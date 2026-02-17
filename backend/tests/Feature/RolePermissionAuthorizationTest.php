@@ -1,0 +1,309 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Models\Post;
+use App\Models\Role;
+use App\Models\Member;
+use App\Models\Contribution;
+use App\Models\User;
+use Database\Seeders\RoleSeeder;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Laravel\Sanctum\Sanctum;
+use Tests\TestCase;
+
+class RolePermissionAuthorizationTest extends TestCase
+{
+    use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->seed(RoleSeeder::class);
+    }
+
+    public function test_member_cannot_create_post(): void
+    {
+        $memberRole = Role::query()->where('name', 'member')->firstOrFail();
+        $member = User::factory()->create(['role_id' => $memberRole->id]);
+
+        Sanctum::actingAs($member);
+
+        $response = $this->postJson('/api/v1/cms/posts', [
+            'title' => 'Unauthorized Post',
+            'section' => 'news',
+            'content' => 'Body content',
+            'status' => 'published',
+        ]);
+
+        $response->assertStatus(403);
+    }
+
+    public function test_officer_can_update_post_but_cannot_delete_post(): void
+    {
+        $officerRole = Role::query()->where('name', 'officer')->firstOrFail();
+        $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
+        $officer = User::factory()->create(['role_id' => $officerRole->id]);
+        $author = User::factory()->create(['role_id' => $adminRole->id]);
+
+        $post = Post::query()->create([
+            'title' => 'Initial title',
+            'slug' => 'initial-title',
+            'section' => 'news',
+            'excerpt' => 'Initial excerpt',
+            'content' => 'Initial content',
+            'status' => 'draft',
+            'author_id' => $author->id,
+        ]);
+
+        Sanctum::actingAs($officer);
+
+        $updateResponse = $this->putJson("/api/v1/cms/posts/{$post->id}", [
+            'title' => 'Updated title',
+            'section' => 'news',
+            'excerpt' => 'Updated excerpt',
+            'content' => 'Updated content',
+            'status' => 'published',
+        ]);
+
+        $updateResponse->assertOk();
+
+        $deleteResponse = $this->deleteJson("/api/v1/cms/posts/{$post->id}");
+        $deleteResponse->assertStatus(403);
+    }
+
+    public function test_member_cannot_view_members_endpoint(): void
+    {
+        $memberRole = Role::query()->where('name', 'member')->firstOrFail();
+        $member = User::factory()->create(['role_id' => $memberRole->id]);
+
+        Sanctum::actingAs($member);
+
+        $response = $this->getJson('/api/v1/members');
+
+        $response->assertStatus(403);
+    }
+
+    public function test_officer_cannot_update_fellow_officer_account(): void
+    {
+        $officerRole = Role::query()->where('name', 'officer')->firstOrFail();
+        $actor = User::factory()->create(['role_id' => $officerRole->id]);
+        $target = User::factory()->create(['role_id' => $officerRole->id]);
+
+        Sanctum::actingAs($actor);
+
+        $response = $this->putJson("/api/v1/admin/users/{$target->id}", [
+            'name' => 'Target Officer Updated',
+            'email' => $target->email,
+            'role_id' => $officerRole->id,
+        ]);
+
+        $response->assertStatus(403);
+    }
+
+    public function test_created_admin_cannot_promote_user_to_admin(): void
+    {
+        $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
+
+        $originalAdmin = User::factory()->create([
+            'email' => 'admin@lipataeagles.ph',
+            'role_id' => $adminRole->id,
+        ]);
+
+        $createdAdmin = User::factory()->create(['role_id' => $adminRole->id]);
+        $target = User::factory()->create();
+
+        Sanctum::actingAs($createdAdmin);
+
+        $response = $this->putJson("/api/v1/admin/users/{$target->id}", [
+            'name' => $target->name,
+            'email' => $target->email,
+            'role_id' => $adminRole->id,
+        ]);
+
+        $response->assertStatus(403);
+
+        $this->assertNotNull($originalAdmin->id);
+    }
+
+    public function test_original_admin_cannot_exceed_max_admin_count_when_assigning_member_role(): void
+    {
+        $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
+        $memberRole = Role::query()->where('name', 'member')->firstOrFail();
+
+        $originalAdmin = User::factory()->create([
+            'email' => 'admin@lipataeagles.ph',
+            'role_id' => $adminRole->id,
+        ]);
+        User::factory()->create(['role_id' => $adminRole->id]);
+        User::factory()->create(['role_id' => $adminRole->id]);
+
+        Sanctum::actingAs($originalAdmin);
+
+        $candidateForAdmin = Member::query()->create([
+            'member_number' => 'M-ADM-001',
+            'first_name' => 'Should',
+            'middle_name' => null,
+            'last_name' => 'Fail Admin',
+            'email' => 'newadmin@example.com',
+            'membership_status' => 'active',
+        ]);
+
+        $response = $this->putJson("/api/v1/admin/members/{$candidateForAdmin->id}/role", [
+            'role_id' => $adminRole->id,
+        ]);
+
+        $response->assertStatus(422);
+
+        $candidateForMember = Member::query()->create([
+            'member_number' => 'M-MEM-001',
+            'first_name' => 'Allowed',
+            'middle_name' => null,
+            'last_name' => 'Member',
+            'email' => 'allowed-member@example.com',
+            'membership_status' => 'active',
+        ]);
+
+        $memberCreate = $this->putJson("/api/v1/admin/members/{$candidateForMember->id}/role", [
+            'role_id' => $memberRole->id,
+        ]);
+
+        $memberCreate->assertStatus(200);
+    }
+
+    public function test_admin_cannot_access_finance_without_finance_role(): void
+    {
+        $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
+        $admin = User::factory()->create([
+            'email' => 'admin@lipataeagles.ph',
+            'role_id' => $adminRole->id,
+        ]);
+
+        Sanctum::actingAs($admin);
+
+        $response = $this->getJson('/api/v1/finance/members');
+
+        $response->assertStatus(403);
+    }
+
+    public function test_member_can_view_own_contributions_without_finance_role(): void
+    {
+        $memberRole = Role::query()->where('name', 'member')->firstOrFail();
+        $memberUser = User::factory()->create(['role_id' => $memberRole->id]);
+
+        $member = Member::query()->create([
+            'member_number' => 'M-OWN-001',
+            'first_name' => 'Own',
+            'middle_name' => 'Member',
+            'last_name' => 'User',
+            'email' => $memberUser->email,
+            'user_id' => $memberUser->id,
+            'membership_status' => 'active',
+        ]);
+
+        Contribution::query()->create([
+            'member_id' => $member->id,
+            'category' => 'monthly_contribution',
+            'contribution_date' => now()->toDateString(),
+            'amount' => 500,
+            'note' => 'Monthly due',
+            'encoded_by_user_id' => $memberUser->id,
+            'encoded_at' => now(),
+        ]);
+
+        Sanctum::actingAs($memberUser);
+
+        $response = $this->getJson('/api/v1/finance/my-contributions');
+
+        $response->assertStatus(200)->assertJsonStructure([
+            'member' => ['id', 'member_number'],
+            'total_amount',
+            'category_totals',
+            'monthly_summary',
+            'yearly_summary',
+            'data',
+        ]);
+    }
+
+    public function test_admin_can_view_own_contributions_without_finance_permissions(): void
+    {
+        $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
+        $adminUser = User::factory()->create([
+            'email' => 'admin@lipataeagles.ph',
+            'role_id' => $adminRole->id,
+        ]);
+
+        $member = Member::query()->create([
+            'member_number' => 'M-ADM-OWN-001',
+            'first_name' => 'Original',
+            'middle_name' => null,
+            'last_name' => 'Admin',
+            'email' => $adminUser->email,
+            'user_id' => $adminUser->id,
+            'membership_status' => 'active',
+        ]);
+
+        Contribution::query()->create([
+            'member_id' => $member->id,
+            'category' => 'project_contribution',
+            'contribution_date' => now()->toDateString(),
+            'amount' => 1000,
+            'note' => 'Project support',
+            'encoded_by_user_id' => $adminUser->id,
+            'encoded_at' => now(),
+        ]);
+
+        Sanctum::actingAs($adminUser);
+
+        $response = $this->getJson('/api/v1/finance/my-contributions');
+
+        $response->assertStatus(200)->assertJsonPath('member.id', $member->id);
+    }
+
+    public function test_admin_with_treasurer_secondary_role_can_access_finance_endpoints(): void
+    {
+        $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
+        $admin = User::factory()->create([
+            'email' => 'admin@lipataeagles.ph',
+            'role_id' => $adminRole->id,
+            'finance_role' => 'treasurer',
+        ]);
+
+        Sanctum::actingAs($admin);
+
+        $response = $this->getJson('/api/v1/finance/members');
+
+        $response->assertStatus(200);
+    }
+
+    public function test_member_primary_role_can_receive_secondary_finance_role(): void
+    {
+        $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
+        $memberRole = Role::query()->where('name', 'member')->firstOrFail();
+
+        $originalAdmin = User::factory()->create([
+            'email' => 'admin@lipataeagles.ph',
+            'role_id' => $adminRole->id,
+        ]);
+
+        $candidate = Member::query()->create([
+            'member_number' => 'M-SEC-001',
+            'first_name' => 'Secondary',
+            'middle_name' => null,
+            'last_name' => 'Role',
+            'email' => 'secondary-role@example.com',
+            'membership_status' => 'active',
+        ]);
+
+        Sanctum::actingAs($originalAdmin);
+
+        $response = $this->putJson("/api/v1/admin/members/{$candidate->id}/role", [
+            'role_id' => $memberRole->id,
+            'finance_role' => 'auditor',
+        ]);
+
+        $response->assertStatus(200);
+        $this->assertSame('auditor', (string) $response->json('user.finance_role'));
+    }
+}

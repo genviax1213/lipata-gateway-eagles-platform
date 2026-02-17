@@ -1,0 +1,317 @@
+import { useEffect, useMemo, useState } from "react";
+import axios from "axios";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { useAuth } from "../contexts/useAuth";
+import api from "../services/api";
+
+type AuthMode = "login" | "forgot" | "reset";
+
+export default function Login() {
+  const { login } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
+
+  const [mode, setMode] = useState<AuthMode>("login");
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  const [forgotEmail, setForgotEmail] = useState("");
+
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetToken, setResetToken] = useState("");
+  const [resetPassword, setResetPassword] = useState("");
+  const [resetPasswordConfirmation, setResetPasswordConfirmation] = useState("");
+
+  const tokenFromQuery = useMemo(() => searchParams.get("token") ?? "", [searchParams]);
+  const emailFromQuery = useMemo(() => searchParams.get("email") ?? "", [searchParams]);
+
+  useEffect(() => {
+    const resetRoute = location.pathname === "/member-reset-password";
+    if (resetRoute || tokenFromQuery) {
+      setMode("reset");
+      setResetToken(tokenFromQuery);
+      setResetEmail(emailFromQuery);
+      if (emailFromQuery) {
+        setForgotEmail(emailFromQuery);
+        setEmail(emailFromQuery);
+      }
+    }
+  }, [emailFromQuery, location.pathname, tokenFromQuery]);
+
+  const parseError = (err: unknown, fallback: string): string => {
+    if (!axios.isAxiosError(err)) return fallback;
+    const message = (err.response?.data as { message?: string; errors?: Record<string, string[]> } | undefined)?.message;
+    const errors = (err.response?.data as { errors?: Record<string, string[]> } | undefined)?.errors;
+    if (message) return message;
+    if (errors) {
+      const first = Object.values(errors).flat()[0];
+      if (first) return first;
+    }
+    return fallback;
+  };
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setNotice("");
+    setSaving(true);
+
+    try {
+      await login(email, password);
+      navigate("/portal");
+    } catch {
+      setError("Invalid credentials.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setNotice("");
+    setSaving(true);
+
+    try {
+      await api.post("/forgot-password", { email: forgotEmail.trim() });
+      setNotice("If your email exists in the system, a password reset link has been sent.");
+    } catch (err) {
+      setError(parseError(err, "Failed to send password reset link."));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setNotice("");
+    setSaving(true);
+
+    try {
+      await api.post("/reset-password", {
+        email: resetEmail.trim(),
+        token: resetToken.trim(),
+        password: resetPassword,
+        password_confirmation: resetPasswordConfirmation,
+      });
+
+      setNotice("Password reset successful. You can now log in.");
+      setMode("login");
+      setPassword("");
+      setResetPassword("");
+      setResetPasswordConfirmation("");
+      setResetToken("");
+      setEmail(resetEmail.trim());
+      navigate("/member-login", { replace: true });
+    } catch (err) {
+      setError(parseError(err, "Failed to reset password."));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center px-4 py-10">
+      <div className="w-full max-w-5xl">
+        <div className="grid items-center gap-6 md:grid-cols-2">
+          <aside className="p-2 md:p-4">
+            <div className="mb-5">
+              <Link
+                to="/"
+                className="inline-flex items-center rounded-md border border-gold/50 px-4 py-2 text-sm font-semibold text-gold-soft transition hover:bg-gold/10 hover:text-gold"
+              >
+                Back to Home
+              </Link>
+            </div>
+            <p className="mb-3 text-xs uppercase tracking-[0.25em] text-gold-soft">Security Notice</p>
+            <h2 className="mb-4 font-heading text-4xl text-offwhite">Protected Member Access</h2>
+            <p className="text-sm leading-relaxed text-mist/85">
+              This portal is secured for verified members and authorized officers only. All access attempts and role-based actions are monitored to protect member data and administrative functions.
+            </p>
+            <div className="mt-6 rounded-md border border-white/20 bg-white/10 px-4 py-3 text-xs text-mist/85">
+              Password reset procedure:
+              <br />
+              1. Click Forgot Password and submit your account email.
+              <br />
+              2. Open the reset email and use the provided reset link.
+              <br />
+              3. Set a new password and return to login.
+            </div>
+          </aside>
+
+          <div className="glass-card w-full max-w-md p-10 md:ml-auto">
+            <div className="mx-auto mb-4 flex w-fit items-center gap-5">
+              <img
+                src="/images/tfoe-logo.png"
+                alt="TFOE Logo"
+                className="h-[7.5rem] w-[7.5rem] object-contain"
+              />
+              <img
+                src="/images/lgec-logo.png"
+                alt="LGEC Logo"
+                className="h-[8.5rem] w-[8.5rem] object-contain"
+              />
+            </div>
+            <h1 className="mb-2 text-center font-heading text-3xl text-gold">Member & Admin Portal</h1>
+            <p className="mb-8 text-center text-sm text-gray-300">
+              {mode === "login" ? "Secure access for authorized members" : mode === "forgot" ? "Request password reset link" : "Reset your account password"}
+            </p>
+
+            {error && <p className="mb-3 text-center text-sm text-red-400">{error}</p>}
+            {notice && <p className="mb-3 text-center text-sm text-gold-soft">{notice}</p>}
+
+            {mode === "login" && (
+              <form onSubmit={handleLogin} className="space-y-5">
+                <div>
+                  <input
+                    type="email"
+                    placeholder="Email address"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full rounded-lg border border-white/20 bg-white/10 px-4 py-3 text-offwhite placeholder:text-mist/70 outline-none focus:border-gold"
+                  />
+                </div>
+
+                <div>
+                  <input
+                    type="password"
+                    placeholder="Password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full rounded-lg border border-white/20 bg-white/10 px-4 py-3 text-offwhite placeholder:text-mist/70 outline-none focus:border-gold"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="w-full rounded-lg bg-gold py-3 font-semibold text-navy shadow transition hover:-translate-y-0.5 hover:bg-gold-soft disabled:opacity-60"
+                >
+                  {saving ? "Logging in..." : "Login"}
+                </button>
+
+                <div className="text-center">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMode("forgot");
+                      setForgotEmail(email);
+                      setError("");
+                      setNotice("");
+                    }}
+                    className="text-sm text-gold-soft hover:text-gold"
+                  >
+                    Forgot password?
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {mode === "forgot" && (
+              <form onSubmit={handleForgotPassword} className="space-y-5">
+                <input
+                  type="email"
+                  placeholder="Account email"
+                  value={forgotEmail}
+                  onChange={(e) => setForgotEmail(e.target.value)}
+                  className="w-full rounded-lg border border-white/20 bg-white/10 px-4 py-3 text-offwhite placeholder:text-mist/70 outline-none focus:border-gold"
+                />
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="w-full rounded-lg bg-gold py-3 font-semibold text-navy shadow transition hover:-translate-y-0.5 hover:bg-gold-soft disabled:opacity-60"
+                >
+                  {saving ? "Sending..." : "Send Reset Link"}
+                </button>
+                <div className="flex items-center justify-between text-sm">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMode("login");
+                      setError("");
+                      setNotice("");
+                    }}
+                    className="text-gold-soft hover:text-gold"
+                  >
+                    Back to login
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMode("reset");
+                      setResetEmail(forgotEmail);
+                      setError("");
+                      setNotice("");
+                    }}
+                    className="text-gold-soft hover:text-gold"
+                  >
+                    I already have a token
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {mode === "reset" && (
+              <form onSubmit={handleResetPassword} className="space-y-4">
+                <input
+                  type="email"
+                  placeholder="Account email"
+                  value={resetEmail}
+                  onChange={(e) => setResetEmail(e.target.value)}
+                  className="w-full rounded-lg border border-white/20 bg-white/10 px-4 py-3 text-offwhite placeholder:text-mist/70 outline-none focus:border-gold"
+                />
+                <input
+                  type="text"
+                  placeholder="Reset token"
+                  value={resetToken}
+                  onChange={(e) => setResetToken(e.target.value)}
+                  className="w-full rounded-lg border border-white/20 bg-white/10 px-4 py-3 text-offwhite placeholder:text-mist/70 outline-none focus:border-gold"
+                />
+                <input
+                  type="password"
+                  placeholder="New password"
+                  value={resetPassword}
+                  onChange={(e) => setResetPassword(e.target.value)}
+                  className="w-full rounded-lg border border-white/20 bg-white/10 px-4 py-3 text-offwhite placeholder:text-mist/70 outline-none focus:border-gold"
+                />
+                <input
+                  type="password"
+                  placeholder="Confirm new password"
+                  value={resetPasswordConfirmation}
+                  onChange={(e) => setResetPasswordConfirmation(e.target.value)}
+                  className="w-full rounded-lg border border-white/20 bg-white/10 px-4 py-3 text-offwhite placeholder:text-mist/70 outline-none focus:border-gold"
+                />
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="w-full rounded-lg bg-gold py-3 font-semibold text-navy shadow transition hover:-translate-y-0.5 hover:bg-gold-soft disabled:opacity-60"
+                >
+                  {saving ? "Resetting..." : "Reset Password"}
+                </button>
+                <div className="text-center">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMode("login");
+                      setError("");
+                      setNotice("");
+                    }}
+                    className="text-sm text-gold-soft hover:text-gold"
+                  >
+                    Back to login
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
