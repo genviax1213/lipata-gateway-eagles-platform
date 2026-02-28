@@ -162,3 +162,41 @@ Date: 2026-02-28
 - Do not run docroot sync with unqualified `--delete` unless preserving runtime links.
 - If using `rsync --delete`, include protect/exclude rules for `api`, `backend`, and `storage`.
 - Keep API handler pinned to required PHP runtime in `backend/public/.htaccess`.
+
+## Follow-up Editor Incident: Image Resize Handle Not Visible
+
+Date: 2026-03-01
+
+### Fault Observed
+
+- In CMS/forum rich-text editor, selecting an image showed width buttons but no visible drag handle for direct resize.
+
+### Root Cause
+
+1. Resize handle element existed in editor JSX but had no CSS rule, so it had no visible rendered style.
+2. Editor container needed reliable relative positioning for absolute handle placement.
+
+### Solution Applied
+
+1. Added editor container positioning:
+   - `frontend/src/index.css`
+   - `.rich-editor-container { position: relative; }`
+2. Added visible resize handle style:
+   - `.rich-editor-container .image-resize-handle { ... }`
+   - includes `position: absolute`, size, color, border, `cursor: se-resize`, and `touch-action: none`.
+3. Added selected-image visual outline to confirm active image target:
+   - `.rich-editor-container .ProseMirror img.ProseMirror-selectednode { ... }`
+4. Rebuilt frontend and deployed to StackCP docroot without destructive delete.
+
+### Verification
+
+- Frontend checks:
+  - `cd frontend && npm run lint` => pass
+  - `cd frontend && npm run build` => pass
+- Live routes/API:
+  - `https://lgec.org/` => `200`
+  - `https://lgec.org/activities` => `200`
+  - `https://lgec.org/api/index.php/api/v1/content/homepage_hero` => `200`
+- Live assets updated:
+  - `assets/index-uvk7Sq4P.js`
+  - `assets/index-CsUQqFrA.css`

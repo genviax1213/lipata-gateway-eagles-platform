@@ -199,6 +199,35 @@ input::-ms-clear {
   outline: none;
 }
 
+.rich-editor-container {
+  position: relative;
+}
+
+.rich-editor-container .ProseMirror img {
+  display: block;
+  height: auto;
+  margin: 1em 0;
+  max-width: 100%;
+}
+
+.rich-editor-container .ProseMirror img.ProseMirror-selectednode {
+  outline: 2px solid rgba(224, 180, 74, 0.8);
+  outline-offset: 2px;
+}
+
+.rich-editor-container .image-resize-handle {
+  position: absolute;
+  z-index: 30;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  border: 2px solid #0a1730;
+  background: #f3db98;
+  box-shadow: 0 0 0 1px rgba(243, 219, 152, 0.4);
+  cursor: se-resize;
+  touch-action: none;
+}
+
 .rich-editor-container [contenteditable="true"] {
   caret-color: #f3db98;
 }

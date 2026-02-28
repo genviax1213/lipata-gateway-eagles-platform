@@ -12,6 +12,28 @@ type RichTextEditorProps = {
   disabled?: boolean;
 };
 
+const ResizableImage = Image.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      width: {
+        default: null,
+        parseHTML: (element) => {
+          const raw = element.getAttribute("width");
+          if (!raw) return null;
+          const parsed = Number.parseInt(raw, 10);
+          return Number.isFinite(parsed) && parsed > 0 ? String(parsed) : null;
+        },
+        renderHTML: (attributes) => {
+          const width = Number.parseInt(String(attributes.width ?? ""), 10);
+          if (!Number.isFinite(width) || width <= 0) return {};
+          return { width: String(width) };
+        },
+      },
+    };
+  },
+});
+
 async function loadImage(file: File): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
@@ -120,12 +142,15 @@ export default function RichTextEditor({
   disabled = false,
 }: RichTextEditorProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const editorContainerRef = useRef<HTMLDivElement | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [handlePos, setHandlePos] = useState<{ left: number; top: number } | null>(null);
+  const [resizing, setResizing] = useState<{ startX: number; startWidth: number; pos: number } | null>(null);
 
   const editor = useEditor({
     extensions: [
       StarterKit,
-      Image.configure({
+      ResizableImage.configure({
         inline: false,
       }),
       Link.configure({
@@ -163,6 +188,104 @@ export default function RichTextEditor({
     } finally {
       setUploadingImage(false);
     }
+  };
+
+  const imageIsSelected = !!editor?.isActive("image");
+  const selectedImageWidth = imageIsSelected
+    ? Number.parseInt(String(editor?.getAttributes("image").width ?? ""), 10)
+    : Number.NaN;
+  const currentImageWidth = Number.isFinite(selectedImageWidth) && selectedImageWidth > 0
+    ? selectedImageWidth
+    : null;
+
+  const setImageWidth = (width: number | null) => {
+    if (!editor) return;
+    if (width === null) {
+      editor.chain().focus().updateAttributes("image", { width: null }).run();
+      return;
+    }
+    const bounded = Math.max(160, Math.min(2000, Math.round(width)));
+    editor.chain().focus().updateAttributes("image", { width: String(bounded) }).run();
+  };
+
+  const adjustImageWidth = (delta: number) => {
+    if (!editor || !imageIsSelected) return;
+    const base = currentImageWidth ?? 800;
+    setImageWidth(base + delta);
+  };
+
+  useEffect(() => {
+    if (!editor) return;
+
+    const updateHandlePosition = () => {
+      if (!editorContainerRef.current || !editor.isActive("image")) {
+        setHandlePos(null);
+        return;
+      }
+
+      const from = editor.state.selection.from;
+      const domAtPos = editor.view.nodeDOM(from);
+      if (!(domAtPos instanceof HTMLImageElement)) {
+        setHandlePos(null);
+        return;
+      }
+
+      const containerRect = editorContainerRef.current.getBoundingClientRect();
+      const imageRect = domAtPos.getBoundingClientRect();
+      setHandlePos({
+        left: imageRect.right - containerRect.left - 7,
+        top: imageRect.bottom - containerRect.top - 7,
+      });
+    };
+
+    updateHandlePosition();
+    editor.on("selectionUpdate", updateHandlePosition);
+    editor.on("update", updateHandlePosition);
+    window.addEventListener("resize", updateHandlePosition);
+
+    return () => {
+      editor.off("selectionUpdate", updateHandlePosition);
+      editor.off("update", updateHandlePosition);
+      window.removeEventListener("resize", updateHandlePosition);
+    };
+  }, [editor]);
+
+  useEffect(() => {
+    if (!editor || !resizing) return;
+
+    const onPointerMove = (event: PointerEvent) => {
+      const width = resizing.startWidth + (event.clientX - resizing.startX);
+      const bounded = Math.max(160, Math.min(2000, Math.round(width)));
+      editor.chain().setNodeSelection(resizing.pos).updateAttributes("image", { width: String(bounded) }).run();
+    };
+
+    const onPointerUp = () => {
+      setResizing(null);
+    };
+
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+
+    return () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+    };
+  }, [editor, resizing]);
+
+  const beginHandleResize = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (!editor || !editor.isActive("image")) return;
+    event.preventDefault();
+    event.stopPropagation();
+
+    const from = editor.state.selection.from;
+    const domAtPos = editor.view.nodeDOM(from);
+    const currentWidth = domAtPos instanceof HTMLImageElement ? domAtPos.getBoundingClientRect().width : 800;
+
+    setResizing({
+      startX: event.clientX,
+      startWidth: currentWidth,
+      pos: from,
+    });
   };
 
   return (
@@ -223,6 +346,44 @@ export default function RichTextEditor({
           disabled={disabled}
           onClick={() => editor?.chain().focus().unsetLink().run()}
         />
+        <ToolbarButton
+          label="Smaller"
+          disabled={disabled || !imageIsSelected}
+          onClick={() => adjustImageWidth(-80)}
+        />
+        <ToolbarButton
+          label="Larger"
+          disabled={disabled || !imageIsSelected}
+          onClick={() => adjustImageWidth(80)}
+        />
+        <ToolbarButton
+          label="320px"
+          active={currentImageWidth === 320}
+          disabled={disabled || !imageIsSelected}
+          onClick={() => setImageWidth(320)}
+        />
+        <ToolbarButton
+          label="640px"
+          active={currentImageWidth === 640}
+          disabled={disabled || !imageIsSelected}
+          onClick={() => setImageWidth(640)}
+        />
+        <ToolbarButton
+          label="960px"
+          active={currentImageWidth === 960}
+          disabled={disabled || !imageIsSelected}
+          onClick={() => setImageWidth(960)}
+        />
+        <ToolbarButton
+          label="Auto"
+          disabled={disabled || !imageIsSelected}
+          onClick={() => setImageWidth(null)}
+        />
+        {imageIsSelected && (
+          <span className="self-center text-xs text-mist/75">
+            Image width: {currentImageWidth ? `${currentImageWidth}px` : "auto"}
+          </span>
+        )}
       </div>
 
       <input
@@ -239,8 +400,20 @@ export default function RichTextEditor({
         }}
       />
 
-      <div className="rich-editor-container min-h-60 rounded-md border border-white/20 bg-ink/35 px-3 py-2 text-offwhite">
+      <div
+        ref={editorContainerRef}
+        className="rich-editor-container min-h-60 rounded-md border border-white/20 bg-ink/35 px-3 py-2 text-offwhite"
+      >
         <EditorContent editor={editor} />
+        {handlePos && (
+          <button
+            type="button"
+            onPointerDown={beginHandleResize}
+            className="image-resize-handle"
+            style={{ left: `${handlePos.left}px`, top: `${handlePos.top}px` }}
+            title="Drag to resize image"
+          />
+        )}
       </div>
     </div>
   );
