@@ -352,7 +352,7 @@ class PostController extends Controller
 
         $allowedAttrs = [
             'a' => ['href', 'target', 'rel'],
-            'img' => ['src', 'alt', 'title'],
+            'img' => ['src', 'alt', 'title', 'width', 'align'],
             '*' => [],
         ];
 
@@ -404,6 +404,10 @@ class PostController extends Controller
                     if (!$this->isSafeUrl($src, true)) {
                         $node->removeChild($child);
                         continue;
+                    }
+                    $align = strtolower(trim((string) $child->getAttribute('align')));
+                    if (!in_array($align, ['left', 'right', 'center'], true)) {
+                        $child->removeAttribute('align');
                     }
                     $child->removeAttribute('srcset');
                 }

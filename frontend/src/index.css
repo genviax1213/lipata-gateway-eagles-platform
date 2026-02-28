@@ -210,6 +210,28 @@ input::-ms-clear {
   max-width: 100%;
 }
 
+.rich-editor-container .ProseMirror::after {
+  clear: both;
+  content: "";
+  display: table;
+}
+
+.rich-editor-container .ProseMirror img[align="left"] {
+  float: left;
+  margin: 0.35em 1em 0.8em 0;
+}
+
+.rich-editor-container .ProseMirror img[align="right"] {
+  float: right;
+  margin: 0.35em 0 0.8em 1em;
+}
+
+.rich-editor-container .ProseMirror img[align="center"] {
+  display: block;
+  float: none;
+  margin: 1em auto;
+}
+
 .rich-editor-container .ProseMirror img.ProseMirror-selectednode {
   outline: 2px solid rgba(224, 180, 74, 0.8);
   outline-offset: 2px;
@@ -226,6 +248,32 @@ input::-ms-clear {
   box-shadow: 0 0 0 1px rgba(243, 219, 152, 0.4);
   cursor: se-resize;
   touch-action: none;
+}
+
+.rich-editor-container .image-resize-handle-left {
+  cursor: sw-resize;
+}
+
+.rich-content::after {
+  clear: both;
+  content: "";
+  display: table;
+}
+
+.rich-content img[align="left"] {
+  float: left;
+  margin: 0.4em 1em 0.8em 0;
+}
+
+.rich-content img[align="right"] {
+  float: right;
+  margin: 0.4em 0 0.8em 1em;
+}
+
+.rich-content img[align="center"] {
+  display: block;
+  float: none;
+  margin: 1.2em auto;
 }
 
 .rich-editor-container [contenteditable="true"] {

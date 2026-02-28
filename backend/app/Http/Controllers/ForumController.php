@@ -309,7 +309,7 @@ class ForumController extends Controller
 
         $allowedAttrs = [
             'a' => ['href', 'target', 'rel'],
-            'img' => ['src', 'alt', 'title'],
+            'img' => ['src', 'alt', 'title', 'width', 'align'],
             '*' => [],
         ];
 
@@ -356,6 +356,10 @@ class ForumController extends Controller
                     if (!$this->isSafeUrl($src)) {
                         $node->removeChild($child);
                         continue;
+                    }
+                    $align = strtolower(trim((string) $child->getAttribute('align')));
+                    if (!in_array($align, ['left', 'right', 'center'], true)) {
+                        $child->removeAttribute('align');
                     }
                 }
 

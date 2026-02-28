@@ -200,3 +200,43 @@ Date: 2026-03-01
 - Live assets updated:
   - `assets/index-uvk7Sq4P.js`
   - `assets/index-CsUQqFrA.css`
+
+## Follow-up Editor Enhancement: Newspaper-Style Image Wrapping
+
+Date: 2026-03-01
+
+### Fault Observed
+
+- Image resize handle existed but only one side was available.
+- Images tended to occupy a full row instead of allowing text flow like a newspaper layout.
+
+### Root Cause
+
+1. Editor displayed a single right-side resize handle only.
+2. Image rendering used block layout by default, with no left/right wrap controls.
+3. Backend/frontend sanitizers did not preserve image alignment metadata.
+
+### Solution Applied
+
+1. Added dual resize handles (left + right bottom corners) in rich editor.
+2. Added image alignment controls in toolbar:
+   - `Wrap Left`
+   - `Wrap Right`
+   - `Center`
+3. Enabled newspaper-style float wrapping in editor and display CSS for `img[align="left|right"]`.
+4. Extended sanitizers to allow and preserve image `align` attribute:
+   - frontend DOMPurify config
+   - backend post/forum rich-content sanitizers
+
+### Verification
+
+- `cd frontend && npm run lint` => pass
+- `cd frontend && npm run build` => pass
+- `cd backend && composer test` => pass (27 tests)
+- Live checks:
+  - `https://lgec.org/` => `200`
+  - `https://lgec.org/activities` => `200`
+  - `https://lgec.org/api/index.php/api/v1/content/homepage_hero` => `200`
+- Live bundle updated:
+  - `assets/index-DG2ifkDE.js`
+  - `assets/index-CZ-f0beQ.css`

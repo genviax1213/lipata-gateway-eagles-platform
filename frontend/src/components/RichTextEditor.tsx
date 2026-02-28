@@ -16,6 +16,20 @@ const ResizableImage = Image.extend({
   addAttributes() {
     return {
       ...this.parent?.(),
+      align: {
+        default: null,
+        parseHTML: (element) => {
+          const raw = (element.getAttribute("align") || "").toLowerCase();
+          return raw === "left" || raw === "right" || raw === "center" ? raw : null;
+        },
+        renderHTML: (attributes) => {
+          const align = String(attributes.align ?? "").toLowerCase();
+          if (align === "left" || align === "right" || align === "center") {
+            return { align };
+          }
+          return {};
+        },
+      },
       width: {
         default: null,
         parseHTML: (element) => {
@@ -144,8 +158,13 @@ export default function RichTextEditor({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const editorContainerRef = useRef<HTMLDivElement | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
-  const [handlePos, setHandlePos] = useState<{ left: number; top: number } | null>(null);
-  const [resizing, setResizing] = useState<{ startX: number; startWidth: number; pos: number } | null>(null);
+  const [handlePos, setHandlePos] = useState<{ left: number; right: number; top: number } | null>(null);
+  const [resizing, setResizing] = useState<{
+    startX: number;
+    startWidth: number;
+    pos: number;
+    side: "left" | "right";
+  } | null>(null);
 
   const editor = useEditor({
     extensions: [
@@ -184,13 +203,19 @@ export default function RichTextEditor({
       const editedFile = await cropAndResizeEditorImage(file);
       if (!editedFile) return;
       const imageUrl = await onUploadImage(editedFile);
-      editor.chain().focus().setImage({ src: imageUrl, alt: editedFile.name }).run();
+      editor
+        .chain()
+        .focus()
+        .setImage({ src: imageUrl, alt: editedFile.name })
+        .updateAttributes("image", { align: "left", width: "420" })
+        .run();
     } finally {
       setUploadingImage(false);
     }
   };
 
   const imageIsSelected = !!editor?.isActive("image");
+  const currentImageAlign = imageIsSelected ? String(editor?.getAttributes("image").align ?? "") : "";
   const selectedImageWidth = imageIsSelected
     ? Number.parseInt(String(editor?.getAttributes("image").width ?? ""), 10)
     : Number.NaN;
@@ -214,6 +239,11 @@ export default function RichTextEditor({
     setImageWidth(base + delta);
   };
 
+  const setImageAlign = (align: "left" | "right" | "center") => {
+    if (!editor || !imageIsSelected) return;
+    editor.chain().focus().updateAttributes("image", { align }).run();
+  };
+
   useEffect(() => {
     if (!editor) return;
 
@@ -233,7 +263,8 @@ export default function RichTextEditor({
       const containerRect = editorContainerRef.current.getBoundingClientRect();
       const imageRect = domAtPos.getBoundingClientRect();
       setHandlePos({
-        left: imageRect.right - containerRect.left - 7,
+        left: imageRect.left - containerRect.left - 7,
+        right: imageRect.right - containerRect.left - 7,
         top: imageRect.bottom - containerRect.top - 7,
       });
     };
@@ -254,7 +285,10 @@ export default function RichTextEditor({
     if (!editor || !resizing) return;
 
     const onPointerMove = (event: PointerEvent) => {
-      const width = resizing.startWidth + (event.clientX - resizing.startX);
+      const delta = event.clientX - resizing.startX;
+      const width = resizing.side === "right"
+        ? resizing.startWidth + delta
+        : resizing.startWidth - delta;
       const bounded = Math.max(160, Math.min(2000, Math.round(width)));
       editor.chain().setNodeSelection(resizing.pos).updateAttributes("image", { width: String(bounded) }).run();
     };
@@ -272,7 +306,7 @@ export default function RichTextEditor({
     };
   }, [editor, resizing]);
 
-  const beginHandleResize = (event: React.PointerEvent<HTMLButtonElement>) => {
+  const beginHandleResize = (event: React.PointerEvent<HTMLButtonElement>, side: "left" | "right") => {
     if (!editor || !editor.isActive("image")) return;
     event.preventDefault();
     event.stopPropagation();
@@ -285,6 +319,7 @@ export default function RichTextEditor({
       startX: event.clientX,
       startWidth: currentWidth,
       pos: from,
+      side,
     });
   };
 
@@ -379,9 +414,27 @@ export default function RichTextEditor({
           disabled={disabled || !imageIsSelected}
           onClick={() => setImageWidth(null)}
         />
+        <ToolbarButton
+          label="Wrap Left"
+          active={currentImageAlign === "left"}
+          disabled={disabled || !imageIsSelected}
+          onClick={() => setImageAlign("left")}
+        />
+        <ToolbarButton
+          label="Wrap Right"
+          active={currentImageAlign === "right"}
+          disabled={disabled || !imageIsSelected}
+          onClick={() => setImageAlign("right")}
+        />
+        <ToolbarButton
+          label="Center"
+          active={currentImageAlign === "center"}
+          disabled={disabled || !imageIsSelected}
+          onClick={() => setImageAlign("center")}
+        />
         {imageIsSelected && (
           <span className="self-center text-xs text-mist/75">
-            Image width: {currentImageWidth ? `${currentImageWidth}px` : "auto"}
+            Image: {currentImageAlign || "default"} / {currentImageWidth ? `${currentImageWidth}px` : "auto"}
           </span>
         )}
       </div>
@@ -406,13 +459,22 @@ export default function RichTextEditor({
       >
         <EditorContent editor={editor} />
         {handlePos && (
-          <button
-            type="button"
-            onPointerDown={beginHandleResize}
-            className="image-resize-handle"
-            style={{ left: `${handlePos.left}px`, top: `${handlePos.top}px` }}
-            title="Drag to resize image"
-          />
+          <>
+            <button
+              type="button"
+              onPointerDown={(event) => beginHandleResize(event, "left")}
+              className="image-resize-handle image-resize-handle-left"
+              style={{ left: `${handlePos.left}px`, top: `${handlePos.top}px` }}
+              title="Drag to resize image"
+            />
+            <button
+              type="button"
+              onPointerDown={(event) => beginHandleResize(event, "right")}
+              className="image-resize-handle image-resize-handle-right"
+              style={{ left: `${handlePos.right}px`, top: `${handlePos.top}px` }}
+              title="Drag to resize image"
+            />
+          </>
         )}
       </div>
     </div>
