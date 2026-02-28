@@ -82,11 +82,11 @@ export default function Landing() {
             className="reveal mb-6 h-36 w-36 object-contain md:h-44 md:w-44"
           />
           <h1 className="reveal reveal-delay-1 mb-6 font-heading text-5xl leading-tight text-offwhite md:text-7xl">
-            {heroPost?.title ?? "Set Homepage Hero in CMS"}
+            {heroPost?.title ?? "Lipata Gateway Eagles Club"}
           </h1>
           <p className="reveal reveal-delay-2 mb-10 max-w-2xl text-lg text-mist/90 md:text-xl">
             {heroPost?.excerpt ??
-              "Create a published post in section homepage_hero to control homepage main title, excerpt, image, and lead text."}
+              "Service Through Strong Brotherhood."}
           </p>
           <div className="reveal reveal-delay-2 flex flex-wrap gap-4">
             <Link to="/contact" className="btn-primary">

@@ -2,47 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import api from "../services/api";
 import type { CmsPost } from "../types/cms";
-
-function paginateContent(content: string, maxChars: number): string[] {
-  const normalized = content.replace(/\r\n/g, "\n").trim();
-  if (!normalized) return [""];
-
-  const pages: string[] = [];
-  let cursor = 0;
-
-  while (cursor < normalized.length) {
-    const hardEnd = Math.min(cursor + maxChars, normalized.length);
-
-    if (hardEnd >= normalized.length) {
-      pages.push(normalized.slice(cursor).trim());
-      break;
-    }
-
-    const searchStart = Math.floor(cursor + maxChars * 0.6);
-    const windowText = normalized.slice(searchStart, hardEnd);
-
-    const breakDoubleNewline = windowText.lastIndexOf("\n\n");
-    const breakNewline = windowText.lastIndexOf("\n");
-    const breakSpace = windowText.lastIndexOf(" ");
-
-    let breakOffset = breakDoubleNewline;
-    if (breakOffset < 0) breakOffset = breakNewline;
-    if (breakOffset < 0) breakOffset = breakSpace;
-
-    const cutAt = breakOffset >= 0 ? searchStart + breakOffset : hardEnd;
-
-    pages.push(normalized.slice(cursor, cutAt).trim());
-    cursor = cutAt + 1;
-  }
-
-  return pages.filter((p) => p.length > 0);
-}
-
-const PAGE_SIZES = [
-  { label: "Short pages", value: 4500 },
-  { label: "Balanced pages", value: 7000 },
-  { label: "Long pages", value: 10000 },
-];
+import { htmlToPlainText, sanitizeRichHtml } from "../utils/richText";
 
 export default function NewsArticle() {
   const { slug } = useParams();
@@ -52,9 +12,6 @@ export default function NewsArticle() {
 
   const [fontSize, setFontSize] = useState(18);
   const [layout, setLayout] = useState<"single" | "columns">("single");
-  const [isPaged, setIsPaged] = useState(true);
-  const [charsPerPage, setCharsPerPage] = useState(PAGE_SIZES[1].value);
-  const [pageIndex, setPageIndex] = useState(0);
 
   useEffect(() => {
     let mounted = true;
@@ -87,20 +44,13 @@ export default function NewsArticle() {
     };
   }, [slug]);
 
-  const pages = useMemo(() => paginateContent(post?.content ?? "", charsPerPage), [post?.content, charsPerPage]);
-  const currentPageText = pages[pageIndex] ?? "";
-  const contentText = post?.content ?? "";
-  const activeText = isPaged ? currentPageText : contentText;
   const backTo = post?.section === "history" ? "/history" : post?.section === "news" ? "/news" : "/";
   const backLabel = post?.section === "history" ? "Back to History" : post?.section === "news" ? "Back to News" : "Back to Homepage";
+  const renderedHtml = useMemo(() => sanitizeRichHtml(post?.content ?? ""), [post?.content]);
   const estimatedWords = useMemo(
-    () => (activeText.trim().length ? activeText.trim().split(/\s+/).length : 0),
-    [activeText],
+    () => htmlToPlainText(post?.content ?? "").split(/\s+/).filter(Boolean).length,
+    [post?.content],
   );
-
-  useEffect(() => {
-    setPageIndex(0);
-  }, [post?.id, charsPerPage, isPaged]);
 
   return (
     <section className="section-wrap py-12 md:py-16">
@@ -119,6 +69,12 @@ export default function NewsArticle() {
 
       {!loading && !error && post && (
         <article className="surface-card overflow-hidden p-4 md:p-6">
+          <div className="mb-4">
+            <Link to="/" className="btn-secondary">
+              Back to Homepage
+            </Link>
+          </div>
+
           {post.image_url && (
             <img
               src={post.image_url}
@@ -140,9 +96,9 @@ export default function NewsArticle() {
             <p className="mt-5 text-lg text-mist/90">{post.excerpt}</p>
           )}
 
-          <div className="mt-6 grid gap-3 rounded-lg border border-white/20 bg-white/5 p-3 md:grid-cols-[1fr_auto_auto_auto] md:items-center">
+          <div className="mt-6 grid gap-3 rounded-lg border border-white/20 bg-white/5 p-3 md:grid-cols-[1fr_auto_auto] md:items-center">
             <div className="text-xs text-mist/80">
-              {isPaged ? `Page ${pageIndex + 1} of ${pages.length}` : "Continuous mode"} · {estimatedWords.toLocaleString()} words
+              Rich article mode · {estimatedWords.toLocaleString()} words
             </div>
 
             <div className="flex items-center gap-2">
@@ -179,70 +135,18 @@ export default function NewsArticle() {
                 Multi Column
               </button>
             </div>
-
-            <div className="flex flex-wrap items-center gap-2 md:justify-end">
-              <button
-                type="button"
-                onClick={() => setIsPaged(false)}
-                className={`rounded-md border px-3 py-1 text-sm ${!isPaged ? "border-gold bg-gold text-ink" : "border-white/30 text-mist/80"}`}
-              >
-                Continuous
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsPaged(true)}
-                className={`rounded-md border px-3 py-1 text-sm ${isPaged ? "border-gold bg-gold text-ink" : "border-white/30 text-mist/80"}`}
-              >
-                Multi Page
-              </button>
-              {isPaged && (
-                <select
-                  value={charsPerPage}
-                  onChange={(e) => setCharsPerPage(Number(e.target.value))}
-                  className="rounded-md border border-white/30 bg-white/10 px-3 py-1 text-sm text-offwhite"
-                >
-                  {PAGE_SIZES.map((size) => (
-                    <option key={size.value} value={size.value} style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>
-                      {size.label}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </div>
           </div>
 
           <div
-            className={`mt-6 whitespace-pre-line leading-relaxed text-mist/90 ${layout === "columns" ? "md:columns-2 xl:columns-3 md:gap-10" : "max-w-4xl"}`}
+            className={`rich-content mt-6 text-mist/90 ${layout === "columns" ? "md:columns-2 xl:columns-3 md:gap-10" : "max-w-4xl"}`}
             style={{ fontSize: `${fontSize}px` }}
-          >
-            {activeText}
-          </div>
+            dangerouslySetInnerHTML={{ __html: renderedHtml }}
+          />
 
           <div className="mt-8 flex flex-wrap items-center justify-between gap-4 border-t border-white/20 pt-5">
             <Link to={backTo} className="btn-secondary">
               {backLabel}
             </Link>
-
-            {isPaged && (
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  disabled={pageIndex === 0}
-                  onClick={() => setPageIndex((p) => Math.max(0, p - 1))}
-                  className="rounded-md border border-white/30 px-4 py-2 text-sm disabled:opacity-50"
-                >
-                  Prev Page
-                </button>
-                <button
-                  type="button"
-                  disabled={pageIndex >= pages.length - 1}
-                  onClick={() => setPageIndex((p) => Math.min(pages.length - 1, p + 1))}
-                  className="rounded-md border border-white/30 px-4 py-2 text-sm disabled:opacity-50"
-                >
-                  Next Page
-                </button>
-              </div>
-            )}
           </div>
         </article>
       )}

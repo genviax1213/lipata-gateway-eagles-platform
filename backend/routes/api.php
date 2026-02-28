@@ -32,6 +32,7 @@ Route::prefix('v1')->group(function () {
 
         Route::get('/cms/posts', [PostController::class, 'index']);
         Route::post('/cms/posts', [PostController::class, 'store']);
+        Route::post('/cms/uploads/inline-image', [PostController::class, 'uploadInlineImage']);
         Route::post('/cms/posts/{post}', [PostController::class, 'update']);
         Route::put('/cms/posts/{post}', [PostController::class, 'update']);
         Route::delete('/cms/posts/{post}', [PostController::class, 'destroy']);

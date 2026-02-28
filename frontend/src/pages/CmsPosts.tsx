@@ -1,9 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { PointerEvent as ReactPointerEvent } from "react";
 import axios from "axios";
 import api from "../services/api";
 import type { CmsPost } from "../types/cms";
 import { useAuth } from "../contexts/useAuth";
 import { hasPermission } from "../utils/auth";
+import RichTextEditor from "../components/RichTextEditor";
+import { htmlToPlainText, sanitizeRichHtml } from "../utils/richText";
 
 const sectionOptions = [
   "homepage_hero",
@@ -16,10 +19,18 @@ const sectionOptions = [
 ];
 
 const PAGE_SIZES = [
-  { label: "Short pages", value: 4500 },
-  { label: "Balanced pages", value: 7000 },
-  { label: "Long pages", value: 10000 },
+  { label: "Readable", value: 18 },
+  { label: "Comfortable", value: 20 },
+  { label: "Large", value: 22 },
 ];
+
+const PREVIEW_TARGET_IMAGE_BYTES = 1.5 * 1024 * 1024;
+const PREVIEW_MIN_IMAGE_BYTES = 250 * 1024;
+const PREVIEW_IMAGE_MIME_ORDER = ["image/webp", "image/jpeg"] as const;
+const CROP_FRAME_WIDTH = 320;
+const CROP_FRAME_HEIGHT = 180;
+const CROP_OUTPUT_WIDTH = 1920;
+const CROP_OUTPUT_HEIGHT = 1080;
 
 type FormState = {
   title: string;
@@ -30,6 +41,26 @@ type FormState = {
   is_featured: boolean;
   published_at: string;
   image: File | null;
+};
+
+type ProcessedImageMeta = {
+  originalBytes: number;
+  finalBytes: number;
+  mimeType: string;
+  width: number;
+  height: number;
+};
+
+type CropState = {
+  x: number;
+  y: number;
+  zoom: number;
+};
+
+type SourceImageState = {
+  file: File;
+  width: number;
+  height: number;
 };
 
 const initialForm: FormState = {
@@ -59,43 +90,181 @@ function toDateTimeLocal(value: string | null): string {
   return local.toISOString().slice(0, 16);
 }
 
-function paginateContent(content: string, maxChars: number): string[] {
-  const normalized = content.replace(/\r\n/g, "\n").trim();
-  if (!normalized) return [""];
+function humanFileSize(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB"] as const;
+  let value = bytes;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+  return `${value.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+}
 
-  const pages: string[] = [];
-  let cursor = 0;
+function loadImage(file: File): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(image);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Unable to decode image."));
+    };
+    image.src = url;
+  });
+}
 
-  while (cursor < normalized.length) {
-    const hardEnd = Math.min(cursor + maxChars, normalized.length);
+function canvasToBlob(canvas: HTMLCanvasElement, mime: string, quality: number): Promise<Blob | null> {
+  return new Promise((resolve) => {
+    canvas.toBlob((blob) => resolve(blob), mime, quality);
+  });
+}
 
-    if (hardEnd >= normalized.length) {
-      pages.push(normalized.slice(cursor).trim());
-      break;
-    }
-
-    const searchStart = Math.floor(cursor + maxChars * 0.6);
-    const windowText = normalized.slice(searchStart, hardEnd);
-
-    const breakDoubleNewline = windowText.lastIndexOf("\n\n");
-    const breakNewline = windowText.lastIndexOf("\n");
-    const breakSpace = windowText.lastIndexOf(" ");
-
-    let breakOffset = breakDoubleNewline;
-    if (breakOffset < 0) breakOffset = breakNewline;
-    if (breakOffset < 0) breakOffset = breakSpace;
-
-    const cutAt = breakOffset >= 0 ? searchStart + breakOffset : hardEnd;
-    pages.push(normalized.slice(cursor, cutAt).trim());
-    cursor = cutAt + 1;
+function renderedCropDimensions(width: number, height: number, zoom: number): { width: number; height: number } {
+  if (width <= 0 || height <= 0) {
+    return { width: CROP_FRAME_WIDTH, height: CROP_FRAME_HEIGHT };
   }
 
-  return pages.filter((p) => p.length > 0);
+  const frameAspect = CROP_FRAME_WIDTH / CROP_FRAME_HEIGHT;
+  const imageAspect = width / height;
+
+  const baseWidth = imageAspect > frameAspect
+    ? CROP_FRAME_HEIGHT * imageAspect
+    : CROP_FRAME_WIDTH;
+  const baseHeight = imageAspect > frameAspect
+    ? CROP_FRAME_HEIGHT
+    : CROP_FRAME_WIDTH / imageAspect;
+
+  return {
+    width: baseWidth * zoom,
+    height: baseHeight * zoom,
+  };
+}
+
+function clampCropState(crop: CropState, source: SourceImageState): CropState {
+  const safeZoom = Math.max(1, Math.min(3, crop.zoom));
+  const rendered = renderedCropDimensions(source.width, source.height, safeZoom);
+  const maxX = Math.max(0, (rendered.width - CROP_FRAME_WIDTH) / 2);
+  const maxY = Math.max(0, (rendered.height - CROP_FRAME_HEIGHT) / 2);
+
+  return {
+    zoom: safeZoom,
+    x: Math.max(-maxX, Math.min(maxX, crop.x)),
+    y: Math.max(-maxY, Math.min(maxY, crop.y)),
+  };
+}
+
+async function optimizeCroppedImageForUpload(
+  source: SourceImageState,
+  rawCrop: CropState,
+): Promise<{ file: File; meta: ProcessedImageMeta }> {
+  const crop = clampCropState(rawCrop, source);
+  const image = await loadImage(source.file);
+
+  const rendered = renderedCropDimensions(source.width, source.height, crop.zoom);
+  const drawX = (CROP_FRAME_WIDTH - rendered.width) / 2 + crop.x;
+  const drawY = (CROP_FRAME_HEIGHT - rendered.height) / 2 + crop.y;
+
+  const sx = Math.max(0, (-drawX * source.width) / rendered.width);
+  const sy = Math.max(0, (-drawY * source.height) / rendered.height);
+  const sw = Math.min(source.width - sx, (CROP_FRAME_WIDTH * source.width) / rendered.width);
+  const sh = Math.min(source.height - sy, (CROP_FRAME_HEIGHT * source.height) / rendered.height);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = CROP_OUTPUT_WIDTH;
+  canvas.height = CROP_OUTPUT_HEIGHT;
+  const ctx = canvas.getContext("2d");
+
+  if (!ctx) {
+    return {
+      file: source.file,
+      meta: {
+        originalBytes: source.file.size,
+        finalBytes: source.file.size,
+        mimeType: source.file.type || "application/octet-stream",
+        width: source.width,
+        height: source.height,
+      },
+    };
+  }
+
+  ctx.drawImage(
+    image,
+    sx,
+    sy,
+    Math.max(1, sw),
+    Math.max(1, sh),
+    0,
+    0,
+    CROP_OUTPUT_WIDTH,
+    CROP_OUTPUT_HEIGHT,
+  );
+
+  let bestBlob: Blob | null = null;
+  let bestMime = "image/webp";
+
+  for (const mimeType of PREVIEW_IMAGE_MIME_ORDER) {
+    const firstTry = await canvasToBlob(canvas, mimeType, 0.84);
+    if (!firstTry) continue;
+
+    let candidate = firstTry;
+    let quality = 0.78;
+    while (candidate.size > PREVIEW_TARGET_IMAGE_BYTES && candidate.size > PREVIEW_MIN_IMAGE_BYTES && quality >= 0.45) {
+      const next = await canvasToBlob(canvas, mimeType, quality);
+      if (!next) break;
+      candidate = next;
+      quality -= 0.07;
+    }
+
+    if (!bestBlob || candidate.size < bestBlob.size) {
+      bestBlob = candidate;
+      bestMime = mimeType;
+    }
+
+    if (candidate.size <= PREVIEW_TARGET_IMAGE_BYTES) {
+      break;
+    }
+  }
+
+  if (!bestBlob) {
+    return {
+      file: source.file,
+      meta: {
+        originalBytes: source.file.size,
+        finalBytes: source.file.size,
+        mimeType: source.file.type || "application/octet-stream",
+        width: source.width,
+        height: source.height,
+      },
+    };
+  }
+
+  const originalName = source.file.name.replace(/\.[^.]+$/, "");
+  const extension = bestMime === "image/webp" ? "webp" : "jpg";
+  const optimizedFile = new File([bestBlob], `${originalName}-crop.${extension}`, {
+    type: bestMime,
+    lastModified: Date.now(),
+  });
+
+  return {
+    file: optimizedFile,
+    meta: {
+      originalBytes: source.file.size,
+      finalBytes: optimizedFile.size,
+      mimeType: bestMime,
+      width: CROP_OUTPUT_WIDTH,
+      height: CROP_OUTPUT_HEIGHT,
+    },
+  };
 }
 
 export default function CmsPosts() {
   const { user } = useAuth();
-  const canViewPosts = hasPermission(user, "posts.view");
+  const canManageCmsPosts = hasPermission(user, "posts.create");
   const canCreatePosts = hasPermission(user, "posts.create");
   const canUpdatePosts = hasPermission(user, "posts.update");
   const canDeletePosts = hasPermission(user, "posts.delete");
@@ -107,25 +276,28 @@ export default function CmsPosts() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const excerptChars = form.excerpt.length;
-  const contentChars = form.content.length;
-  const contentWords = form.content.trim() === "" ? 0 : form.content.trim().split(/\s+/).length;
+  const plainContent = useMemo(() => htmlToPlainText(form.content), [form.content]);
+  const contentChars = plainContent.length;
+  const contentWords = plainContent.trim() === "" ? 0 : plainContent.trim().split(/\s+/).length;
   const [previewFontSize, setPreviewFontSize] = useState(18);
   const [previewLayout, setPreviewLayout] = useState<"single" | "columns">("single");
-  const [previewPaged, setPreviewPaged] = useState(true);
-  const [previewCharsPerPage, setPreviewCharsPerPage] = useState(PAGE_SIZES[1].value);
-  const [previewPageIndex, setPreviewPageIndex] = useState(0);
   const [previewUploadUrl, setPreviewUploadUrl] = useState("");
+  const [processingImage, setProcessingImage] = useState(false);
+  const [processedImageMeta, setProcessedImageMeta] = useState<ProcessedImageMeta | null>(null);
+  const [sourceImage, setSourceImage] = useState<SourceImageState | null>(null);
+  const [crop, setCrop] = useState<CropState>({ x: 0, y: 0, zoom: 1 });
+  const [sourceImageUrl, setSourceImageUrl] = useState("");
+  const pointerDragRef = useRef<{ pointerId: number; startX: number; startY: number; originX: number; originY: number } | null>(null);
   const editingPost = editingId ? posts.find((p) => p.id === editingId) : null;
   const previewImageUrl = previewUploadUrl || editingPost?.image_url || "";
+  const cropRendered = sourceImage
+    ? renderedCropDimensions(sourceImage.width, sourceImage.height, crop.zoom)
+    : { width: CROP_FRAME_WIDTH, height: CROP_FRAME_HEIGHT };
 
-  const previewPages = useMemo(
-    () => paginateContent(form.content, previewCharsPerPage),
-    [form.content, previewCharsPerPage],
-  );
-  const previewText = previewPaged ? (previewPages[previewPageIndex] ?? "") : form.content;
+  const previewHtml = useMemo(() => sanitizeRichHtml(form.content), [form.content]);
   const previewWordCount = useMemo(
-    () => (previewText.trim().length ? previewText.trim().split(/\s+/).length : 0),
-    [previewText],
+    () => (plainContent.trim().length ? plainContent.trim().split(/\s+/).length : 0),
+    [plainContent],
   );
 
   function getApiErrorMessage(err: unknown): string {
@@ -149,7 +321,7 @@ export default function CmsPosts() {
   }
 
   useEffect(() => {
-    if (!canViewPosts) {
+    if (!canManageCmsPosts) {
       setLoading(false);
       return;
     }
@@ -171,11 +343,7 @@ export default function CmsPosts() {
     return () => {
       mounted = false;
     };
-  }, [canViewPosts]);
-
-  useEffect(() => {
-    setPreviewPageIndex(0);
-  }, [form.content, previewCharsPerPage, previewPaged]);
+  }, [canManageCmsPosts]);
 
   useEffect(() => {
     if (!form.image) {
@@ -189,8 +357,139 @@ export default function CmsPosts() {
     return () => URL.revokeObjectURL(objectUrl);
   }, [form.image]);
 
+  useEffect(() => {
+    if (!sourceImage) {
+      setSourceImageUrl("");
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(sourceImage.file);
+    setSourceImageUrl(objectUrl);
+
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [sourceImage]);
+
+  useEffect(() => {
+    const onPointerMove = (event: PointerEvent) => {
+      const drag = pointerDragRef.current;
+      if (!drag || drag.pointerId !== event.pointerId || !sourceImage) return;
+
+      const dx = event.clientX - drag.startX;
+      const dy = event.clientY - drag.startY;
+      const next = clampCropState(
+        {
+          zoom: crop.zoom,
+          x: drag.originX + dx,
+          y: drag.originY + dy,
+        },
+        sourceImage,
+      );
+      setCrop(next);
+    };
+
+    const onPointerUp = (event: PointerEvent) => {
+      const drag = pointerDragRef.current;
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      pointerDragRef.current = null;
+    };
+
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+
+    return () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+    };
+  }, [crop.zoom, sourceImage]);
+
+  async function handleImageChange(file: File | null) {
+    if (!file) {
+      setForm((prev) => ({ ...prev, image: null }));
+      setProcessedImageMeta(null);
+      setSourceImage(null);
+      setCrop({ x: 0, y: 0, zoom: 1 });
+      return;
+    }
+
+    setProcessingImage(true);
+    setError("");
+
+    try {
+      const image = await loadImage(file);
+      const nextSource: SourceImageState = {
+        file,
+        width: image.naturalWidth || image.width,
+        height: image.naturalHeight || image.height,
+      };
+      setSourceImage(nextSource);
+      const initialCrop: CropState = { x: 0, y: 0, zoom: 1 };
+      setCrop(initialCrop);
+
+      const optimized = await optimizeCroppedImageForUpload(nextSource, initialCrop);
+      setForm((prev) => ({ ...prev, image: optimized.file }));
+      setProcessedImageMeta(optimized.meta);
+    } catch {
+      setForm((prev) => ({ ...prev, image: file }));
+      setProcessedImageMeta({
+        originalBytes: file.size,
+        finalBytes: file.size,
+        mimeType: file.type || "application/octet-stream",
+        width: 0,
+        height: 0,
+      });
+      setSourceImage(null);
+      setCrop({ x: 0, y: 0, zoom: 1 });
+      setError("Image preview optimization failed. Original file will be uploaded.");
+    } finally {
+      setProcessingImage(false);
+    }
+  }
+
+  async function applyCropToUpload() {
+    if (!sourceImage) return;
+
+    setProcessingImage(true);
+    setError("");
+    try {
+      const optimized = await optimizeCroppedImageForUpload(sourceImage, crop);
+      setForm((prev) => ({ ...prev, image: optimized.file }));
+      setProcessedImageMeta(optimized.meta);
+    } catch {
+      setError("Unable to apply image crop. Keeping previous optimized preview.");
+    } finally {
+      setProcessingImage(false);
+    }
+  }
+
+  async function uploadInlineImage(file: File): Promise<string> {
+    const payload = new FormData();
+    payload.append("image", file);
+    const response = await api.post("/cms/uploads/inline-image", payload);
+    const url = response.data?.url as string | undefined;
+    if (!url) {
+      throw new Error("Inline image upload failed.");
+    }
+    return url;
+  }
+
+  function handleCropFramePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    if (!sourceImage) return;
+
+    (event.currentTarget as HTMLDivElement).setPointerCapture(event.pointerId);
+    pointerDragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      originX: crop.x,
+      originY: crop.y,
+    };
+  }
+
   function resetForm() {
     setForm(initialForm);
+    setProcessedImageMeta(null);
+    setSourceImage(null);
+    setCrop({ x: 0, y: 0, zoom: 1 });
     setEditingId(null);
   }
 
@@ -210,6 +509,9 @@ export default function CmsPosts() {
     });
     setMessage("");
     setError("");
+    setProcessedImageMeta(null);
+    setSourceImage(null);
+    setCrop({ x: 0, y: 0, zoom: 1 });
   }
 
   async function submit() {
@@ -227,6 +529,13 @@ export default function CmsPosts() {
     setMessage("");
 
     try {
+      let imageToUpload = form.image;
+      if (sourceImage) {
+        const optimized = await optimizeCroppedImageForUpload(sourceImage, crop);
+        imageToUpload = optimized.file;
+        setProcessedImageMeta(optimized.meta);
+      }
+
       const basePayload = {
         title: form.title,
         section: form.section,
@@ -239,7 +548,7 @@ export default function CmsPosts() {
           : {}),
       };
 
-      if (form.image) {
+      if (imageToUpload) {
         const payload = new FormData();
         payload.append("title", basePayload.title);
         payload.append("section", basePayload.section);
@@ -248,7 +557,7 @@ export default function CmsPosts() {
         payload.append("status", basePayload.status);
         payload.append("is_featured", String(basePayload.is_featured));
         if (basePayload.published_at) payload.append("published_at", basePayload.published_at);
-        payload.append("image", form.image);
+        payload.append("image", imageToUpload);
 
         if (editingId) {
           payload.append("_method", "PUT");
@@ -291,12 +600,12 @@ export default function CmsPosts() {
     }
   }
 
-  if (!canViewPosts) {
+  if (!canManageCmsPosts) {
     return (
       <section>
         <h1 className="mb-2 font-heading text-4xl text-offwhite">CMS Posts</h1>
         <p className="rounded-md border border-red-400/40 bg-red-400/10 px-4 py-3 text-sm text-red-200">
-          You do not have permission to view CMS posts.
+          You do not have permission to manage CMS posts.
         </p>
       </section>
     );
@@ -370,26 +679,95 @@ export default function CmsPosts() {
             Excerpt: {excerptChars}/300
           </p>
 
-          <textarea
+          <RichTextEditor
             value={form.content}
-            onChange={(e) => setForm((prev) => ({ ...prev, content: e.target.value }))}
-            placeholder="Write article content here (supports long-form articles)"
-            rows={12}
-            maxLength={30000}
-            required
-            className="rounded-md border border-white/25 bg-white/10 px-4 py-2.5 text-offwhite placeholder:text-mist/70 md:col-span-2"
+            onChange={(html) => setForm((prev) => ({ ...prev, content: html }))}
+            onUploadImage={uploadInlineImage}
+            disabled={saving || processingImage}
           />
           <p className="md:col-span-2 -mt-2 text-right text-xs text-mist/75">
-            Content: {contentWords.toLocaleString()} words · {contentChars.toLocaleString()}/30,000 characters
-            <span className="ml-2 text-gold-soft">(target long-form: 5,000 words or ~18,000 to 30,000 chars)</span>
+            Content: {contentWords.toLocaleString()} words · {contentChars.toLocaleString()} text characters
+            <span className="ml-2 text-gold-soft">(Rich text enabled: headings, links, lists, inline images)</span>
           </p>
 
           <input
             type="file"
             accept="image/*"
-            onChange={(e) => setForm((prev) => ({ ...prev, image: e.target.files?.[0] ?? null }))}
+            onChange={(e) => {
+              void handleImageChange(e.target.files?.[0] ?? null);
+            }}
             className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite md:col-span-2"
           />
+          {sourceImage && sourceImageUrl && (
+            <div className="md:col-span-2 rounded-lg border border-white/20 bg-white/5 p-3">
+              <p className="mb-2 text-xs text-mist/80">
+                Drag inside the frame to choose visible area. Only framed image will be resized and uploaded.
+              </p>
+              <div
+                className="relative mx-auto h-[180px] w-[320px] overflow-hidden rounded-md border border-white/35 bg-ink/40 touch-none"
+                onPointerDown={handleCropFramePointerDown}
+              >
+                <img
+                  src={sourceImageUrl}
+                  alt="Crop source"
+                  draggable={false}
+                  className="pointer-events-none absolute left-1/2 top-1/2 max-w-none select-none"
+                  style={{
+                    width: `${cropRendered.width}px`,
+                    height: `${cropRendered.height}px`,
+                    transform: `translate(calc(-50% + ${crop.x}px), calc(-50% + ${crop.y}px))`,
+                  }}
+                />
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <label className="flex items-center gap-2 text-xs text-mist/80">
+                  Zoom
+                  <input
+                    type="range"
+                    min={1}
+                    max={3}
+                    step={0.01}
+                    value={crop.zoom}
+                    onChange={(e) => {
+                      if (!sourceImage) return;
+                      const next = clampCropState(
+                        { ...crop, zoom: Number(e.target.value) },
+                        sourceImage,
+                      );
+                      setCrop(next);
+                    }}
+                  />
+                  <span className="w-10 text-right">{crop.zoom.toFixed(2)}x</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => void applyCropToUpload()}
+                  disabled={processingImage}
+                  className="rounded-md border border-white/30 px-3 py-1.5 text-xs text-offwhite disabled:opacity-50"
+                >
+                  Apply Crop
+                </button>
+              </div>
+            </div>
+          )}
+          <p className="md:col-span-2 -mt-2 text-xs text-mist/75">
+            {processingImage && "Optimizing image for faster upload..."}
+            {!processingImage && form.image && processedImageMeta && (
+              <>
+                Upload file: {humanFileSize(processedImageMeta.finalBytes)}
+                {" · "}
+                {processedImageMeta.width > 0 && processedImageMeta.height > 0
+                  ? `${processedImageMeta.width}x${processedImageMeta.height}`
+                  : "Original resolution"}
+                {" · "}
+                {processedImageMeta.mimeType}
+                {processedImageMeta.finalBytes < processedImageMeta.originalBytes
+                  ? ` · reduced from ${humanFileSize(processedImageMeta.originalBytes)}`
+                  : ""}
+              </>
+            )}
+            {!processingImage && !form.image && "Selected image will be auto-resized and compressed before upload."}
+          </p>
 
           {editingId && (
             <div className="md:col-span-2">
@@ -420,10 +798,10 @@ export default function CmsPosts() {
           <button
             type="button"
             onClick={submit}
-            disabled={saving || (!editingId && !canCreatePosts) || (editingId !== null && !canUpdatePosts)}
+            disabled={saving || processingImage || (!editingId && !canCreatePosts) || (editingId !== null && !canUpdatePosts)}
             className="btn-primary"
           >
-            {saving ? "Saving..." : editingId ? "Update Post" : "Publish Post"}
+            {processingImage ? "Processing image..." : saving ? "Saving..." : editingId ? "Update Post" : "Publish Post"}
           </button>
 
           {editingId && (
@@ -440,9 +818,9 @@ export default function CmsPosts() {
           Preview long-form readability before publishing.
         </p>
 
-        <div className="mb-4 grid gap-3 rounded-lg border border-white/20 bg-white/5 p-3 md:grid-cols-[1fr_auto_auto_auto] md:items-center">
+        <div className="mb-4 grid gap-3 rounded-lg border border-white/20 bg-white/5 p-3 md:grid-cols-[1fr_auto_auto] md:items-center">
           <div className="text-xs text-mist/80">
-            {previewPaged ? `Page ${previewPageIndex + 1} of ${previewPages.length}` : "Continuous mode"} · {previewWordCount.toLocaleString()} words
+            Rich preview · {previewWordCount.toLocaleString()} words
           </div>
 
           <div className="flex items-center gap-2">
@@ -481,33 +859,17 @@ export default function CmsPosts() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2 md:justify-end">
-            <button
-              type="button"
-              onClick={() => setPreviewPaged(false)}
-              className={`rounded-md border px-3 py-1 text-sm ${!previewPaged ? "border-gold bg-gold text-ink" : "border-white/30 text-mist/80"}`}
+            <select
+              value={previewFontSize}
+              onChange={(e) => setPreviewFontSize(Number(e.target.value))}
+              className="rounded-md border border-white/30 bg-white/10 px-3 py-1 text-sm text-offwhite"
             >
-              Continuous
-            </button>
-            <button
-              type="button"
-              onClick={() => setPreviewPaged(true)}
-              className={`rounded-md border px-3 py-1 text-sm ${previewPaged ? "border-gold bg-gold text-ink" : "border-white/30 text-mist/80"}`}
-            >
-              Multi Page
-            </button>
-            {previewPaged && (
-              <select
-                value={previewCharsPerPage}
-                onChange={(e) => setPreviewCharsPerPage(Number(e.target.value))}
-                className="rounded-md border border-white/30 bg-white/10 px-3 py-1 text-sm text-offwhite"
-              >
-                {PAGE_SIZES.map((size) => (
-                  <option key={size.value} value={size.value} style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>
-                    {size.label}
-                  </option>
-                ))}
-              </select>
-            )}
+              {PAGE_SIZES.map((size) => (
+                <option key={size.value} value={size.value} style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>
+                  {size.label}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 
@@ -531,33 +893,14 @@ export default function CmsPosts() {
           )}
 
           <div
-            className={`mt-5 whitespace-pre-line leading-relaxed text-mist/90 ${previewLayout === "columns" ? "md:columns-2 xl:columns-3 md:gap-10" : "max-w-4xl"}`}
+            className={`rich-content mt-5 leading-relaxed text-mist/90 ${previewLayout === "columns" ? "md:columns-2 xl:columns-3 md:gap-10" : "max-w-4xl"}`}
             style={{ fontSize: `${previewFontSize}px` }}
+            dangerouslySetInnerHTML={{
+              __html: previewHtml || "<p>Article content preview will appear here.</p>",
+            }}
           >
-            {previewText || "Article content preview will appear here."}
           </div>
         </article>
-
-        {previewPaged && (
-          <div className="mt-4 flex justify-end gap-3">
-            <button
-              type="button"
-              disabled={previewPageIndex === 0}
-              onClick={() => setPreviewPageIndex((p) => Math.max(0, p - 1))}
-              className="rounded-md border border-white/30 px-4 py-2 text-sm disabled:opacity-50"
-            >
-              Prev Page
-            </button>
-            <button
-              type="button"
-              disabled={previewPageIndex >= previewPages.length - 1}
-              onClick={() => setPreviewPageIndex((p) => Math.min(previewPages.length - 1, p + 1))}
-              className="rounded-md border border-white/30 px-4 py-2 text-sm disabled:opacity-50"
-            >
-              Next Page
-            </button>
-          </div>
-        )}
       </div>
 
       <div className="overflow-hidden rounded-xl border border-white/20 bg-white/10">

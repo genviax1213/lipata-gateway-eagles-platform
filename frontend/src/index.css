@@ -191,3 +191,95 @@ input::-ms-clear {
     transform: none;
   }
 }
+
+.rich-editor-container .ProseMirror {
+  min-height: 13rem;
+  outline: none;
+}
+
+.rich-editor-container .ProseMirror p.is-editor-empty:first-child::before {
+  color: rgba(223, 232, 245, 0.55);
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+.rich-content h1,
+.rich-content h2,
+.rich-content h3,
+.rich-content h4,
+.rich-content h5,
+.rich-content h6 {
+  color: #f6f1e6;
+  font-family: var(--font-heading);
+  line-height: 1.2;
+  margin: 1.2em 0 0.45em;
+}
+
+.rich-content h1 {
+  font-size: 2.2em;
+}
+
+.rich-content h2 {
+  font-size: 1.8em;
+}
+
+.rich-content h3 {
+  font-size: 1.4em;
+}
+
+.rich-content p {
+  line-height: 1.8;
+  margin: 0.9em 0;
+}
+
+.rich-content ul,
+.rich-content ol {
+  margin: 0.9em 0;
+  padding-left: 1.35em;
+}
+
+.rich-content li {
+  margin: 0.35em 0;
+}
+
+.rich-content blockquote {
+  border-left: 3px solid rgba(224, 180, 74, 0.5);
+  color: #dfe8f5;
+  margin: 1.2em 0;
+  padding-left: 1em;
+}
+
+.rich-content a {
+  color: #f3db98;
+  text-decoration: underline;
+}
+
+.rich-content img {
+  border-radius: 0.65rem;
+  display: block;
+  height: auto;
+  margin: 1.2em 0;
+  max-width: 100%;
+}
+
+.rich-content hr {
+  border-color: rgba(255, 255, 255, 0.2);
+  margin: 1.4em 0;
+}
+
+.rich-content code,
+.rich-content pre {
+  background: rgba(10, 23, 48, 0.6);
+  border-radius: 0.35rem;
+}
+
+.rich-content code {
+  padding: 0.08em 0.35em;
+}
+
+.rich-content pre {
+  overflow-x: auto;
+  padding: 0.8em;
+}

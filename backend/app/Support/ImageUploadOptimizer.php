@@ -15,7 +15,8 @@ class ImageUploadOptimizer
         int $maxWidth = 1920,
         int $maxHeight = 1920,
         int $quality = 82,
-        bool $convertToWebp = false
+        bool $convertToWebp = false,
+        ?int $targetMaxBytes = null
     ): string {
         $mime = (string) $file->getMimeType();
         if (!in_array($mime, ['image/jpeg', 'image/png'], true)) {
@@ -75,6 +76,7 @@ class ImageUploadOptimizer
         }
 
         $binary = self::encodeImage($targetImage, $outputMime, $quality);
+        $binary = self::shrinkToTargetSize($targetImage, $outputMime, $quality, $binary, $targetMaxBytes);
 
         if ($targetImage !== $sourceImage) {
             imagedestroy($targetImage);
@@ -94,6 +96,40 @@ class ImageUploadOptimizer
         Storage::disk($disk)->put($path, $binary);
 
         return $path;
+    }
+
+    private static function shrinkToTargetSize($image, string $mime, int $quality, ?string $binary, ?int $targetMaxBytes): ?string
+    {
+        if ($binary === null || $targetMaxBytes === null || $targetMaxBytes < 1024) {
+            return $binary;
+        }
+
+        if (strlen($binary) <= $targetMaxBytes) {
+            return $binary;
+        }
+
+        if (!in_array($mime, ['image/jpeg', 'image/webp'], true)) {
+            return $binary;
+        }
+
+        $best = $binary;
+
+        for ($q = max(30, min(95, $quality) - 7); $q >= 30; $q -= 5) {
+            $candidate = self::encodeImage($image, $mime, $q);
+            if ($candidate === null) {
+                continue;
+            }
+
+            if (strlen($candidate) < strlen($best)) {
+                $best = $candidate;
+            }
+
+            if (strlen($candidate) <= $targetMaxBytes) {
+                return $candidate;
+            }
+        }
+
+        return $best;
     }
 
     private static function fitDimensions(int $width, int $height, int $maxWidth, int $maxHeight): array
