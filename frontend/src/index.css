@@ -193,8 +193,14 @@ input::-ms-clear {
 }
 
 .rich-editor-container .ProseMirror {
+  caret-color: #f3db98;
+  color: #f6f1e6;
   min-height: 13rem;
   outline: none;
+}
+
+.rich-editor-container [contenteditable="true"] {
+  caret-color: #f3db98;
 }
 
 .rich-editor-container .ProseMirror p.is-editor-empty:first-child::before {

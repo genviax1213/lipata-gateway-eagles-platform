@@ -74,6 +74,7 @@ Route::prefix('v1')->group(function () {
 
         Route::get('/forum/threads', [ForumController::class, 'index']);
         Route::post('/forum/threads', [ForumController::class, 'storeThread']);
+        Route::post('/forum/uploads/inline-image', [ForumController::class, 'uploadInlineImage']);
         Route::get('/forum/threads/{thread}', [ForumController::class, 'show']);
         Route::post('/forum/threads/{thread}/posts', [ForumController::class, 'storeReply']);
         Route::post('/forum/threads/{thread}/lock', [ForumController::class, 'setThreadLock']);

@@ -299,6 +299,16 @@ export default function CmsPosts() {
     () => (plainContent.trim().length ? plainContent.trim().split(/\s+/).length : 0),
     [plainContent],
   );
+  const hasUnsavedDraft = useMemo(() => {
+    if (editingId) return true;
+    return (
+      form.title.trim() !== "" ||
+      form.excerpt.trim() !== "" ||
+      htmlToPlainText(form.content).trim() !== "" ||
+      form.image !== null ||
+      sourceImage !== null
+    );
+  }, [editingId, form.title, form.excerpt, form.content, form.image, sourceImage]);
 
   function getApiErrorMessage(err: unknown): string {
     if (!axios.isAxiosError(err)) return "Unexpected error while saving post.";
@@ -491,6 +501,19 @@ export default function CmsPosts() {
     setSourceImage(null);
     setCrop({ x: 0, y: 0, zoom: 1 });
     setEditingId(null);
+  }
+
+  function cancelOrDiscardForm() {
+    const confirmed = window.confirm(
+      editingId
+        ? "Cancel editing this post and discard unsaved changes?"
+        : "Discard this draft?",
+    );
+
+    if (!confirmed) return;
+    resetForm();
+    setMessage("");
+    setError("");
   }
 
   function startEdit(post: CmsPost) {
@@ -804,9 +827,9 @@ export default function CmsPosts() {
             {processingImage ? "Processing image..." : saving ? "Saving..." : editingId ? "Update Post" : "Publish Post"}
           </button>
 
-          {editingId && (
-            <button type="button" onClick={resetForm} className="btn-secondary">
-              Cancel Edit
+          {hasUnsavedDraft && (
+            <button type="button" onClick={cancelOrDiscardForm} className="btn-secondary">
+              {editingId ? "Cancel Edit" : "Discard Draft"}
             </button>
           )}
         </div>

@@ -12,6 +12,85 @@ type RichTextEditorProps = {
   disabled?: boolean;
 };
 
+async function loadImage(file: File): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const image = new window.Image();
+    image.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(image);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Unable to read selected image."));
+    };
+    image.src = url;
+  });
+}
+
+function canvasToBlob(canvas: HTMLCanvasElement, mimeType: string, quality: number): Promise<Blob | null> {
+  return new Promise((resolve) => {
+    canvas.toBlob((blob) => resolve(blob), mimeType, quality);
+  });
+}
+
+async function cropAndResizeEditorImage(file: File): Promise<File | null> {
+  const image = await loadImage(file);
+  const sourceWidth = image.naturalWidth || image.width;
+  const sourceHeight = image.naturalHeight || image.height;
+
+  const shouldCrop169 = window.confirm("Crop this image to 16:9 center before upload?");
+  const widthInput = window.prompt("Max output width in px (e.g. 1400). Leave blank to keep original.", "1400");
+  if (widthInput === null) return null;
+
+  const parsedMaxWidth = Number.parseInt(widthInput.trim(), 10);
+  const maxWidth = Number.isFinite(parsedMaxWidth) && parsedMaxWidth > 0
+    ? parsedMaxWidth
+    : sourceWidth;
+
+  let sx = 0;
+  let sy = 0;
+  let sw = sourceWidth;
+  let sh = sourceHeight;
+
+  if (shouldCrop169) {
+    const targetAspect = 16 / 9;
+    const sourceAspect = sourceWidth / sourceHeight;
+
+    if (sourceAspect > targetAspect) {
+      sw = Math.round(sourceHeight * targetAspect);
+      sx = Math.round((sourceWidth - sw) / 2);
+    } else if (sourceAspect < targetAspect) {
+      sh = Math.round(sourceWidth / targetAspect);
+      sy = Math.round((sourceHeight - sh) / 2);
+    }
+  }
+
+  const outputWidth = Math.max(1, Math.min(maxWidth, sw));
+  const outputHeight = Math.max(1, Math.round(outputWidth * (sh / sw)));
+
+  const canvas = document.createElement("canvas");
+  canvas.width = outputWidth;
+  canvas.height = outputHeight;
+
+  const context = canvas.getContext("2d");
+  if (!context) return file;
+
+  context.drawImage(image, sx, sy, sw, sh, 0, 0, outputWidth, outputHeight);
+
+  const outputType = file.type === "image/png" ? "image/png" : "image/webp";
+  const blob = await canvasToBlob(canvas, outputType, 0.86);
+  if (!blob) return file;
+
+  const baseName = file.name.replace(/\.[^.]+$/, "");
+  const ext = outputType === "image/png" ? "png" : "webp";
+
+  return new File([blob], `${baseName}-edited.${ext}`, {
+    type: outputType,
+    lastModified: Date.now(),
+  });
+}
+
 type ToolbarButtonProps = {
   active?: boolean;
   disabled?: boolean;
@@ -77,8 +156,10 @@ export default function RichTextEditor({
     if (!editor) return;
     setUploadingImage(true);
     try {
-      const imageUrl = await onUploadImage(file);
-      editor.chain().focus().setImage({ src: imageUrl, alt: file.name }).run();
+      const editedFile = await cropAndResizeEditorImage(file);
+      if (!editedFile) return;
+      const imageUrl = await onUploadImage(editedFile);
+      editor.chain().focus().setImage({ src: imageUrl, alt: editedFile.name }).run();
     } finally {
       setUploadingImage(false);
     }

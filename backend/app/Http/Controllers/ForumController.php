@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\ImageUploadOptimizer;
 use App\Models\ForumPost;
 use App\Models\ForumThread;
 use App\Models\User;
@@ -10,6 +11,8 @@ use Illuminate\Support\Str;
 
 class ForumController extends Controller
 {
+    private const FORUM_BODY_MAX_CHARS = 60000;
+
     private function isSuperAdmin(User $user): bool
     {
         return (string) $user->email === 'admin@lipataeagles.ph';
@@ -113,8 +116,12 @@ class ForumController extends Controller
 
         $validated = $request->validate([
             'title' => 'required|string|min:5|max:180',
-            'body' => 'required|string|min:5|max:5000',
+            'body' => 'required|string|max:' . self::FORUM_BODY_MAX_CHARS,
         ]);
+        $body = $this->sanitizeRichContent($validated['body']);
+        if (mb_strlen(trim(strip_tags($body))) < 2) {
+            return response()->json(['message' => 'Thread body must contain meaningful content.'], 422);
+        }
 
         /** @var User $user */
         $user = $request->user();
@@ -122,14 +129,14 @@ class ForumController extends Controller
         $thread = ForumThread::query()->create([
             'title' => trim($validated['title']),
             'slug' => $this->uniqueThreadSlug(Str::slug($validated['title'])),
-            'body' => trim($validated['body']),
+            'body' => $body,
             'created_by_user_id' => $user->id,
             'last_posted_at' => now(),
         ]);
 
         ForumPost::query()->create([
             'thread_id' => $thread->id,
-            'body' => trim($validated['body']),
+            'body' => $body,
             'created_by_user_id' => $user->id,
             'is_hidden' => false,
         ]);
@@ -146,15 +153,19 @@ class ForumController extends Controller
         }
 
         $validated = $request->validate([
-            'body' => 'required|string|min:2|max:5000',
+            'body' => 'required|string|max:' . self::FORUM_BODY_MAX_CHARS,
         ]);
+        $body = $this->sanitizeRichContent($validated['body']);
+        if (mb_strlen(trim(strip_tags($body))) < 2) {
+            return response()->json(['message' => 'Reply must contain meaningful content.'], 422);
+        }
 
         /** @var User $user */
         $user = $request->user();
 
         $post = ForumPost::query()->create([
             'thread_id' => $thread->id,
-            'body' => trim($validated['body']),
+            'body' => $body,
             'created_by_user_id' => $user->id,
             'is_hidden' => false,
         ]);
@@ -163,6 +174,34 @@ class ForumController extends Controller
         $thread->save();
 
         return response()->json($post->load('author:id,name'), 201);
+    }
+
+    public function uploadInlineImage(Request $request)
+    {
+        $this->ensurePermission($request, 'forum.reply');
+
+        $validated = $request->validate([
+            'image' => 'required|image|max:12288',
+        ], [
+            'image.image' => 'The selected file must be a valid image.',
+            'image.max' => 'Image file is too large. Maximum allowed size is 12MB.',
+        ]);
+
+        $path = ImageUploadOptimizer::storeOptimizedOrOriginal(
+            $validated['image'],
+            'forum',
+            'public',
+            1920,
+            1920,
+            82,
+            true,
+            1536 * 1024
+        );
+
+        return response()->json([
+            'url' => asset('storage/' . $path),
+            'path' => $path,
+        ], 201);
     }
 
     public function setThreadLock(Request $request, ForumThread $thread)
@@ -236,5 +275,114 @@ class ForumController extends Controller
         }
 
         return response()->json(['message' => 'Post deleted.']);
+    }
+
+    private function sanitizeRichContent(string $content): string
+    {
+        $content = trim(str_replace("\r\n", "\n", $content));
+        if ($content === '') {
+            return '';
+        }
+
+        $wrapped = '<!DOCTYPE html><html><body>' . $content . '</body></html>';
+        $dom = new \DOMDocument('1.0', 'UTF-8');
+        $previous = libxml_use_internal_errors(true);
+        $dom->loadHTML($wrapped, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+        libxml_clear_errors();
+        libxml_use_internal_errors($previous);
+
+        $body = $dom->getElementsByTagName('body')->item(0);
+        if (!$body instanceof \DOMElement) {
+            return '';
+        }
+
+        $this->sanitizeNodeChildren($body, $dom);
+        return trim($this->innerHtml($body));
+    }
+
+    private function sanitizeNodeChildren(\DOMNode $node, \DOMDocument $dom): void
+    {
+        $allowedTags = [
+            'p', 'br', 'strong', 'em', 'u', 's', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+            'ul', 'ol', 'li', 'blockquote', 'a', 'img', 'hr', 'code', 'pre',
+        ];
+
+        $allowedAttrs = [
+            'a' => ['href', 'target', 'rel'],
+            'img' => ['src', 'alt', 'title'],
+            '*' => [],
+        ];
+
+        $children = [];
+        foreach ($node->childNodes as $child) {
+            $children[] = $child;
+        }
+
+        foreach ($children as $child) {
+            if ($child instanceof \DOMElement) {
+                $tag = strtolower($child->tagName);
+                if (!in_array($tag, $allowedTags, true)) {
+                    while ($child->firstChild) {
+                        $node->insertBefore($child->firstChild, $child);
+                    }
+                    $node->removeChild($child);
+                    continue;
+                }
+
+                $allowed = array_merge($allowedAttrs['*'], $allowedAttrs[$tag] ?? []);
+                $toRemove = [];
+                foreach ($child->attributes as $attr) {
+                    $name = strtolower($attr->name);
+                    if (!in_array($name, $allowed, true)) {
+                        $toRemove[] = $name;
+                    }
+                }
+                foreach ($toRemove as $name) {
+                    $child->removeAttribute($name);
+                }
+
+                if ($tag === 'a') {
+                    $href = trim((string) $child->getAttribute('href'));
+                    if (!$this->isSafeUrl($href)) {
+                        $child->removeAttribute('href');
+                    } else {
+                        $child->setAttribute('target', '_blank');
+                        $child->setAttribute('rel', 'noopener noreferrer nofollow');
+                    }
+                }
+
+                if ($tag === 'img') {
+                    $src = trim((string) $child->getAttribute('src'));
+                    if (!$this->isSafeUrl($src)) {
+                        $node->removeChild($child);
+                        continue;
+                    }
+                }
+
+                $this->sanitizeNodeChildren($child, $dom);
+            }
+        }
+    }
+
+    private function isSafeUrl(string $url): bool
+    {
+        if ($url === '') {
+            return false;
+        }
+
+        if (str_starts_with($url, '/')) {
+            return true;
+        }
+
+        return (bool) preg_match('#^https?://#i', $url);
+    }
+
+    private function innerHtml(\DOMNode $node): string
+    {
+        $html = '';
+        foreach ($node->childNodes as $child) {
+            $html .= $node->ownerDocument?->saveHTML($child) ?? '';
+        }
+        return $html;
     }
 }

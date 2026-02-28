@@ -3,6 +3,8 @@ import axios from "axios";
 import api from "../services/api";
 import { useAuth } from "../contexts/useAuth";
 import { hasPermission } from "../utils/auth";
+import RichTextEditor from "../components/RichTextEditor";
+import { htmlToPlainText, sanitizeRichHtml } from "../utils/richText";
 
 interface ForumAuthor {
   id: number;
@@ -56,6 +58,17 @@ export default function Forum() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const threadWordCount = useMemo(
+    () => (htmlToPlainText(threadBody).trim().length ? htmlToPlainText(threadBody).trim().split(/\s+/).length : 0),
+    [threadBody],
+  );
+  const replyWordCount = useMemo(
+    () => (htmlToPlainText(replyBody).trim().length ? htmlToPlainText(replyBody).trim().split(/\s+/).length : 0),
+    [replyBody],
+  );
+
+  const hasThreadBodyContent = useMemo(() => htmlToPlainText(threadBody).trim().length > 1, [threadBody]);
+  const hasReplyBodyContent = useMemo(() => htmlToPlainText(replyBody).trim().length > 1, [replyBody]);
 
   const parseError = (err: unknown, fallback: string): string => {
     if (!axios.isAxiosError(err)) return fallback;
@@ -143,6 +156,17 @@ export default function Forum() {
       setSaving(false);
     }
   };
+
+  async function uploadInlineImage(file: File): Promise<string> {
+    const payload = new FormData();
+    payload.append("image", file);
+    const response = await api.post("/forum/uploads/inline-image", payload);
+    const url = response.data?.url as string | undefined;
+    if (!url) {
+      throw new Error("Forum inline image upload failed.");
+    }
+    return url;
+  }
 
   const addReply = async () => {
     if (!canReply || !selectedThread) return;
@@ -296,17 +320,19 @@ export default function Forum() {
             placeholder="Thread title"
             className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
           />
-          <textarea
+          <RichTextEditor
             value={threadBody}
-            onChange={(e) => setThreadBody(e.target.value)}
-            rows={4}
-            placeholder="Discussion details"
-            className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+            onChange={setThreadBody}
+            onUploadImage={uploadInlineImage}
+            disabled={saving}
           />
+          <p className="-mt-1 text-right text-xs text-mist/75">
+            {threadWordCount.toLocaleString()} words
+          </p>
           <button
             className="btn-primary justify-self-start disabled:opacity-50"
             onClick={() => void createThread()}
-            disabled={saving || !threadTitle.trim() || !threadBody.trim()}
+            disabled={saving || !threadTitle.trim() || !hasThreadBodyContent}
           >
             {saving ? "Saving..." : "Create Thread"}
           </button>
@@ -384,7 +410,10 @@ export default function Forum() {
           <div className="max-h-[34rem] space-y-3 overflow-y-auto pr-1">
             {(selectedThread?.posts ?? []).map((post) => (
               <article key={post.id} className={`rounded-lg border px-3 py-3 ${post.is_hidden ? "border-red-400/40 bg-red-400/10" : "border-white/20 bg-white/5"}`}>
-                <p className="mb-2 whitespace-pre-wrap text-sm text-offwhite">{post.body}</p>
+                <div
+                  className="rich-content mb-2 text-sm text-offwhite"
+                  dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(post.body) }}
+                />
                 <p className="text-xs text-mist/70">
                   {post.author?.name ?? "Unknown"} | {new Date(post.created_at).toLocaleString()}
                   {post.is_hidden ? " | Hidden" : ""}
@@ -416,17 +445,18 @@ export default function Forum() {
 
           {selectedThread && canReply && (
             <div className="mt-4 grid gap-3">
-              <textarea
+              <RichTextEditor
                 value={replyBody}
-                onChange={(e) => setReplyBody(e.target.value)}
-                rows={4}
-                placeholder={selectedThread.is_locked ? "Thread is locked." : "Write your reply"}
-                disabled={selectedThread.is_locked}
-                className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite disabled:opacity-50"
+                onChange={setReplyBody}
+                onUploadImage={uploadInlineImage}
+                disabled={selectedThread.is_locked || saving}
               />
+              <p className="-mt-1 text-right text-xs text-mist/75">
+                {replyWordCount.toLocaleString()} words
+              </p>
               <button
                 className="btn-primary justify-self-start disabled:opacity-50"
-                disabled={saving || selectedThread.is_locked || !replyBody.trim()}
+                disabled={saving || selectedThread.is_locked || !hasReplyBodyContent}
                 onClick={() => void addReply()}
               >
                 {saving ? "Posting..." : "Post Reply"}
