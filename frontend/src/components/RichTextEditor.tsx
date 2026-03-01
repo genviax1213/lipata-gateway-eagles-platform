@@ -269,7 +269,7 @@ export default function RichTextEditor({
     setImageWidth(base + delta);
   };
 
-  const setImageAlign = (align: "left" | "right" | "center") => {
+  const setImageAlign = (align: "left" | "right") => {
     if (!editor) return;
     const attrs: Record<string, string | null> = { align };
     if (!currentImageWidth || currentImageWidth > 900) {
@@ -496,12 +496,6 @@ export default function RichTextEditor({
           active={currentImageAlign === "right"}
           disabled={disabled || !imageIsSelected}
           onClick={() => setImageAlign("right")}
-        />
-        <ToolbarButton
-          label="Center"
-          active={currentImageAlign === "center"}
-          disabled={disabled || !imageIsSelected}
-          onClick={() => setImageAlign("center")}
         />
         <ToolbarButton
           label="Add Label"
