@@ -232,6 +232,15 @@ input::-ms-clear {
   margin: 1em auto;
 }
 
+.rich-editor-container .ProseMirror p.image-label {
+  clear: both;
+  color: rgba(223, 232, 245, 0.88);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  margin: 0.25rem 0 1.1rem;
+  text-align: center;
+}
+
 .rich-editor-container .ProseMirror img.ProseMirror-selectednode {
   outline: 2px solid rgba(224, 180, 74, 0.8);
   outline-offset: 2px;
@@ -274,6 +283,15 @@ input::-ms-clear {
   display: block;
   float: none;
   margin: 1.2em auto;
+}
+
+.rich-content p.image-label {
+  clear: both;
+  color: rgba(223, 232, 245, 0.88);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  margin: 0.25rem 0 1.1rem;
+  text-align: center;
 }
 
 .rich-editor-container [contenteditable="true"] {

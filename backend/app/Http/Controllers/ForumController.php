@@ -309,6 +309,7 @@ class ForumController extends Controller
 
         $allowedAttrs = [
             'a' => ['href', 'target', 'rel'],
+            'p' => ['class'],
             'img' => ['src', 'alt', 'title', 'width', 'align'],
             '*' => [],
         ];
@@ -348,6 +349,17 @@ class ForumController extends Controller
                     } else {
                         $child->setAttribute('target', '_blank');
                         $child->setAttribute('rel', 'noopener noreferrer nofollow');
+                    }
+                }
+
+                if ($tag === 'p') {
+                    $class = trim((string) $child->getAttribute('class'));
+                    $tokens = preg_split('/\s+/', $class) ?: [];
+                    $tokens = array_values(array_filter($tokens, fn (string $token): bool => $token === 'image-label'));
+                    if ($tokens === []) {
+                        $child->removeAttribute('class');
+                    } else {
+                        $child->setAttribute('class', implode(' ', $tokens));
                     }
                 }
 

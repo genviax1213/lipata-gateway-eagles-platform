@@ -288,7 +288,7 @@ export default function RichTextEditor({
     editor
       .chain()
       .focus()
-      .insertContentAt(insertPos, "<p><em>Type image label here...</em></p>")
+      .insertContentAt(insertPos, '<p class="image-label"><em>Type image label here...</em></p>')
       .setTextSelection(insertPos + 1)
       .run();
   };

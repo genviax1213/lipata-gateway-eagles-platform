@@ -33,6 +33,7 @@ const ALLOWED_ATTR = [
   "title",
   "width",
   "align",
+  "class",
 ] as const;
 
 function escapeHtml(value: string): string {

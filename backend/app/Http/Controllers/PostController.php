@@ -352,6 +352,7 @@ class PostController extends Controller
 
         $allowedAttrs = [
             'a' => ['href', 'target', 'rel'],
+            'p' => ['class'],
             'img' => ['src', 'alt', 'title', 'width', 'align'],
             '*' => [],
         ];
@@ -396,6 +397,17 @@ class PostController extends Controller
                     }
                     if ($child->getAttribute('target') === '_blank') {
                         $child->setAttribute('rel', 'noopener noreferrer');
+                    }
+                }
+
+                if ($tag === 'p') {
+                    $class = trim((string) $child->getAttribute('class'));
+                    $tokens = preg_split('/\s+/', $class) ?: [];
+                    $tokens = array_values(array_filter($tokens, fn (string $token): bool => $token === 'image-label'));
+                    if ($tokens === []) {
+                        $child->removeAttribute('class');
+                    } else {
+                        $child->setAttribute('class', implode(' ', $tokens));
                     }
                 }
 
