@@ -9,3 +9,8 @@ id_ed25519.pub
 **/stackcpkey.pub
 **/stackcp.ppk
 **/stackcp.pub
+
+# Local/internal artifacts not intended for remote
+BLOCKCHAIN_*.md
+frontend-dist-deploy.tgz
+frontend/dist/

@@ -33,9 +33,7 @@ Rules added:
 2. Exclude backend endpoints (`/api/*`, `/sanctum/*`) from SPA rewrite.
 3. Rewrite all other requests to `index.html` so React Router resolves routes client-side.
 
-Also applied live on host via SSH in the active web root:
-
-- `/home/sites/35b/4/4ffed8199b/home/3088588/public_html/.htaccess`
+Also applied live on host via SSH in the active web root `.htaccess`.
 
 The live `.htaccess` now keeps API passthrough and adds SPA fallback for all non-file routes.
 
@@ -113,10 +111,8 @@ Updated fallback values:
 
 ### Deployment
 
-- Built frontend bundle and deployed to live docroot:
-  - `/home/sites/35b/4/4ffed8199b/home/3088588/public_html`
-- Live homepage now serves updated bundle:
-  - `index-CaHKf2Ge.js`
+- Built frontend bundle and deployed to live docroot.
+- Live homepage now serves updated bundle.
 
 ## Follow-up Deployment Incident: API 404/500 After Frontend Sync
 
@@ -131,31 +127,21 @@ Date: 2026-02-28
 ### Root Cause
 
 1. `rsync --delete` removed non-frontend runtime entries in docroot (`api`, `backend`, `storage` links).
-2. Recreated API bridge initially executed under Apache PHP `7.0.33`, while Laravel runtime required newer PHP.
+2. Recreated API bridge initially executed under an older Apache PHP runtime, while Laravel required a newer supported PHP runtime.
 3. API path was restored but failed with platform/runtime mismatch until PHP handler was pinned.
 
 ### Solution Applied
 
-1. Restored docroot runtime links:
-   - `public_html/backend -> ../../../backend`
-   - `public_html/storage -> ../../../backend/storage/app/public`
-   - `public_html/api -> ../../../backend/public`
-2. Pinned backend public PHP handler to 8.4 by adding at top of:
-   - `backend/public/.htaccess`
-   - `AddHandler x-httpd-php84 .php`
-3. Re-ran Laravel maintenance using PHP 8.4 CLI:
-   - `/usr/php84/usr/bin/php artisan migrate --force --no-interaction`
-   - `/usr/php84/usr/bin/php artisan optimize:clear`
-   - `/usr/php84/usr/bin/php artisan config:cache`
-   - `/usr/php84/usr/bin/php artisan route:cache`
-   - `/usr/php84/usr/bin/php artisan view:cache`
+1. Restored docroot runtime links required by the Laravel backend (`backend`, `storage`, `api`).
+2. Pinned backend public PHP handler to PHP 8.4 in `backend/public/.htaccess`.
+3. Re-ran standard Laravel maintenance commands using the PHP 8.4 CLI.
 
 ### Live Validation
 
 - `https://lgec.org/` => `200`
 - `https://lgec.org/activities` => `200`
 - `https://lgec.org/api/index.php/api/v1/content/homepage_hero` => `200`
-- Live frontend bundle: `assets/index-qW__G2M6.js`
+- Live frontend bundle updated.
 
 ### Prevent Recurrence
 
@@ -197,9 +183,7 @@ Date: 2026-03-01
   - `https://lgec.org/` => `200`
   - `https://lgec.org/activities` => `200`
   - `https://lgec.org/api/index.php/api/v1/content/homepage_hero` => `200`
-- Live assets updated:
-  - `assets/index-uvk7Sq4P.js`
-  - `assets/index-CsUQqFrA.css`
+- Live assets updated.
 
 ## Follow-up Editor Enhancement: Newspaper-Style Image Wrapping
 
@@ -237,6 +221,4 @@ Date: 2026-03-01
   - `https://lgec.org/` => `200`
   - `https://lgec.org/activities` => `200`
   - `https://lgec.org/api/index.php/api/v1/content/homepage_hero` => `200`
-- Live bundle updated:
-  - `assets/index-DG2ifkDE.js`
-  - `assets/index-CZ-f0beQ.css`
+- Live bundle updated.
