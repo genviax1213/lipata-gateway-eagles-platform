@@ -77,6 +77,10 @@ export default function Activities() {
       <h2 className="mb-8 font-heading text-4xl text-offwhite md:text-5xl">
         Activities & Community Projects
       </h2>
+      <p className="mb-6 max-w-3xl text-sm text-mist/85">
+        Complete archive of activities, projects, and community engagements. Unlike the homepage highlights,
+        this page is intended to provide full historical coverage.
+      </p>
 
       {loading && (
         <div className="surface-card p-6 text-sm text-mist/85">Loading activities posts...</div>

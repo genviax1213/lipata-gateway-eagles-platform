@@ -195,12 +195,14 @@ export default function Members() {
 
       <div className="mb-6 grid gap-4 rounded-xl border border-white/20 bg-white/10 p-4 md:grid-cols-[1fr_220px_auto]">
         <input
+          aria-label="Search members"
           placeholder="Search..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite placeholder:text-mist/70 focus:border-gold focus:outline-none"
         />
         <select
+          aria-label="Filter members by status"
           value={status}
           onChange={(e) => setStatus(e.target.value)}
           className="rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite focus:border-gold focus:outline-none"

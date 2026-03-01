@@ -62,4 +62,18 @@ class TreasurerDashboardTest extends TestCase
             ],
         ]);
     }
+
+    public function test_member_with_auditor_secondary_role_cannot_access_treasurer_dashboard(): void
+    {
+        $memberRole = Role::query()->where('name', 'member')->firstOrFail();
+        $auditor = User::factory()->create([
+            'role_id' => $memberRole->id,
+            'finance_role' => 'auditor',
+        ]);
+        Sanctum::actingAs($auditor);
+
+        $response = $this->getJson('/api/v1/dashboard/treasurer');
+
+        $response->assertStatus(403);
+    }
 }

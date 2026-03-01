@@ -193,6 +193,8 @@ class FinanceController extends Controller
 
     public function searchMembers(Request $request)
     {
+        $this->authorize('viewFinanceDirectory', Member::class);
+
         $search = (string) $request->query('search', '');
         $query = Member::query()->with('user.role:id,name');
 
@@ -212,6 +214,8 @@ class FinanceController extends Controller
 
     public function memberContributions(Request $request, Member $member)
     {
+        $this->authorize('viewFinancialContributions', $member);
+
         return response()->json($this->contributionDataForMember($member));
     }
 
@@ -312,6 +316,8 @@ class FinanceController extends Controller
 
     public function editRequests(Request $request)
     {
+        $this->authorize('viewEditRequests', ContributionEditRequest::class);
+
         $status = (string) $request->query('status', 'pending');
         $allowed = ['pending', 'approved', 'rejected'];
         if (!in_array($status, $allowed, true)) {

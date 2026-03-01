@@ -1,5 +1,13 @@
 # React + TypeScript + Vite
 
+## Auth Mode
+
+- Default: Sanctum SPA session/cookie mode
+  - Frontend requests `/sanctum/csrf-cookie` then authenticates via `/api/v1/login`
+  - Session state is read from `/api/v1/user`
+- Backward-compatible fallback:
+  - Set `VITE_AUTH_MODE=token` to store and send `auth_token` bearer token
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:

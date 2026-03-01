@@ -97,6 +97,131 @@ class RolePermissionAuthorizationTest extends TestCase
         $response->assertStatus(403);
     }
 
+    public function test_officer_can_view_members_endpoint(): void
+    {
+        $officerRole = Role::query()->where('name', 'officer')->firstOrFail();
+        $officer = User::factory()->create(['role_id' => $officerRole->id]);
+
+        Sanctum::actingAs($officer);
+
+        $response = $this->getJson('/api/v1/members');
+
+        $response->assertStatus(200);
+    }
+
+    public function test_member_cannot_access_admin_users_list(): void
+    {
+        $memberRole = Role::query()->where('name', 'member')->firstOrFail();
+        $member = User::factory()->create(['role_id' => $memberRole->id]);
+
+        Sanctum::actingAs($member);
+
+        $response = $this->getJson('/api/v1/admin/users');
+
+        $response->assertStatus(403);
+    }
+
+    public function test_officer_can_access_admin_users_list(): void
+    {
+        $officerRole = Role::query()->where('name', 'officer')->firstOrFail();
+        $officer = User::factory()->create(['role_id' => $officerRole->id]);
+
+        Sanctum::actingAs($officer);
+
+        $response = $this->getJson('/api/v1/admin/users');
+
+        $response->assertStatus(200);
+    }
+
+    public function test_officer_can_view_cms_posts_list(): void
+    {
+        $officerRole = Role::query()->where('name', 'officer')->firstOrFail();
+        $officer = User::factory()->create(['role_id' => $officerRole->id]);
+
+        Sanctum::actingAs($officer);
+
+        $response = $this->getJson('/api/v1/cms/posts');
+
+        $response->assertStatus(200);
+    }
+
+    public function test_officer_cannot_delegate_member_role(): void
+    {
+        $officerRole = Role::query()->where('name', 'officer')->firstOrFail();
+        $memberRole = Role::query()->where('name', 'member')->firstOrFail();
+        $officer = User::factory()->create(['role_id' => $officerRole->id]);
+
+        $candidate = Member::query()->create([
+            'member_number' => 'M-OFF-001',
+            'first_name' => 'Candidate',
+            'middle_name' => null,
+            'last_name' => 'Member',
+            'email' => 'candidate-member@example.com',
+            'membership_status' => 'active',
+        ]);
+
+        Sanctum::actingAs($officer);
+
+        $response = $this->putJson("/api/v1/admin/members/{$candidate->id}/role", [
+            'role_id' => $memberRole->id,
+        ]);
+
+        $response->assertStatus(403);
+    }
+
+    public function test_officer_cannot_update_user_role_via_admin_role_endpoint(): void
+    {
+        $officerRole = Role::query()->where('name', 'officer')->firstOrFail();
+        $memberRole = Role::query()->where('name', 'member')->firstOrFail();
+        $officer = User::factory()->create(['role_id' => $officerRole->id]);
+        $target = User::factory()->create(['role_id' => $memberRole->id]);
+
+        Sanctum::actingAs($officer);
+
+        $response = $this->putJson("/api/v1/admin/users/{$target->id}/role", [
+            'role_id' => $officerRole->id,
+        ]);
+
+        $response->assertStatus(403);
+    }
+
+    public function test_member_cannot_create_admin_user_account(): void
+    {
+        $memberRole = Role::query()->where('name', 'member')->firstOrFail();
+        $officerRole = Role::query()->where('name', 'officer')->firstOrFail();
+        $member = User::factory()->create(['role_id' => $memberRole->id]);
+
+        Sanctum::actingAs($member);
+
+        $response = $this->postJson('/api/v1/admin/users', [
+            'name' => 'Blocked Member Create',
+            'email' => 'blocked-member-create@example.com',
+            'password' => 'Password123',
+            'role_id' => $officerRole->id,
+        ]);
+
+        $response->assertStatus(403);
+    }
+
+    public function test_officer_can_create_user_account(): void
+    {
+        $officerRole = Role::query()->where('name', 'officer')->firstOrFail();
+        $memberRole = Role::query()->where('name', 'member')->firstOrFail();
+        $officer = User::factory()->create(['role_id' => $officerRole->id]);
+
+        Sanctum::actingAs($officer);
+
+        $response = $this->postJson('/api/v1/admin/users', [
+            'name' => 'Created By Officer',
+            'email' => 'created-by-officer@example.com',
+            'password' => 'Password123',
+            'role_id' => $memberRole->id,
+        ]);
+
+        $response->assertStatus(201)
+            ->assertJsonPath('role.name', 'member');
+    }
+
     public function test_officer_cannot_update_fellow_officer_account(): void
     {
         $officerRole = Role::query()->where('name', 'officer')->firstOrFail();
@@ -114,14 +239,9 @@ class RolePermissionAuthorizationTest extends TestCase
         $response->assertStatus(403);
     }
 
-    public function test_created_admin_cannot_promote_user_to_admin(): void
+    public function test_admin_can_promote_user_to_admin_within_limit(): void
     {
         $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
-
-        $originalAdmin = User::factory()->create([
-            'email' => 'admin@lipataeagles.ph',
-            'role_id' => $adminRole->id,
-        ]);
 
         $createdAdmin = User::factory()->create(['role_id' => $adminRole->id]);
         $target = User::factory()->create();
@@ -134,24 +254,22 @@ class RolePermissionAuthorizationTest extends TestCase
             'role_id' => $adminRole->id,
         ]);
 
-        $response->assertStatus(403);
-
-        $this->assertNotNull($originalAdmin->id);
+        $response->assertStatus(200)
+            ->assertJsonPath('role.name', 'admin');
     }
 
-    public function test_original_admin_cannot_exceed_max_admin_count_when_assigning_member_role(): void
+    public function test_admin_cannot_exceed_max_admin_count_when_assigning_member_role(): void
     {
         $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
         $memberRole = Role::query()->where('name', 'member')->firstOrFail();
 
-        $originalAdmin = User::factory()->create([
-            'email' => 'admin@lipataeagles.ph',
+        $adminActor = User::factory()->create([
             'role_id' => $adminRole->id,
         ]);
         User::factory()->create(['role_id' => $adminRole->id]);
         User::factory()->create(['role_id' => $adminRole->id]);
 
-        Sanctum::actingAs($originalAdmin);
+        Sanctum::actingAs($adminActor);
 
         $candidateForAdmin = Member::query()->create([
             'member_number' => 'M-ADM-001',
@@ -294,8 +412,7 @@ class RolePermissionAuthorizationTest extends TestCase
         $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
         $memberRole = Role::query()->where('name', 'member')->firstOrFail();
 
-        $originalAdmin = User::factory()->create([
-            'email' => 'admin@lipataeagles.ph',
+        $admin = User::factory()->create([
             'role_id' => $adminRole->id,
         ]);
 
@@ -308,7 +425,7 @@ class RolePermissionAuthorizationTest extends TestCase
             'membership_status' => 'active',
         ]);
 
-        Sanctum::actingAs($originalAdmin);
+        Sanctum::actingAs($admin);
 
         $response = $this->putJson("/api/v1/admin/members/{$candidate->id}/role", [
             'role_id' => $memberRole->id,

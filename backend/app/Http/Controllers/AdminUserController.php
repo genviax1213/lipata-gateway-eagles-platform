@@ -13,67 +13,8 @@ use Illuminate\Support\Str;
 
 class AdminUserController extends Controller
 {
-    private const MAX_ADMINS_TOTAL = 3;
     private const FINANCE_ROLES = ['auditor', 'treasurer'];
     private const FORUM_ROLES = ['forum_moderator'];
-
-    private function isAdmin(User $user): bool
-    {
-        $user->loadMissing('role:id,name');
-        return optional($user->role)->name === 'admin';
-    }
-
-    private function ensureCapability(User $actor, string $permission): void
-    {
-        if ($this->isAdmin($actor)) {
-            return;
-        }
-
-        if (!$actor->hasPermission($permission)) {
-            abort(403, 'Insufficient privileges for this action.');
-        }
-    }
-
-    private function enforceTargetRestrictions(User $actor, ?User $target = null, ?Role $requestedRole = null, string $action = 'update'): void
-    {
-        $actor->loadMissing('role:id,name');
-        $actorRole = optional($actor->role)->name;
-        $actorIsAdmin = $actorRole === 'admin';
-
-        if ($target) {
-            $target->loadMissing('role:id,name');
-            $targetRole = optional($target->role)->name;
-
-            if ($action === 'delete' && $actor->id === $target->id) {
-                abort(422, 'You cannot delete your own account.');
-            }
-
-            if ($targetRole === 'admin' && !$actorIsAdmin) {
-                abort(403, 'Only administrators can manage administrator accounts.');
-            }
-
-            if ($actorRole === 'officer' && $targetRole === 'officer') {
-                abort(403, 'Officers cannot manage fellow officers.');
-            }
-        }
-
-        if ($requestedRole && $requestedRole->name === 'admin') {
-            if (!$actorIsAdmin) {
-                abort(403, 'Only administrators can create or assign administrator accounts.');
-            }
-
-            $isPromotion = $target ? optional($target->role)->name !== 'admin' : true;
-            if ($isPromotion) {
-                $adminCount = User::query()
-                    ->whereHas('role', fn ($q) => $q->where('name', 'admin'))
-                    ->count();
-
-                if ($adminCount >= self::MAX_ADMINS_TOTAL) {
-                    abort(422, 'Maximum administrator accounts reached.');
-                }
-            }
-        }
-    }
 
     public function index(Request $request)
     {
@@ -172,7 +113,7 @@ class AdminUserController extends Controller
             ], 422);
         }
 
-        $this->enforceTargetRestrictions($authUser, $linkedUser, $selectedRole, 'update');
+        $this->authorize('manageRoleAssignment', [User::class, $linkedUser, $selectedRole, 'update']);
 
         if (!$linkedUser) {
             $linkedUser = User::query()->create([
@@ -232,7 +173,7 @@ class AdminUserController extends Controller
             ], 422);
         }
 
-        $this->enforceTargetRestrictions($authUser, $user, $selectedRole, 'update');
+        $this->authorize('manageRoleAssignment', [User::class, $user, $selectedRole, 'update']);
 
         $previousRole = optional($user->role)->name;
         $user->role_id = $validated['role_id'];
@@ -255,7 +196,7 @@ class AdminUserController extends Controller
     {
         /** @var User $actor */
         $actor = $request->user();
-        $this->ensureCapability($actor, 'members.create');
+        $this->authorize('manageAdminUsers', [User::class, 'members.create']);
 
         $validated = $request->validate([
             'name' => 'required|string|max:120',
@@ -265,7 +206,7 @@ class AdminUserController extends Controller
         ]);
 
         $selectedRole = Role::query()->select(['id', 'name'])->findOrFail($validated['role_id']);
-        $this->enforceTargetRestrictions($actor, null, $selectedRole, 'create');
+        $this->authorize('manageRoleAssignment', [User::class, null, $selectedRole, 'create']);
 
         $created = User::query()->create([
             'name' => (string) TextCase::title($validated['name']),
@@ -288,7 +229,7 @@ class AdminUserController extends Controller
     {
         /** @var User $actor */
         $actor = $request->user();
-        $this->ensureCapability($actor, 'members.update');
+        $this->authorize('manageAdminUsers', [User::class, 'members.update']);
 
         $validated = $request->validate([
             'name' => 'required|string|max:120',
@@ -298,7 +239,7 @@ class AdminUserController extends Controller
         ]);
 
         $selectedRole = Role::query()->select(['id', 'name'])->findOrFail($validated['role_id']);
-        $this->enforceTargetRestrictions($actor, $user, $selectedRole, 'update');
+        $this->authorize('manageRoleAssignment', [User::class, $user, $selectedRole, 'update']);
 
         $previousRole = optional($user->role)->name;
         $user->name = (string) TextCase::title($validated['name']);
@@ -324,8 +265,8 @@ class AdminUserController extends Controller
     {
         /** @var User $actor */
         $actor = $request->user();
-        $this->ensureCapability($actor, 'members.delete');
-        $this->enforceTargetRestrictions($actor, $user, null, 'delete');
+        $this->authorize('manageAdminUsers', [User::class, 'members.delete']);
+        $this->authorize('manageRoleAssignment', [User::class, $user, null, 'delete']);
 
         $targetUserId = $user->id;
         $user->delete();

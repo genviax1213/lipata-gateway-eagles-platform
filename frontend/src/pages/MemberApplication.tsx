@@ -1,6 +1,8 @@
 import { useState } from "react";
 import axios from "axios";
 import api from "../services/api";
+import { canonicalRoutes, microcopy } from "../content/portalCopy";
+import TaskHierarchyCard from "../components/TaskHierarchyCard";
 
 interface ApplicationForm {
   first_name: string;
@@ -28,7 +30,6 @@ export default function MemberApplication() {
   const [verificationToken, setVerificationToken] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [devToken, setDevToken] = useState("");
   const [saving, setSaving] = useState(false);
 
   const statusMeaning = {
@@ -56,7 +57,7 @@ export default function MemberApplication() {
     const email = form.email.trim();
 
     if (!email || !firstName || !middleName || !lastName || !form.membership_status || !form.password || !form.password_confirmation) {
-      return "All application fields are required.";
+      return microcopy.errors.required;
     }
 
     if (form.password.length < 8) {
@@ -99,10 +100,9 @@ export default function MemberApplication() {
         middle_name: form.middle_name.trim(),
         last_name: form.last_name.trim(),
       };
-      const res = await api.post("/member-applications", payload);
+      await api.post("/member-applications", payload);
       setVerificationEmail(payload.email);
-      setDevToken((res.data as { verification_token?: string }).verification_token ?? "");
-      setNotice("Application submitted. Verify your email/token to move to admin approval.");
+      setNotice(microcopy.success.applicationSubmitted);
       setForm(initialForm);
     } catch (err: unknown) {
       setError(parseError(err, "Failed to submit application."));
@@ -127,9 +127,8 @@ export default function MemberApplication() {
         email: verificationEmail.trim(),
         verification_token: verificationToken.trim(),
       });
-      setNotice("Email verified. Your application is now pending admin/officer approval.");
+      setNotice(microcopy.success.applicationVerified);
       setVerificationToken("");
-      setDevToken("");
     } catch (err: unknown) {
       setError(parseError(err, "Failed to verify application."));
     } finally {
@@ -142,51 +141,70 @@ export default function MemberApplication() {
       <div className="mx-auto max-w-3xl rounded-xl border border-white/20 bg-white/10 p-6 md:p-8">
         <h1 className="mb-2 font-heading text-4xl text-offwhite">Member Application</h1>
         <p className="mb-6 text-sm text-mist/85">
-          Submit your application, verify your email, and wait for admin/officer approval.
+          Submit your application, complete verification, and wait for committee review.
         </p>
+        <TaskHierarchyCard
+          className="mb-6"
+          status="Ready to submit a new application profile."
+          actions="Provide identity details, submit application, then verify using token from your email."
+          nextStep={microcopy.nextStep.application}
+        />
+        <div className="mb-6 rounded-md border border-white/20 bg-white/5 p-3 text-xs text-mist/85">
+          <p className="mt-2">Canonical onboarding route: <span className="font-mono text-gold-soft">{canonicalRoutes.memberApplication}</span></p>
+        </div>
 
         {error && (
-          <p className="mb-4 rounded-md border border-red-300/30 bg-red-400/10 px-4 py-2 text-sm text-red-200">
+          <p className="mb-4 rounded-md border border-red-300/30 bg-red-400/10 px-4 py-2 text-sm text-red-200" role="alert" aria-live="polite">
             {error}
           </p>
         )}
 
         {notice && (
-          <p className="mb-4 rounded-md border border-gold/30 bg-gold/10 px-4 py-2 text-sm text-gold-soft">
+          <p className="mb-4 rounded-md border border-gold/30 bg-gold/10 px-4 py-2 text-sm text-gold-soft" role="status" aria-live="polite">
             {notice}
           </p>
         )}
 
         <div className="mb-8 grid gap-3 md:grid-cols-2">
+          <label htmlFor="application-email" className="text-xs font-semibold text-mist/85 md:col-span-2">Email Address</label>
           <input
+            id="application-email"
             placeholder="Email"
             type="email"
             value={form.email}
             onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))}
             className="rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite"
           />
+          <label htmlFor="application-password" className="text-xs font-semibold text-mist/85 md:col-span-2">Password</label>
           <input
+            id="application-password"
             placeholder="Password"
             type="password"
             value={form.password}
             onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))}
             className="rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite"
           />
+          <label htmlFor="application-password-confirmation" className="text-xs font-semibold text-mist/85 md:col-span-2">Confirm Password</label>
           <input
+            id="application-password-confirmation"
             placeholder="Confirm Password"
             type="password"
             value={form.password_confirmation}
             onChange={(e) => setForm((prev) => ({ ...prev, password_confirmation: e.target.value }))}
             className="rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite"
           />
+          <label htmlFor="application-first-name" className="text-xs font-semibold text-mist/85 md:col-span-2">First Name</label>
           <input
+            id="application-first-name"
             placeholder="First Name"
             value={form.first_name}
             onChange={(e) => setForm((prev) => ({ ...prev, first_name: e.target.value }))}
             className="rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite"
           />
           <div>
+            <label htmlFor="application-middle-name" className="mb-1 block text-xs font-semibold text-mist/85">Middle Name</label>
             <input
+              id="application-middle-name"
               placeholder="Middle Name"
               value={form.middle_name}
               onChange={(e) => setForm((prev) => ({ ...prev, middle_name: e.target.value }))}
@@ -195,7 +213,9 @@ export default function MemberApplication() {
             <p className="mt-1 text-xs text-gold-soft">Use full middle name, not initial.</p>
           </div>
           <div>
+            <label htmlFor="application-last-name" className="mb-1 block text-xs font-semibold text-mist/85">Last Name</label>
             <input
+              id="application-last-name"
               placeholder="Last Name"
               value={form.last_name}
               onChange={(e) => setForm((prev) => ({ ...prev, last_name: e.target.value }))}
@@ -204,6 +224,7 @@ export default function MemberApplication() {
             <p className="mt-1 text-xs text-transparent select-none">Spacer</p>
           </div>
           <select
+            id="application-membership-status"
             value={form.membership_status}
             onChange={(e) => setForm((prev) => ({ ...prev, membership_status: e.target.value as ApplicationForm["membership_status"] }))}
             className="rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite md:col-span-2"
@@ -229,14 +250,18 @@ export default function MemberApplication() {
           </p>
 
           <div className="grid gap-3 md:grid-cols-2">
+            <label htmlFor="verification-email" className="text-xs font-semibold text-mist/85 md:col-span-2">Application Email</label>
             <input
+              id="verification-email"
               placeholder="Application email"
               type="email"
               value={verificationEmail}
               onChange={(e) => setVerificationEmail(e.target.value)}
               className="rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite"
             />
+            <label htmlFor="verification-token" className="text-xs font-semibold text-mist/85 md:col-span-2">Verification Token</label>
             <input
+              id="verification-token"
               placeholder="Verification token"
               value={verificationToken}
               onChange={(e) => setVerificationToken(e.target.value)}
@@ -248,12 +273,6 @@ export default function MemberApplication() {
               </button>
             </div>
           </div>
-
-          {devToken && (
-            <p className="mt-3 rounded-md border border-gold/30 bg-gold/10 px-3 py-2 text-xs text-gold-soft">
-              Dev token: <span className="font-mono">{devToken}</span>
-            </p>
-          )}
         </div>
       </div>
     </section>

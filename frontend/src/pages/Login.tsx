@@ -3,6 +3,8 @@ import axios from "axios";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../contexts/useAuth";
 import api from "../services/api";
+import { canonicalRoutes, microcopy } from "../content/portalCopy";
+import TaskHierarchyCard from "../components/TaskHierarchyCard";
 
 type AuthMode = "login" | "forgot" | "reset";
 
@@ -108,7 +110,7 @@ export default function Login() {
       setResetPasswordConfirmation("");
       setResetToken("");
       setEmail(resetEmail.trim());
-      navigate("/member-login", { replace: true });
+      navigate(canonicalRoutes.login, { replace: true });
     } catch (err) {
       setError(parseError(err, "Failed to reset password."));
     } finally {
@@ -143,6 +145,9 @@ export default function Login() {
               <br />
               3. Set a new password and return to login.
             </div>
+            <div className="mt-3 rounded-md border border-white/20 bg-white/10 px-4 py-3 text-xs text-mist/85">
+              Canonical login path: <span className="font-mono text-gold-soft">{canonicalRoutes.login}</span>
+            </div>
           </aside>
 
           <div className="glass-card w-full max-w-md p-10 md:ml-auto">
@@ -163,13 +168,22 @@ export default function Login() {
               {mode === "login" ? "Secure access for authorized members" : mode === "forgot" ? "Request password reset link" : "Reset your account password"}
             </p>
 
-            {error && <p className="mb-3 text-center text-sm text-red-400">{error}</p>}
-            {notice && <p className="mb-3 text-center text-sm text-gold-soft">{notice}</p>}
+            {error && <p className="mb-3 text-center text-sm text-red-400" role="alert" aria-live="polite">{error}</p>}
+            {notice && <p className="mb-3 text-center text-sm text-gold-soft" role="status" aria-live="polite">{notice}</p>}
+
+            <TaskHierarchyCard
+              className="mb-5"
+              status={mode === "login" ? "Ready to authenticate with your account credentials." : mode === "forgot" ? "Ready to request a reset link." : "Ready to set a new password."}
+              actions={mode === "login" ? "Sign in or switch to forgot password." : mode === "forgot" ? "Send reset link or proceed with existing token." : "Submit token and new password."}
+              nextStep={microcopy.nextStep.login}
+            />
 
             {mode === "login" && (
               <form onSubmit={handleLogin} className="space-y-5">
                 <div>
+                  <label htmlFor="login-email" className="mb-1 block text-xs font-semibold text-mist/85">Email Address</label>
                   <input
+                    id="login-email"
                     type="email"
                     placeholder="Email address"
                     value={email}
@@ -179,7 +193,9 @@ export default function Login() {
                 </div>
 
                 <div>
+                  <label htmlFor="login-password" className="mb-1 block text-xs font-semibold text-mist/85">Password</label>
                   <input
+                    id="login-password"
                     type="password"
                     placeholder="Password"
                     value={password}
@@ -215,7 +231,9 @@ export default function Login() {
 
             {mode === "forgot" && (
               <form onSubmit={handleForgotPassword} className="space-y-5">
+                <label htmlFor="forgot-email" className="mb-1 block text-xs font-semibold text-mist/85">Account Email</label>
                 <input
+                  id="forgot-email"
                   type="email"
                   placeholder="Account email"
                   value={forgotEmail}
@@ -259,28 +277,36 @@ export default function Login() {
 
             {mode === "reset" && (
               <form onSubmit={handleResetPassword} className="space-y-4">
+                <label htmlFor="reset-email" className="mb-1 block text-xs font-semibold text-mist/85">Account Email</label>
                 <input
+                  id="reset-email"
                   type="email"
                   placeholder="Account email"
                   value={resetEmail}
                   onChange={(e) => setResetEmail(e.target.value)}
                   className="w-full rounded-lg border border-white/20 bg-white/10 px-4 py-3 text-offwhite placeholder:text-mist/70 outline-none focus:border-gold"
                 />
+                <label htmlFor="reset-token" className="mb-1 block text-xs font-semibold text-mist/85">Reset Token</label>
                 <input
+                  id="reset-token"
                   type="text"
                   placeholder="Reset token"
                   value={resetToken}
                   onChange={(e) => setResetToken(e.target.value)}
                   className="w-full rounded-lg border border-white/20 bg-white/10 px-4 py-3 text-offwhite placeholder:text-mist/70 outline-none focus:border-gold"
                 />
+                <label htmlFor="reset-password" className="mb-1 block text-xs font-semibold text-mist/85">New Password</label>
                 <input
+                  id="reset-password"
                   type="password"
                   placeholder="New password"
                   value={resetPassword}
                   onChange={(e) => setResetPassword(e.target.value)}
                   className="w-full rounded-lg border border-white/20 bg-white/10 px-4 py-3 text-offwhite placeholder:text-mist/70 outline-none focus:border-gold"
                 />
+                <label htmlFor="reset-password-confirmation" className="mb-1 block text-xs font-semibold text-mist/85">Confirm New Password</label>
                 <input
+                  id="reset-password-confirmation"
                   type="password"
                   placeholder="Confirm new password"
                   value={resetPasswordConfirmation}

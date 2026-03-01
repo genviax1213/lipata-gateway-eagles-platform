@@ -1,24 +1,22 @@
 import { useState, useEffect } from "react";
 import type { ReactNode } from "react";
-import api from "../services/api";
+import api, { ensureCsrfCookie, shouldUseLegacyTokenMode } from "../services/api";
 import { AuthContext } from "./auth-context";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const syncUserFromToken = async () => {
+  const syncUserSession = async () => {
     const token = localStorage.getItem("auth_token");
-    if (!token) {
-      setUser(null);
-      return;
-    }
 
     try {
       const res = await api.get("/user");
       setUser(res.data);
     } catch {
-      localStorage.removeItem("auth_token");
+      if (token) {
+        localStorage.removeItem("auth_token");
+      }
       setUser(null);
     }
   };
@@ -26,7 +24,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Restore session on refresh
   useEffect(() => {
     void (async () => {
-      await syncUserFromToken();
+      await syncUserSession();
       setLoading(false);
     })();
   }, []);
@@ -34,12 +32,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const onStorage = (event: StorageEvent) => {
       if (event.key === "auth_token") {
-        void syncUserFromToken();
+        void syncUserSession();
       }
     };
 
     const onFocus = () => {
-      void syncUserFromToken();
+      void syncUserSession();
     };
 
     window.addEventListener("storage", onStorage);
@@ -52,14 +50,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = async (email: string, password: string) => {
+    try {
+      await ensureCsrfCookie();
+    } catch {
+      if (!shouldUseLegacyTokenMode()) {
+        throw new Error("Unable to initialize CSRF cookie for session authentication.");
+      }
+    }
     const res = await api.post("/login", { email, password });
-    localStorage.setItem("auth_token", res.data.token);
+    const token = typeof res.data?.token === "string" ? res.data.token : null;
+    if (token && shouldUseLegacyTokenMode()) {
+      localStorage.setItem("auth_token", token);
+    } else {
+      localStorage.removeItem("auth_token");
+    }
     setUser(res.data.user);
   };
 
-  const logout = () => {
-    localStorage.removeItem("auth_token");
-    setUser(null);
+  const logout = async () => {
+    try {
+      await ensureCsrfCookie();
+      await api.post("/logout");
+    } catch {
+      // Keep client-side cleanup deterministic even if API logout fails.
+    } finally {
+      localStorage.removeItem("auth_token");
+      setUser(null);
+    }
   };
 
   if (loading) return null;

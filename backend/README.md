@@ -36,10 +36,20 @@
 - `ForumPostPolicy`
   - `setVisibility`: requires forum moderation capability.
   - `delete`: requires forum moderation capability.
+- `AdminUserPolicy`
+  - `manageAdminUsers`: enforces capability checks plus admin-only restrictions for admin-account management.
+  - `manageRoleAssignment`: enforces admin-assignment constraints and max-admin guardrails.
 - `ContributionPolicy`
   - `requestEdit`: requires `finance.request_edit`.
 - `ContributionEditRequestPolicy`
+  - `viewEditRequests`: requires `finance.approve_edits`.
   - `approve`/`reject`: requires `finance.approve_edits`.
+- `MemberPolicy`
+  - `viewMemberDirectory`: requires `members.view`.
+  - `viewFinanceDirectory`: requires `finance.view`.
+  - `viewFinancialContributions`: requires `finance.view`.
+- `PostPolicy`
+  - `viewCmsIndex`: requires `posts.create`.
 
 ### Required env variables
 

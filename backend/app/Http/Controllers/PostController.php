@@ -14,20 +14,6 @@ class PostController extends Controller
     private const DEFAULT_CMS_IMAGE_TARGET_KB = 1536; // 1.5 MB best-effort output target
     private const MAX_RICH_CONTENT_CHARS = 120000;
 
-    private function ensurePermission(Request $request, string $permission): void
-    {
-        $user = $request->user();
-        $email = (string) $user->email;
-
-        if ($email === 'admin@lipataeagles.ph') {
-            return;
-        }
-
-        if (!$user->hasPermission($permission)) {
-            abort(403, 'Insufficient privileges for this action.');
-        }
-    }
-
     public function publicBySection(Request $request, string $section)
     {
         $query = Post::query()
@@ -67,7 +53,7 @@ class PostController extends Controller
 
     public function index(Request $request)
     {
-        $this->ensurePermission($request, 'posts.create');
+        $this->authorize('viewCmsIndex', Post::class);
 
         $query = Post::query()->with('author:id,name');
 
@@ -84,7 +70,6 @@ class PostController extends Controller
 
     public function store(Request $request)
     {
-        $this->ensurePermission($request, 'posts.create');
         if ($response = $this->rejectIfPayloadTooLarge($request)) {
             return $response;
         }
@@ -126,7 +111,6 @@ class PostController extends Controller
 
     public function update(Request $request, Post $post)
     {
-        $this->ensurePermission($request, 'posts.update');
         if ($response = $this->rejectIfPayloadTooLarge($request)) {
             return $response;
         }
@@ -172,8 +156,6 @@ class PostController extends Controller
 
     public function destroy(Request $request, Post $post)
     {
-        $this->ensurePermission($request, 'posts.delete');
-
         if ($post->image_path) {
             Storage::disk('public')->delete($post->image_path);
         }
@@ -185,7 +167,6 @@ class PostController extends Controller
 
     public function uploadInlineImage(Request $request)
     {
-        $this->ensurePermission($request, 'posts.create');
         if ($response = $this->rejectIfPayloadTooLarge($request)) {
             return $response;
         }

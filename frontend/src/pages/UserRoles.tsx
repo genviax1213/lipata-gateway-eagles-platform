@@ -175,6 +175,7 @@ export default function UserRoles() {
 
       <div className="mb-4 flex flex-wrap gap-3">
         <input
+          aria-label="Search members by name, member number, or email"
           placeholder="Search members (wildcard by name/member no./email)"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -212,6 +213,7 @@ export default function UserRoles() {
             Selected member: {selectedMember ? fullName(selectedMember) : "None"}
           </p>
           <select
+            aria-label="Select primary role"
             value={selectedRoleId}
             onChange={(e) => setSelectedRoleId(Number(e.target.value))}
             className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
@@ -227,6 +229,7 @@ export default function UserRoles() {
           </select>
 
           <select
+            aria-label="Select finance role"
             value={selectedFinanceRole}
             onChange={(e) => setSelectedFinanceRole(e.target.value as "" | "auditor" | "treasurer")}
             disabled={!selectedRoleName}
@@ -244,6 +247,7 @@ export default function UserRoles() {
           </select>
 
           <select
+            aria-label="Select forum role"
             value={selectedForumRole}
             onChange={(e) => setSelectedForumRole(e.target.value as "" | "forum_moderator")}
             disabled={!selectedRoleName}

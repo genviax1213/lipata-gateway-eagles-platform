@@ -5,18 +5,12 @@ namespace App\Http\Controllers;
 use App\Support\ImageUploadOptimizer;
 use App\Models\ForumPost;
 use App\Models\ForumThread;
-use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
 class ForumController extends Controller
 {
     private const FORUM_BODY_MAX_CHARS = 60000;
-
-    private function canModerate(User $user): bool
-    {
-        return $user->hasPermission('forum.moderate');
-    }
 
     private function uniqueThreadSlug(string $base): string
     {
@@ -57,12 +51,12 @@ class ForumController extends Controller
 
     public function show(Request $request, ForumThread $thread)
     {
+        $canViewHiddenPosts = $request->user()->can('viewHiddenPosts', $thread);
+
         $thread->load(['author:id,name']);
         $thread->load([
-            'posts' => function ($q) use ($request) {
-                /** @var User $user */
-                $user = $request->user();
-                if (!$this->canModerate($user)) {
+            'posts' => function ($q) use ($canViewHiddenPosts) {
+                if (!$canViewHiddenPosts) {
                     $q->where('is_hidden', false);
                 }
                 $q->with('author:id,name')->orderBy('created_at');

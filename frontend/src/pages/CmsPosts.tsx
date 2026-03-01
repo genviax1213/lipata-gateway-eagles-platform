@@ -655,6 +655,7 @@ export default function CmsPosts() {
 
         <div className="grid gap-4 md:grid-cols-2">
           <input
+            aria-label="Post title"
             value={form.title}
             onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))}
             placeholder="Post title"
@@ -663,6 +664,7 @@ export default function CmsPosts() {
           />
 
           <select
+            aria-label="Post section"
             value={form.section}
             onChange={(e) => setForm((prev) => ({ ...prev, section: e.target.value }))}
             className="rounded-md border border-white/25 bg-white/10 px-4 py-2.5 text-offwhite"
@@ -675,6 +677,7 @@ export default function CmsPosts() {
           </select>
 
           <select
+            aria-label="Post status"
             value={form.status}
             onChange={(e) => setForm((prev) => ({ ...prev, status: e.target.value as FormState["status"] }))}
             className="rounded-md border border-white/25 bg-white/10 px-4 py-2.5 text-offwhite"
@@ -684,6 +687,7 @@ export default function CmsPosts() {
           </select>
 
           <input
+            aria-label="Post publish date and time"
             type="datetime-local"
             value={form.published_at}
             onChange={(e) => setForm((prev) => ({ ...prev, published_at: e.target.value }))}
@@ -691,6 +695,7 @@ export default function CmsPosts() {
           />
 
           <textarea
+            aria-label="Post excerpt"
             value={form.excerpt}
             onChange={(e) => setForm((prev) => ({ ...prev, excerpt: e.target.value }))}
             placeholder="Short excerpt (optional, up to 300 characters)"
@@ -714,6 +719,7 @@ export default function CmsPosts() {
           </p>
 
           <input
+            aria-label="Post image upload"
             type="file"
             accept="image/*"
             onChange={(e) => {
@@ -883,6 +889,7 @@ export default function CmsPosts() {
 
           <div className="flex flex-wrap items-center gap-2 md:justify-end">
             <select
+              aria-label="Preview font size"
               value={previewFontSize}
               onChange={(e) => setPreviewFontSize(Number(e.target.value))}
               className="rounded-md border border-white/30 bg-white/10 px-3 py-1 text-sm text-offwhite"

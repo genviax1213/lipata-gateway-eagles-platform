@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, NavLink } from "react-router-dom";
 import { useAuth } from "../../contexts/useAuth";
+import { canonicalRoutes } from "../../content/portalCopy";
 
 export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -77,7 +78,7 @@ export default function Navbar() {
             </NavLink>
           ) : (
             <NavLink
-              to="/member-login"
+              to={canonicalRoutes.login}
               className="ml-2 rounded-md border border-gold/50 px-3 py-2 text-sm font-semibold text-gold transition hover:bg-gold/10"
             >
               Member Login
@@ -116,7 +117,7 @@ export default function Navbar() {
                 </NavLink>
               ) : (
                 <NavLink
-                  to="/member-login"
+                  to={canonicalRoutes.login}
                   onClick={() => setMobileOpen(false)}
                   className="mt-1 rounded-md border border-gold/50 px-3 py-2 text-sm font-semibold text-gold transition hover:bg-gold/10"
                 >

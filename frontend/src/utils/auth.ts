@@ -13,11 +13,7 @@ export function isAdminUser(user: AuthUser): boolean {
   if (!user) return false;
 
   const roleName = extractRoleName(user);
-  if (roleName === "admin") {
-    return true;
-  }
-
-  return user.email === "admin@lipataeagles.ph";
+  return roleName === "admin";
 }
 
 export function hasPermission(user: AuthUser, permissionName: string): boolean {

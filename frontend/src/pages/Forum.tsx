@@ -303,6 +303,7 @@ export default function Forum() {
 
       <div className="mb-4 flex flex-wrap gap-3">
         <input
+          aria-label="Search forum threads"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search forum threads"
@@ -315,6 +316,7 @@ export default function Forum() {
         <div className="mb-6 grid gap-3 rounded-xl border border-white/20 bg-white/10 p-4">
           <p className="text-xs uppercase tracking-[0.22em] text-gold-soft">Start New Thread</p>
           <input
+            aria-label="Thread title"
             value={threadTitle}
             onChange={(e) => setThreadTitle(e.target.value)}
             placeholder="Thread title"

@@ -78,7 +78,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
   const handleLogout = () => {
     navigate("/", { replace: true });
-    logout();
+    void logout();
   };
 
   return (

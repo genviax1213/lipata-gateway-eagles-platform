@@ -1,32 +1,35 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { Suspense, lazy } from "react";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "../contexts/AuthContext";
-import Login from "../pages/Login";
-import Landing from "../pages/Landing";
-import About from "../pages/About";
-import History from "../pages/History";
-import Activities from "../pages/Activities";
-import News from "../pages/News";
-import Contact from "../pages/Contact";
-import MemberApplication from "../pages/MemberApplication";
-import PortalDashboard from "../pages/PortalDashboard";
-import Members from "../pages/Members";
-import Contributions from "../pages/Contributions";
-import Analytics from "../pages/Analytics";
-import CmsPosts from "../pages/CmsPosts";
-import NewsArticle from "../pages/NewsArticle";
-import UserRoles from "../pages/UserRoles";
-import Forum from "../pages/Forum";
-import TreasurerDashboard from "../pages/TreasurerDashboard";
 import ProtectedRoute from "./ProtectedRoute";
 import GuestRoute from "./GuestRoute";
-import Layout from "../components/layout/Layout";
-import AdminLayout from "../components/layout/AdminLayout";
+
+const Login = lazy(() => import("../pages/Login"));
+const Landing = lazy(() => import("../pages/Landing"));
+const About = lazy(() => import("../pages/About"));
+const History = lazy(() => import("../pages/History"));
+const Activities = lazy(() => import("../pages/Activities"));
+const News = lazy(() => import("../pages/News"));
+const Contact = lazy(() => import("../pages/Contact"));
+const MemberApplication = lazy(() => import("../pages/MemberApplication"));
+const PortalDashboard = lazy(() => import("../pages/PortalDashboard"));
+const Members = lazy(() => import("../pages/Members"));
+const Contributions = lazy(() => import("../pages/Contributions"));
+const Analytics = lazy(() => import("../pages/Analytics"));
+const CmsPosts = lazy(() => import("../pages/CmsPosts"));
+const NewsArticle = lazy(() => import("../pages/NewsArticle"));
+const UserRoles = lazy(() => import("../pages/UserRoles"));
+const Forum = lazy(() => import("../pages/Forum"));
+const TreasurerDashboard = lazy(() => import("../pages/TreasurerDashboard"));
+const Layout = lazy(() => import("../components/layout/Layout"));
+const AdminLayout = lazy(() => import("../components/layout/AdminLayout"));
 
 export default function AppRoutes() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <Routes>
+        <Suspense fallback={<div className="px-4 py-8 text-sm text-mist/80">Loading page...</div>}>
+          <Routes>
 
           {/* Public */}
           <Route path="/" element={<Layout><Landing /></Layout>} />
@@ -56,19 +59,11 @@ export default function AppRoutes() {
           />
           <Route
             path="/member-login"
-            element={
-              <GuestRoute>
-                <Login />
-              </GuestRoute>
-            }
+            element={<Navigate to="/login" replace />}
           />
           <Route
             path="/portal-login"
-            element={
-              <GuestRoute>
-                <Login />
-              </GuestRoute>
-            }
+            element={<Navigate to="/login" replace />}
           />
           <Route
             path="/member-reset-password"
@@ -168,7 +163,8 @@ export default function AppRoutes() {
             }
           />
 
-        </Routes>
+          </Routes>
+        </Suspense>
       </AuthProvider>
     </BrowserRouter>
   );

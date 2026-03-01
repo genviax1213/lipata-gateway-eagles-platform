@@ -3,6 +3,8 @@ import axios from "axios";
 import api from "../services/api";
 import { useAuth } from "../contexts/useAuth";
 import { hasPermission } from "../utils/auth";
+import { roleGlossary } from "../content/portalCopy";
+import TaskHierarchyCard from "../components/TaskHierarchyCard";
 
 type DashboardView = "applicant" | "member" | "general";
 
@@ -261,6 +263,50 @@ export default function PortalDashboard() {
     return labels.length > 0 ? labels : ["No Assigned Role"];
   }, [user]);
 
+  const statusSummary = useMemo(() => {
+    if (dashboard?.view === "applicant" && applicantDetails) {
+      return `Application is ${applicantDetails.status}; current stage is ${applicantDetails.current_stage_label}.`;
+    }
+    if (dashboard?.view === "member") {
+      return "Member dashboard is active and your contribution history is available.";
+    }
+    return "General portal view is active.";
+  }, [applicantDetails, dashboard?.view]);
+
+  const availableActionsSummary = useMemo(() => {
+    const actions: string[] = [];
+    if (dashboard?.view === "applicant") {
+      if (canUploadApplicantDocs) actions.push("Upload required documents");
+      if (canViewApplicantDashboard) actions.push("Track application notices and fee balance");
+    } else {
+      actions.push("Review personal contributions");
+    }
+
+    if (canChairmanReview) actions.push("Approve/probation/reject applicants");
+    if (canTreasurerSetFee || canTreasurerPay) actions.push("Manage applicant fees");
+    if (canChairmanReviewDocs) actions.push("Review applicant documents");
+
+    return actions.length > 0 ? actions.join("; ") : "No additional actions assigned.";
+  }, [
+    canChairmanReview,
+    canChairmanReviewDocs,
+    canTreasurerPay,
+    canTreasurerSetFee,
+    canUploadApplicantDocs,
+    canViewApplicantDashboard,
+    dashboard?.view,
+  ]);
+
+  const nextStepSummary = useMemo(() => {
+    if (dashboard?.view === "applicant") {
+      return "Complete outstanding requirements and monitor chairman notices for the next interview/approval update.";
+    }
+    if (canChairmanReview || canTreasurerSetFee || canTreasurerPay) {
+      return "Review Application Committee Panel items with pending status and complete today’s required actions.";
+    }
+    return "Review your latest contribution records and check back for new notices.";
+  }, [canChairmanReview, canTreasurerPay, canTreasurerSetFee, dashboard?.view]);
+
   const uploadDocument = async () => {
     if (!applicantDetails || !documentFile || !canUploadApplicantDocs) return;
 
@@ -412,8 +458,25 @@ export default function PortalDashboard() {
         <p className="text-sm text-mist/85">Roles: <span className="text-gold-soft">{roleLabels.join(", ")}</span></p>
       </div>
 
-      {error && <p className="mb-4 rounded-md border border-red-300/30 bg-red-400/10 px-4 py-2 text-sm text-red-200">{error}</p>}
-      {notice && <p className="mb-4 rounded-md border border-gold/30 bg-gold/10 px-4 py-2 text-sm text-gold-soft">{notice}</p>}
+      <div className="mb-4 rounded-xl border border-white/20 bg-white/10 p-4">
+        <h2 className="mb-2 font-heading text-xl text-offwhite">Task Snapshot</h2>
+        <TaskHierarchyCard status={statusSummary} actions={availableActionsSummary} nextStep={nextStepSummary} />
+      </div>
+
+      <div className="mb-4 rounded-xl border border-white/20 bg-white/10 p-4">
+        <h2 className="mb-2 font-heading text-xl text-offwhite">Role Glossary</h2>
+        <div className="grid gap-2 md:grid-cols-2">
+          {roleGlossary.map((item) => (
+            <div key={item.role} className="rounded border border-white/20 bg-white/5 px-3 py-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-gold-soft">{item.role}</p>
+              <p className="text-xs text-mist/85">{item.meaning}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {error && <p className="mb-4 rounded-md border border-red-300/30 bg-red-400/10 px-4 py-2 text-sm text-red-200" role="alert" aria-live="polite">{error}</p>}
+      {notice && <p className="mb-4 rounded-md border border-gold/30 bg-gold/10 px-4 py-2 text-sm text-gold-soft" role="status" aria-live="polite">{notice}</p>}
 
       {loading && <p className="mb-4 text-sm text-mist/80">Loading dashboard...</p>}
 
@@ -449,7 +512,9 @@ export default function PortalDashboard() {
             <h2 className="mb-2 font-heading text-2xl text-offwhite">Required Documents</h2>
             {canUploadApplicantDocs && (
               <div className="mb-3 flex flex-wrap items-center gap-3">
+                <label htmlFor="applicant-document-upload" className="text-xs font-semibold text-mist/85">Upload Document</label>
                 <input
+                  id="applicant-document-upload"
                   type="file"
                   accept=".jpg,.jpeg,.png,.webp,.pdf"
                   capture="environment"
@@ -504,6 +569,7 @@ export default function PortalDashboard() {
               <button className={`rounded-md border px-3 py-1 text-sm ${selectedTab === "monthly_contribution" ? "border-gold text-gold-soft" : "border-white/30 text-offwhite"}`} onClick={() => setSelectedTab("monthly_contribution")}>Monthly Contribution</button>
               <button className={`rounded-md border px-3 py-1 text-sm ${selectedTab === "extra_contribution" ? "border-gold text-gold-soft" : "border-white/30 text-offwhite"}`} onClick={() => setSelectedTab("extra_contribution")}>Extra Contribution</button>
               <select
+                aria-label="Filter contributions by year"
                 value={yearFilter}
                 onChange={(e) => setYearFilter(e.target.value)}
                 className="rounded-md border border-white/25 bg-white/10 px-2 py-1 text-sm text-offwhite"
@@ -516,6 +582,7 @@ export default function PortalDashboard() {
                 ))}
               </select>
               <select
+                aria-label="Filter contributions by month"
                 value={monthFilter}
                 onChange={(e) => setMonthFilter(e.target.value)}
                 className="rounded-md border border-white/25 bg-white/10 px-2 py-1 text-sm text-offwhite"
@@ -594,7 +661,8 @@ export default function PortalDashboard() {
 
               {canChairmanSetStage && (
                 <div className="flex flex-wrap items-center gap-2">
-                  <select value={stageValue} onChange={(e) => setStageValue(e.target.value)} className="rounded-md border border-white/25 bg-white/10 px-2 py-1 text-offwhite">
+                  <label htmlFor="committee-stage" className="text-xs font-semibold text-mist/85">Set Stage</label>
+                  <select id="committee-stage" value={stageValue} onChange={(e) => setStageValue(e.target.value)} className="rounded-md border border-white/25 bg-white/10 px-2 py-1 text-offwhite">
                     <option value="interview" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Interview</option>
                     <option value="introduction" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Introduction</option>
                     <option value="indoctrination_initiation" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Indoctrination (Initiation)</option>
@@ -607,7 +675,8 @@ export default function PortalDashboard() {
 
               {canChairmanSetNotice && (
                 <div className="flex flex-wrap items-center gap-2">
-                  <input value={noticeText} onChange={(e) => setNoticeText(e.target.value)} placeholder="Chairman notice text" className="min-w-[20rem] rounded-md border border-white/25 bg-white/10 px-2 py-1 text-offwhite" />
+                  <label htmlFor="committee-notice" className="text-xs font-semibold text-mist/85">Notice Text</label>
+                  <input id="committee-notice" value={noticeText} onChange={(e) => setNoticeText(e.target.value)} placeholder="Chairman notice text" className="min-w-[20rem] rounded-md border border-white/25 bg-white/10 px-2 py-1 text-offwhite" />
                   <button className="btn-secondary" onClick={() => void setNoticeForApplicant()}>Post Notice</button>
                 </div>
               )}
@@ -616,14 +685,17 @@ export default function PortalDashboard() {
                 <div className="flex flex-wrap items-center gap-2">
                   {canTreasurerSetFee && (
                     <>
-                      <input value={requiredAmount} onChange={(e) => setRequiredAmount(e.target.value)} type="number" step="0.01" placeholder="Required fee amount" className="rounded-md border border-white/25 bg-white/10 px-2 py-1 text-offwhite" />
+                      <label htmlFor="committee-required-fee" className="text-xs font-semibold text-mist/85">Required Fee</label>
+                      <input id="committee-required-fee" value={requiredAmount} onChange={(e) => setRequiredAmount(e.target.value)} type="number" step="0.01" placeholder="Required fee amount" className="rounded-md border border-white/25 bg-white/10 px-2 py-1 text-offwhite" />
                       <button className="btn-secondary" onClick={() => void setFeeRequirement()}>Set Fee</button>
                     </>
                   )}
                   {canTreasurerPay && (
                     <>
-                      <input value={selectedFeeRequirementId ?? ""} onChange={(e) => setSelectedFeeRequirementId(Number(e.target.value) || null)} placeholder="Requirement ID" className="w-[8rem] rounded-md border border-white/25 bg-white/10 px-2 py-1 text-offwhite" />
-                      <input value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} type="number" step="0.01" placeholder="Payment amount" className="rounded-md border border-white/25 bg-white/10 px-2 py-1 text-offwhite" />
+                      <label htmlFor="committee-requirement-id" className="text-xs font-semibold text-mist/85">Requirement ID</label>
+                      <input id="committee-requirement-id" value={selectedFeeRequirementId ?? ""} onChange={(e) => setSelectedFeeRequirementId(Number(e.target.value) || null)} placeholder="Requirement ID" className="w-[8rem] rounded-md border border-white/25 bg-white/10 px-2 py-1 text-offwhite" />
+                      <label htmlFor="committee-payment-amount" className="text-xs font-semibold text-mist/85">Payment Amount</label>
+                      <input id="committee-payment-amount" value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} type="number" step="0.01" placeholder="Payment amount" className="rounded-md border border-white/25 bg-white/10 px-2 py-1 text-offwhite" />
                       <button className="btn-secondary" onClick={() => void addFeePayment()}>Log Payment</button>
                     </>
                   )}

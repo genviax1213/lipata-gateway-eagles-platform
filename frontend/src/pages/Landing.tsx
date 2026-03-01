@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import api from "../services/api";
 import type { CmsPost } from "../types/cms";
 import { htmlToPlainText } from "../utils/richText";
+import { canonicalRoutes } from "../content/portalCopy";
 
 export default function Landing() {
   const [heroPost, setHeroPost] = useState<CmsPost | null>(null);
@@ -102,7 +103,7 @@ export default function Landing() {
           </div>
           <p className="reveal reveal-delay-2 mt-5 text-sm text-mist/80">
             Already a member?{" "}
-            <Link to="/member-login" className="font-semibold text-gold-soft hover:text-gold">
+            <Link to={canonicalRoutes.login} className="font-semibold text-gold-soft hover:text-gold">
               Sign in here
             </Link>
             .
@@ -140,6 +141,10 @@ export default function Landing() {
 
       <div className="section-wrap relative z-10 pb-16">
         <h2 className="mb-4 font-heading text-3xl text-offwhite">Community In Action</h2>
+        <p className="mb-5 max-w-3xl text-sm text-mist/85">
+          Curated highlights from our most visible initiatives. For the complete activity archive and full timeline,
+          visit the Activities page.
+        </p>
 
         {communityPosts.length > 0 ? (
           <div className="grid gap-4 md:grid-cols-3">
@@ -155,9 +160,12 @@ export default function Landing() {
                 <h3 className="font-heading text-2xl text-offwhite">{post.title}</h3>
                 {post.excerpt && <p className="mt-2 text-sm text-mist/85">{post.excerpt}</p>}
                 {post.slug && (
-                  <div className="mt-4">
+                  <div className="mt-4 flex flex-wrap gap-3">
                     <Link to={`/news/${post.slug}`} className="btn-secondary">
                       Read Article
+                    </Link>
+                    <Link to="/activities" className="rounded-md border border-white/25 px-3 py-2 text-xs text-offwhite hover:border-gold/50 hover:text-gold-soft">
+                      Full Activities Archive
                     </Link>
                   </div>
                 )}
@@ -169,6 +177,11 @@ export default function Landing() {
             <div className="rounded-xl border border-white/20 bg-white/5 p-6 text-sm text-mist/80">
               No Community In Action posts yet. Add published posts in CMS section
               <span className="ml-1 text-gold-soft">homepage_community</span>.
+              <div className="mt-3">
+                <Link to="/activities" className="text-gold-soft hover:text-gold">
+                  Browse Activities Archive
+                </Link>
+              </div>
             </div>
           )
         )}

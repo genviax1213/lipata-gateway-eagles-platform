@@ -398,6 +398,7 @@ export default function Contributions() {
           <p className="mb-2 text-xs uppercase tracking-[0.22em] text-gold-soft">Find Member</p>
           <div className="flex flex-wrap items-center gap-3">
             <input
+              aria-label="Search member by number or name"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Wildcard search by member no. or name"
@@ -446,6 +447,7 @@ export default function Contributions() {
           {canInputFinance && (
             <div className="mb-4 grid gap-3 md:grid-cols-2">
               <select
+                aria-label="Contribution category"
                 value={categoryInput}
                 onChange={(e) => setCategoryInput(e.target.value)}
                 className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
@@ -457,12 +459,14 @@ export default function Contributions() {
                 ))}
               </select>
               <input
+                aria-label="Contribution date"
                 value={contributionDateInput}
                 onChange={(e) => setContributionDateInput(e.target.value)}
                 type="date"
                 className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
               />
               <input
+                aria-label="Contribution amount"
                 value={amountInput}
                 onChange={(e) => setAmountInput(e.target.value)}
                 placeholder="Amount"
@@ -472,12 +476,14 @@ export default function Contributions() {
                 className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
               />
               <input
+                aria-label="Contribution recipient indicator"
                 value={recipientIndicatorInput}
                 onChange={(e) => setRecipientIndicatorInput(e.target.value)}
                 placeholder="Recipient indicator (required for Alalayang Agila)"
                 className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
               />
               <input
+                aria-label="Contribution note"
                 value={noteInput}
                 onChange={(e) => setNoteInput(e.target.value)}
                 placeholder="Note (optional)"
@@ -531,6 +537,7 @@ export default function Contributions() {
           {canRequestEdit && selectedContributionId && (
             <div className="mt-4 grid gap-3 rounded-lg border border-white/20 bg-white/10 p-4 md:grid-cols-[180px_1fr_auto]">
               <input
+                aria-label="Requested contribution amount"
                 value={requestAmount}
                 onChange={(e) => setRequestAmount(e.target.value)}
                 placeholder="Requested amount"
@@ -540,6 +547,7 @@ export default function Contributions() {
                 className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
               />
               <input
+                aria-label="Edit request reason"
                 value={requestReason}
                 onChange={(e) => setRequestReason(e.target.value)}
                 placeholder="Reason for edit"
