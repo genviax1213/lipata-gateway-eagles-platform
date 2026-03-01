@@ -230,9 +230,27 @@ export default function RichTextEditor({
     ? selectedImageWidth
     : null;
 
+  const resolveCurrentImagePos = (): number | null => {
+    if (!editor) return null;
+    if (selectedImagePos !== null && editor.state.doc.nodeAt(selectedImagePos)?.type.name === "image") {
+      return selectedImagePos;
+    }
+    const { $from } = editor.state.selection;
+    const afterPos = $from.pos;
+    const beforePos = Math.max(0, $from.pos - 1);
+    const nodeAfter = editor.state.doc.nodeAt(afterPos);
+    if (nodeAfter?.type.name === "image") return afterPos;
+    const nodeBefore = editor.state.doc.nodeAt(beforePos);
+    if (nodeBefore?.type.name === "image") return beforePos;
+    return null;
+  };
+
   const updateSelectedImageAttrs = (attrs: Record<string, string | null>) => {
-    if (!editor || selectedImagePos === null) return;
-    editor.chain().focus().setNodeSelection(selectedImagePos).updateAttributes("image", attrs).run();
+    if (!editor) return;
+    const pos = resolveCurrentImagePos();
+    if (pos === null) return;
+    editor.chain().focus().setNodeSelection(pos).updateAttributes("image", attrs).run();
+    setSelectedImagePos(pos);
   };
 
   const setImageWidth = (width: number | null) => {
@@ -252,8 +270,27 @@ export default function RichTextEditor({
   };
 
   const setImageAlign = (align: "left" | "right" | "center") => {
-    if (!editor || selectedImagePos === null) return;
-    updateSelectedImageAttrs({ align });
+    if (!editor) return;
+    const attrs: Record<string, string | null> = { align };
+    if (!currentImageWidth || currentImageWidth > 900) {
+      attrs.width = "420";
+    }
+    updateSelectedImageAttrs(attrs);
+  };
+
+  const addImageLabelBelow = () => {
+    if (!editor) return;
+    const pos = resolveCurrentImagePos();
+    if (pos === null) return;
+    const imageNode = editor.state.doc.nodeAt(pos);
+    if (!imageNode || imageNode.type.name !== "image") return;
+    const insertPos = pos + imageNode.nodeSize;
+    editor
+      .chain()
+      .focus()
+      .insertContentAt(insertPos, "<p><em>Type image label here...</em></p>")
+      .setTextSelection(insertPos + 1)
+      .run();
   };
 
   useEffect(() => {
@@ -293,6 +330,25 @@ export default function RichTextEditor({
       editor.off("selectionUpdate", updateHandlePosition);
       editor.off("update", updateHandlePosition);
       window.removeEventListener("resize", updateHandlePosition);
+    };
+  }, [editor]);
+
+  useEffect(() => {
+    if (!editor) return;
+
+    const onClick = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof HTMLImageElement)) return;
+      const pos = editor.view.posAtDOM(target, 0);
+      if (typeof pos === "number" && pos >= 0) {
+        editor.chain().focus().setNodeSelection(pos).run();
+        setSelectedImagePos(pos);
+      }
+    };
+
+    editor.view.dom.addEventListener("click", onClick);
+    return () => {
+      editor.view.dom.removeEventListener("click", onClick);
     };
   }, [editor]);
 
@@ -446,6 +502,11 @@ export default function RichTextEditor({
           active={currentImageAlign === "center"}
           disabled={disabled || !imageIsSelected}
           onClick={() => setImageAlign("center")}
+        />
+        <ToolbarButton
+          label="Add Label"
+          disabled={disabled || !imageIsSelected}
+          onClick={addImageLabelBelow}
         />
         {imageIsSelected && (
           <span className="self-center text-xs text-mist/75">
