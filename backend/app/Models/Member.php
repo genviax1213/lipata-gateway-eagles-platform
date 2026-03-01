@@ -14,9 +14,16 @@ class Member extends Model
         'first_name',
         'middle_name',
         'last_name',
+        'spouse_name',
         'email',
         'user_id',
         'membership_status',
+        'contact_number',
+        'address',
+        'date_of_birth',
+        'batch',
+        'induction_date',
+        'source_submitted_at',
     ];
 
     public function user()

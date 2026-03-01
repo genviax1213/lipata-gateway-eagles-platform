@@ -3,6 +3,13 @@ import { Link } from "react-router-dom";
 import api from "../services/api";
 import type { CmsPost } from "../types/cms";
 import { unsplashImages } from "../content/unsplashImages";
+import { htmlToPlainText } from "../utils/richText";
+
+function contentSnippet(value: string, max = 180): string {
+  const plain = htmlToPlainText(value);
+  if (plain.length <= max) return plain;
+  return `${plain.slice(0, max).trim()}...`;
+}
 
 const fallback = [
   {
@@ -30,17 +37,31 @@ const fallback = [
 
 export default function Activities() {
   const [posts, setPosts] = useState<CmsPost[]>([]);
+  const [page, setPage] = useState(1);
+  const [lastPage, setLastPage] = useState(1);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let mounted = true;
 
     const load = async () => {
       try {
-        const res = await api.get("/content/activities");
+        const res = await api.get("/content/activities", {
+          params: {
+            paginate: true,
+            page,
+            per_page: 6,
+          },
+        });
         if (!mounted) return;
-        setPosts(Array.isArray(res.data) ? res.data : []);
+        setPosts(Array.isArray(res.data?.data) ? (res.data.data as CmsPost[]) : []);
+        setLastPage(Number(res.data?.last_page ?? 1));
       } catch {
-        if (mounted) setPosts([]);
+        if (!mounted) return;
+        setPosts([]);
+        setLastPage(1);
+      } finally {
+        if (mounted) setLoading(false);
       }
     };
 
@@ -49,7 +70,7 @@ export default function Activities() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [page]);
 
   return (
     <section className="section-wrap py-16 md:py-20">
@@ -57,8 +78,13 @@ export default function Activities() {
         Activities & Community Projects
       </h2>
 
-      <div className="grid gap-6 md:grid-cols-3">
-        {posts.length > 0
+      {loading && (
+        <div className="surface-card p-6 text-sm text-mist/85">Loading activities posts...</div>
+      )}
+
+      {!loading && (
+        <div className="grid gap-6 md:grid-cols-3">
+          {posts.length > 0
           ? posts.map((post) => (
               <article key={post.id} className="surface-card card-lift group h-full p-6">
                 {post.image_url && (
@@ -72,7 +98,7 @@ export default function Activities() {
                   {post.title}
                 </h3>
                 <p className="text-sm leading-relaxed text-mist/90">
-                  {post.excerpt ?? post.content.slice(0, 180)}
+                  {post.excerpt ?? contentSnippet(post.content)}
                 </p>
                 {post.slug && (
                   <div className="mt-4">
@@ -95,7 +121,38 @@ export default function Activities() {
                 </p>
               </article>
             ))}
-      </div>
+        </div>
+      )}
+
+      {!loading && posts.length > 0 && (
+        <div className="mt-8 flex items-center justify-center gap-4 text-sm text-mist/90">
+          <button
+            type="button"
+            disabled={page === 1}
+            onClick={() => {
+              setLoading(true);
+              setPage((p) => Math.max(1, p - 1));
+            }}
+            className="rounded-md border border-white/25 px-4 py-2 disabled:opacity-50"
+          >
+            Prev
+          </button>
+          <span>
+            Page {page} of {lastPage}
+          </span>
+          <button
+            type="button"
+            disabled={page >= lastPage}
+            onClick={() => {
+              setLoading(true);
+              setPage((p) => Math.min(lastPage, p + 1));
+            }}
+            className="rounded-md border border-white/25 px-4 py-2 disabled:opacity-50"
+          >
+            Next
+          </button>
+        </div>
+      )}
     </section>
   );
 }

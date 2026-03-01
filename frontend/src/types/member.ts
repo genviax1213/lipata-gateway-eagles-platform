@@ -4,6 +4,12 @@ export interface Member {
   first_name: string;
   middle_name: string | null;
   last_name: string;
+  spouse_name: string | null;
+  contact_number: string | null;
+  address: string | null;
+  date_of_birth: string | null;
+  batch: string | null;
+  induction_date: string | null;
   membership_status: "active" | "inactive" | "applicant";
 }
 
@@ -12,6 +18,12 @@ export interface MemberForm {
   first_name: string;
   middle_name: string;
   last_name: string;
+  spouse_name: string;
+  contact_number: string;
+  address: string;
+  date_of_birth: string;
+  batch: string;
+  induction_date: string;
   membership_status: Member["membership_status"];
 }
 

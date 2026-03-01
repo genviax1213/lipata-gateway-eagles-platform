@@ -29,6 +29,7 @@ export default function Members() {
   const [notice, setNotice] = useState("");
 
   const fetchMembers = useCallback(async (page = 1, filters?: { search: string; status: string }) => {
+    setError("");
     const activeFilters = filters ?? { search, status };
     const res = await api.get("/members", {
       params: { page, search: activeFilters.search, status: activeFilters.status },
@@ -48,16 +49,19 @@ export default function Members() {
   useEffect(() => {
     if (!canViewMembers) return;
 
-    setError("");
-    void fetchMembers(1, { search: "", status: "" }).catch(() => {
-      setError("Unable to load members.");
-    });
-
-    if (canApproveApplications) {
-      void fetchApplications().catch(() => {
-        setError("Unable to load member applications.");
+    const timer = setTimeout(() => {
+      void fetchMembers(1, { search: "", status: "" }).catch(() => {
+        setError("Unable to load members.");
       });
-    }
+
+      if (canApproveApplications) {
+        void fetchApplications().catch(() => {
+          setError("Unable to load member applications.");
+        });
+      }
+    }, 0);
+
+    return () => clearTimeout(timer);
   }, [canViewMembers, canApproveApplications, fetchApplications, fetchMembers]);
 
   async function handleUpdate(id: number, form: MemberForm) {
@@ -206,7 +210,7 @@ export default function Members() {
           <option value="inactive" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Inactive</option>
           <option value="applicant" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Applicant</option>
         </select>
-        <button onClick={() => void fetchMembers(1)} className="btn-primary">Apply</button>
+        <button onClick={() => void fetchMembers(1)} className="btn-primary">Search</button>
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-white/20 bg-white/10 shadow-lg">
@@ -215,6 +219,8 @@ export default function Members() {
             <tr>
               <th className="px-4 py-3 text-left">#</th>
               <th className="px-4 py-3 text-left">Name</th>
+              <th className="px-4 py-3 text-left">Batch</th>
+              <th className="px-4 py-3 text-left">Contact</th>
               <th className="px-4 py-3 text-left">Status</th>
               <th className="px-4 py-3 text-left">Actions</th>
             </tr>
@@ -224,6 +230,8 @@ export default function Members() {
               <tr key={m.id} className="border-b border-white/15">
                 <td className="px-4 py-3">{m.member_number}</td>
                 <td className="px-4 py-3">{m.first_name} {m.middle_name ? `${m.middle_name} ` : ""}{m.last_name}</td>
+                <td className="px-4 py-3">{m.batch ?? "—"}</td>
+                <td className="px-4 py-3">{m.contact_number ?? "—"}</td>
                 <td className="px-4 py-3">
                   <span className="rounded-full border border-white/20 bg-white/10 px-2.5 py-1 text-xs capitalize text-gold-soft">
                     {m.membership_status}
@@ -248,7 +256,7 @@ export default function Members() {
             ))}
             {members.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-4 py-8 text-center text-mist/80">No members found for the current filters.</td>
+                <td colSpan={6} className="px-4 py-8 text-center text-mist/80">No members found for the current filters.</td>
               </tr>
             )}
           </tbody>

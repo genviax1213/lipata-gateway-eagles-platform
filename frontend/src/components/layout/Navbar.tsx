@@ -68,7 +68,6 @@ export default function Navbar() {
           <NavLink to="/activities" className={navItem}>Activities</NavLink>
           <NavLink to="/news" className={navItem}>News</NavLink>
           <NavLink to="/contact" className={navItem}>Contact</NavLink>
-          {!isLoggedIn && <NavLink to="/member-application" className={navItem}>Apply</NavLink>}
           {isLoggedIn ? (
             <NavLink
               to="/portal"
@@ -107,11 +106,6 @@ export default function Navbar() {
               <NavLink to="/contact" onClick={() => setMobileOpen(false)} className={navItem}>
                 Contact
               </NavLink>
-              {!isLoggedIn && (
-                <NavLink to="/member-application" onClick={() => setMobileOpen(false)} className={navItem}>
-                  Apply
-                </NavLink>
-              )}
               {isLoggedIn ? (
                 <NavLink
                   to="/portal"

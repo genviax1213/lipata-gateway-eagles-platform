@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { useEffect, useState } from "react";
 import api from "../services/api";
 import type { CmsPost } from "../types/cms";
+import { htmlToPlainText } from "../utils/richText";
 
 export default function Landing() {
   const [heroPost, setHeroPost] = useState<CmsPost | null>(null);
@@ -9,6 +10,9 @@ export default function Landing() {
   const [communityPage, setCommunityPage] = useState(1);
   const [communityLastPage, setCommunityLastPage] = useState(1);
   const [loadingCommunity, setLoadingCommunity] = useState(true);
+  const heroContentPreview = heroPost?.content
+    ? htmlToPlainText(heroPost.content).replace(/\s+/g, " ").trim()
+    : "";
 
   useEffect(() => {
     let mounted = true;
@@ -120,8 +124,8 @@ export default function Landing() {
                 <span className="text-gold-soft">homepage_hero</span>.
               </div>
             )}
-            {heroPost?.content && (
-              <p className="mt-2 line-clamp-2 text-xs text-mist/80">{heroPost.content}</p>
+            {heroContentPreview && (
+              <p className="mt-2 line-clamp-2 text-xs text-mist/80">{heroContentPreview}</p>
             )}
             {heroPost?.slug && (
               <div className="mt-3">

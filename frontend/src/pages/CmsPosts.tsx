@@ -967,7 +967,7 @@ export default function CmsPosts() {
                 </td>
                 <td className="px-4 py-3">
                   <p className="max-w-xs line-clamp-3 text-xs text-mist/85">
-                    {post.excerpt || post.content}
+                    {post.excerpt || htmlToPlainText(post.content)}
                   </p>
                 </td>
                 <td className="px-4 py-3 capitalize">{post.section}</td>

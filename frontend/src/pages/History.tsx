@@ -2,6 +2,13 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import api from "../services/api";
 import type { CmsPost } from "../types/cms";
+import { htmlToPlainText } from "../utils/richText";
+
+function contentSnippet(value: string, max = 180): string {
+  const plain = htmlToPlainText(value);
+  if (plain.length <= max) return plain;
+  return `${plain.slice(0, max).trim()}...`;
+}
 
 export default function History() {
   const [posts, setPosts] = useState<CmsPost[]>([]);
@@ -71,7 +78,7 @@ export default function History() {
                 )}
                 <h2 className="font-heading text-2xl text-offwhite">{post.title}</h2>
                 <p className="mt-2 text-sm text-mist/85">
-                  {post.excerpt ?? `${post.content.slice(0, 180)}...`}
+                  {post.excerpt ?? contentSnippet(post.content)}
                 </p>
                 {post.slug && (
                   <div className="mt-4">

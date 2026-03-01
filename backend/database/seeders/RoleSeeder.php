@@ -114,7 +114,6 @@ class RoleSeeder extends Seeder
             $permissionIds['applications.notice.view'],
         ]);
         $member->permissions()->sync([
-            $permissionIds['posts.view'],
             $permissionIds['forum.view'],
             $permissionIds['forum.create_thread'],
             $permissionIds['forum.reply'],

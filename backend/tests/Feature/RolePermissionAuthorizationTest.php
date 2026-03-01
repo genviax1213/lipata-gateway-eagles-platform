@@ -40,6 +40,18 @@ class RolePermissionAuthorizationTest extends TestCase
         $response->assertStatus(403);
     }
 
+    public function test_member_cannot_view_cms_posts_list(): void
+    {
+        $memberRole = Role::query()->where('name', 'member')->firstOrFail();
+        $member = User::factory()->create(['role_id' => $memberRole->id]);
+
+        Sanctum::actingAs($member);
+
+        $response = $this->getJson('/api/v1/cms/posts');
+
+        $response->assertStatus(403);
+    }
+
     public function test_officer_can_update_post_but_cannot_delete_post(): void
     {
         $officerRole = Role::query()->where('name', 'officer')->firstOrFail();
@@ -305,5 +317,51 @@ class RolePermissionAuthorizationTest extends TestCase
 
         $response->assertStatus(200);
         $this->assertSame('auditor', (string) $response->json('user.finance_role'));
+    }
+
+    public function test_admin_can_update_member_extended_profile_fields(): void
+    {
+        $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
+        $admin = User::factory()->create([
+            'email' => 'admin@lipataeagles.ph',
+            'role_id' => $adminRole->id,
+        ]);
+
+        $member = Member::query()->create([
+            'member_number' => 'M-EXT-001',
+            'first_name' => 'Mario',
+            'middle_name' => 'Santos',
+            'last_name' => 'Reyes',
+            'membership_status' => 'active',
+        ]);
+
+        Sanctum::actingAs($admin);
+
+        $response = $this->putJson("/api/v1/members/{$member->id}", [
+            'member_number' => 'm-ext-001',
+            'first_name' => 'mario',
+            'middle_name' => 'santos',
+            'last_name' => 'reyes',
+            'membership_status' => 'active',
+            'spouse_name' => 'ana maria reyes',
+            'contact_number' => '0917 123 4567',
+            'address' => 'Purok 1, Surigao City',
+            'date_of_birth' => '1988-06-10',
+            'batch' => 'marilag',
+            'induction_date' => '2023-07-24',
+        ]);
+
+        $response->assertOk()
+            ->assertJsonPath('member_number', 'M-EXT-001')
+            ->assertJsonPath('spouse_name', 'Ana Maria Reyes')
+            ->assertJsonPath('contact_number', '09171234567')
+            ->assertJsonPath('batch', 'Marilag');
+
+        $member->refresh();
+        $this->assertSame('Ana Maria Reyes', $member->spouse_name);
+        $this->assertSame('09171234567', $member->contact_number);
+        $this->assertSame('Marilag', $member->batch);
+        $this->assertSame('1988-06-10', $member->date_of_birth);
+        $this->assertSame('2023-07-24', $member->induction_date);
     }
 }

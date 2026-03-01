@@ -20,6 +20,12 @@ export default function MemberModal({
     first_name: member?.first_name || "",
     middle_name: member?.middle_name || "",
     last_name: member?.last_name || "",
+    spouse_name: member?.spouse_name || "",
+    contact_number: member?.contact_number || "",
+    address: member?.address || "",
+    date_of_birth: member?.date_of_birth || "",
+    batch: member?.batch || "",
+    induction_date: member?.induction_date || "",
     membership_status: member?.membership_status || "active",
   });
 
@@ -132,6 +138,94 @@ export default function MemberModal({
               <option value="inactive">Inactive</option>
               <option value="applicant">Applicant</option>
             </select>
+          </div>
+
+          <div>
+            <label htmlFor="spouse_name" className="mb-2 block text-xs uppercase tracking-wider text-gold-soft">
+              Spouse Name
+            </label>
+            <input
+              id="spouse_name"
+              name="spouse_name"
+              value={form.spouse_name}
+              onChange={handleChange}
+              className="w-full rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite placeholder:text-mist/70 focus:border-gold focus:outline-none"
+            />
+            {errors.spouse_name && <p className="text-sm text-red-300">{errors.spouse_name[0]}</p>}
+          </div>
+
+          <div>
+            <label htmlFor="contact_number" className="mb-2 block text-xs uppercase tracking-wider text-gold-soft">
+              Contact Number
+            </label>
+            <input
+              id="contact_number"
+              name="contact_number"
+              value={form.contact_number}
+              onChange={handleChange}
+              className="w-full rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite placeholder:text-mist/70 focus:border-gold focus:outline-none"
+            />
+            {errors.contact_number && <p className="text-sm text-red-300">{errors.contact_number[0]}</p>}
+          </div>
+
+          <div>
+            <label htmlFor="batch" className="mb-2 block text-xs uppercase tracking-wider text-gold-soft">
+              Batch
+            </label>
+            <input
+              id="batch"
+              name="batch"
+              value={form.batch}
+              onChange={handleChange}
+              className="w-full rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite placeholder:text-mist/70 focus:border-gold focus:outline-none"
+            />
+            {errors.batch && <p className="text-sm text-red-300">{errors.batch[0]}</p>}
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div>
+              <label htmlFor="date_of_birth" className="mb-2 block text-xs uppercase tracking-wider text-gold-soft">
+                Date of Birth
+              </label>
+              <input
+                id="date_of_birth"
+                name="date_of_birth"
+                type="date"
+                value={form.date_of_birth}
+                onChange={handleChange}
+                className="w-full rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite focus:border-gold focus:outline-none"
+              />
+              {errors.date_of_birth && <p className="text-sm text-red-300">{errors.date_of_birth[0]}</p>}
+            </div>
+
+            <div>
+              <label htmlFor="induction_date" className="mb-2 block text-xs uppercase tracking-wider text-gold-soft">
+                Induction Date
+              </label>
+              <input
+                id="induction_date"
+                name="induction_date"
+                type="date"
+                value={form.induction_date}
+                onChange={handleChange}
+                className="w-full rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite focus:border-gold focus:outline-none"
+              />
+              {errors.induction_date && <p className="text-sm text-red-300">{errors.induction_date[0]}</p>}
+            </div>
+          </div>
+
+          <div>
+            <label htmlFor="address" className="mb-2 block text-xs uppercase tracking-wider text-gold-soft">
+              Address
+            </label>
+            <input
+              id="address"
+              name="address"
+              value={form.address}
+              onChange={handleChange}
+              className="w-full rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite placeholder:text-mist/70 focus:border-gold focus:outline-none"
+            />
+            {errors.address && <p className="text-sm text-red-300">{errors.address[0]}</p>}
           </div>
 
           <div className="flex justify-end gap-4 pt-4">

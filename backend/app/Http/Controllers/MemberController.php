@@ -36,7 +36,11 @@ class MemberController extends Controller
                 $q->where('member_number', 'like', "%{$search}%")
                   ->orWhere('first_name', 'like', "%{$search}%")
                   ->orWhere('middle_name', 'like', "%{$search}%")
-                  ->orWhere('last_name', 'like', "%{$search}%");
+                  ->orWhere('last_name', 'like', "%{$search}%")
+                  ->orWhere('spouse_name', 'like', "%{$search}%")
+                  ->orWhere('contact_number', 'like', "%{$search}%")
+                  ->orWhere('batch', 'like', "%{$search}%")
+                  ->orWhere('address', 'like', "%{$search}%");
             });
         }
 
@@ -66,12 +70,30 @@ class MemberController extends Controller
             'middle_name' => ['required', 'string', 'min:2', 'max:120', 'not_regex:/\./'],
             'last_name' => 'required|string|max:120',
             'membership_status' => 'required|in:active,inactive,applicant',
+            'spouse_name' => 'nullable|string|max:120',
+            'contact_number' => 'nullable|string|max:50',
+            'address' => 'nullable|string|max:65535',
+            'date_of_birth' => 'nullable|date',
+            'batch' => 'nullable|string|max:120',
+            'induction_date' => 'nullable|date',
         ]);
 
         $validated['member_number'] = (string) TextCase::upper($validated['member_number']);
         $validated['first_name'] = (string) TextCase::title($validated['first_name']);
         $validated['middle_name'] = (string) TextCase::title($validated['middle_name']);
         $validated['last_name'] = (string) TextCase::title($validated['last_name']);
+        $validated['spouse_name'] = isset($validated['spouse_name']) && $validated['spouse_name'] !== ''
+            ? (string) TextCase::title($validated['spouse_name'])
+            : null;
+        $validated['contact_number'] = isset($validated['contact_number']) && $validated['contact_number'] !== ''
+            ? preg_replace('/\s+/', '', (string) $validated['contact_number'])
+            : null;
+        $validated['address'] = isset($validated['address']) && $validated['address'] !== ''
+            ? trim((string) $validated['address'])
+            : null;
+        $validated['batch'] = isset($validated['batch']) && $validated['batch'] !== ''
+            ? (string) TextCase::title($validated['batch'])
+            : null;
 
         $member->update($validated);
 

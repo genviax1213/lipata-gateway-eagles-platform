@@ -3,20 +3,35 @@ import { Link } from "react-router-dom";
 import api from "../services/api";
 import type { CmsPost } from "../types/cms";
 import { unsplashImages } from "../content/unsplashImages";
+import { sanitizeRichHtml } from "../utils/richText";
 
 export default function About() {
   const [posts, setPosts] = useState<CmsPost[]>([]);
+  const [page, setPage] = useState(1);
+  const [lastPage, setLastPage] = useState(1);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let mounted = true;
 
     const load = async () => {
       try {
-        const res = await api.get("/content/about");
+        const res = await api.get("/content/about", {
+          params: {
+            paginate: true,
+            page,
+            per_page: 1,
+          },
+        });
         if (!mounted) return;
-        setPosts(Array.isArray(res.data) ? res.data : []);
+        setPosts(Array.isArray(res.data?.data) ? (res.data.data as CmsPost[]) : []);
+        setLastPage(Number(res.data?.last_page ?? 1));
       } catch {
-        if (mounted) setPosts([]);
+        if (!mounted) return;
+        setPosts([]);
+        setLastPage(1);
+      } finally {
+        if (mounted) setLoading(false);
       }
     };
 
@@ -25,13 +40,16 @@ export default function About() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [page]);
 
   const primary = posts[0];
 
   return (
     <section className="section-wrap py-16 md:py-20">
       <div className="surface-card card-lift reveal p-8 md:p-12">
+        {loading && (
+          <p className="mb-4 text-sm text-mist/85">Loading about article...</p>
+        )}
         <h2 className="mb-6 font-heading text-4xl text-offwhite md:text-5xl">
           {primary?.title ?? "About the Club"}
         </h2>
@@ -46,7 +64,10 @@ export default function About() {
               />
             )}
             {primary.excerpt && <p className="mb-3 text-mist/90">{primary.excerpt}</p>}
-            <p className="whitespace-pre-line text-mist/90">{primary.content}</p>
+            <div
+              className="rich-content text-mist/90"
+              dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(primary.content) }}
+            />
             {primary.slug && (
               <div className="mt-6">
                 <Link to={`/news/${primary.slug}`} className="btn-secondary">
@@ -80,6 +101,36 @@ export default function About() {
               united in service and fellowship.
             </p>
           </>
+        )}
+
+        {!loading && posts.length > 0 && (
+          <div className="mt-8 flex items-center justify-center gap-4 text-sm text-mist/90">
+            <button
+              type="button"
+              disabled={page === 1}
+              onClick={() => {
+                setLoading(true);
+                setPage((p) => Math.max(1, p - 1));
+              }}
+              className="rounded-md border border-white/25 px-4 py-2 disabled:opacity-50"
+            >
+              Prev
+            </button>
+            <span>
+              Page {page} of {lastPage}
+            </span>
+            <button
+              type="button"
+              disabled={page >= lastPage}
+              onClick={() => {
+                setLoading(true);
+                setPage((p) => Math.min(lastPage, p + 1));
+              }}
+              className="rounded-md border border-white/25 px-4 py-2 disabled:opacity-50"
+            >
+              Next
+            </button>
+          </div>
         )}
       </div>
     </section>

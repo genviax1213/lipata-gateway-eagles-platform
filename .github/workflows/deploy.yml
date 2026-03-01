@@ -1,0 +1,163 @@
+name: CD - Deploy to Serverbyt
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: true
+
+jobs:
+  verify_backend:
+    name: Verify Backend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.2"
+          extensions: mbstring, sqlite3, pdo_sqlite
+          coverage: none
+
+      - name: Install Composer Dependencies
+        run: composer install --no-interaction --prefer-dist
+
+      - name: Prepare Laravel Env
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      - name: Run Backend Tests
+        run: php artisan test
+
+  build_frontend:
+    name: Build Frontend
+    runs-on: ubuntu-latest
+    needs: verify_backend
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        env:
+          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+        run: npm run build
+
+      - name: Upload Frontend Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+          if-no-files-found: error
+
+  deploy:
+    name: Deploy to Serverbyt
+    runs-on: ubuntu-latest
+    needs: build_frontend
+    environment: production
+    env:
+      SSH_HOST: ${{ secrets.SSH_HOST != '' && secrets.SSH_HOST || 'serverbyt.net' }}
+      SSH_USER: ${{ secrets.SSH_USER }}
+      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      FRONTEND_REMOTE_DIR: ${{ secrets.FRONTEND_REMOTE_DIR }}
+      REMOTE_APP_DIR: ${{ secrets.REMOTE_APP_DIR }}
+      REMOTE_BACKEND_DIR: ${{ secrets.REMOTE_BACKEND_DIR }}
+      DEPLOY_BRANCH: ${{ vars.DEPLOY_BRANCH != '' && vars.DEPLOY_BRANCH || 'main' }}
+      RUN_SEED: ${{ vars.RUN_SEED != '' && vars.RUN_SEED || 'false' }}
+      RESTART_COMMAND: ${{ vars.RESTART_COMMAND }}
+    steps:
+      - name: Download Frontend Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: dist
+
+      - name: Validate Required Secrets
+        run: |
+          set -e
+          [ -n "$SSH_USER" ] || (echo "Missing secret: SSH_USER" && exit 1)
+          [ -n "$SSH_PRIVATE_KEY" ] || (echo "Missing secret: SSH_PRIVATE_KEY" && exit 1)
+          [ -n "$FRONTEND_REMOTE_DIR" ] || (echo "Missing secret: FRONTEND_REMOTE_DIR" && exit 1)
+          [ -n "$REMOTE_APP_DIR" ] || (echo "Missing secret: REMOTE_APP_DIR" && exit 1)
+
+      - name: Prepare SSH
+        run: |
+          set -e
+          mkdir -p ~/.ssh
+          printf "%s" "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts
+
+      - name: Sync Frontend
+        run: |
+          set -e
+          rsync -az --delete \
+            --exclude ".well-known" \
+            -e "ssh -i ~/.ssh/id_ed25519" \
+            dist/ \
+            "${SSH_USER}@${SSH_HOST}:${FRONTEND_REMOTE_DIR}/"
+
+      - name: Deploy Laravel Backend
+        run: |
+          set -e
+          ssh -i ~/.ssh/id_ed25519 "${SSH_USER}@${SSH_HOST}" << EOF
+          set -e
+          APP_DIR="${REMOTE_APP_DIR}"
+          BACKEND_DIR="${REMOTE_BACKEND_DIR}"
+          if [ -z "\$BACKEND_DIR" ]; then
+            BACKEND_DIR="\$APP_DIR/backend"
+          fi
+
+          cd "\$APP_DIR"
+          git fetch --all --prune
+          git checkout "${DEPLOY_BRANCH}"
+          git pull --ff-only origin "${DEPLOY_BRANCH}"
+
+          cd "\$BACKEND_DIR"
+          if [ ! -f .env ]; then
+            cp .env.example .env
+          fi
+
+          composer install --no-dev --optimize-autoloader --no-interaction
+          php artisan key:generate --force || true
+          php artisan migrate --force --no-interaction
+
+          if [ "${RUN_SEED}" = "true" ]; then
+            php artisan db:seed --force --no-interaction
+          fi
+
+          php artisan storage:link || true
+          php artisan optimize:clear
+          php artisan config:cache
+          php artisan route:cache
+          php artisan view:cache
+
+          if [ -n "${RESTART_COMMAND}" ]; then
+            ${RESTART_COMMAND}
+          fi
+          EOF
