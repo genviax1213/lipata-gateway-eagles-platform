@@ -13,41 +13,9 @@ class ForumController extends Controller
 {
     private const FORUM_BODY_MAX_CHARS = 60000;
 
-    private function isSuperAdmin(User $user): bool
-    {
-        return (string) $user->email === 'admin@lipataeagles.ph';
-    }
-
     private function canModerate(User $user): bool
     {
-        return $this->isSuperAdmin($user) || $user->hasPermission('forum.moderate');
-    }
-
-    private function hasGeneralForumAccess(User $user): bool
-    {
-        $roleName = optional($user->role)->name;
-        return $roleName !== 'applicant';
-    }
-
-    private function ensurePermission(Request $request, string $permission): void
-    {
-        /** @var User $user */
-        $user = $request->user();
-
-        if ($this->isSuperAdmin($user)) {
-            return;
-        }
-
-        if (
-            in_array($permission, ['forum.view', 'forum.create_thread', 'forum.reply'], true)
-            && $this->hasGeneralForumAccess($user)
-        ) {
-            return;
-        }
-
-        if (!$user->hasPermission($permission)) {
-            abort(403, 'Insufficient forum privileges.');
-        }
+        return $user->hasPermission('forum.moderate');
     }
 
     private function uniqueThreadSlug(string $base): string
@@ -66,8 +34,6 @@ class ForumController extends Controller
 
     public function index(Request $request)
     {
-        $this->ensurePermission($request, 'forum.view');
-
         $search = (string) $request->query('search', '');
 
         $query = ForumThread::query()
@@ -91,8 +57,6 @@ class ForumController extends Controller
 
     public function show(Request $request, ForumThread $thread)
     {
-        $this->ensurePermission($request, 'forum.view');
-
         $thread->load(['author:id,name']);
         $thread->load([
             'posts' => function ($q) use ($request) {
@@ -112,8 +76,6 @@ class ForumController extends Controller
 
     public function storeThread(Request $request)
     {
-        $this->ensurePermission($request, 'forum.create_thread');
-
         $validated = $request->validate([
             'title' => 'required|string|min:5|max:180',
             'body' => 'required|string|max:' . self::FORUM_BODY_MAX_CHARS,
@@ -146,8 +108,6 @@ class ForumController extends Controller
 
     public function storeReply(Request $request, ForumThread $thread)
     {
-        $this->ensurePermission($request, 'forum.reply');
-
         if ($thread->is_locked) {
             return response()->json(['message' => 'Thread is locked by forum moderators.'], 422);
         }
@@ -178,8 +138,6 @@ class ForumController extends Controller
 
     public function uploadInlineImage(Request $request)
     {
-        $this->ensurePermission($request, 'forum.reply');
-
         $validated = $request->validate([
             'image' => 'required|image|max:12288',
         ], [
@@ -206,7 +164,7 @@ class ForumController extends Controller
 
     public function setThreadLock(Request $request, ForumThread $thread)
     {
-        $this->ensurePermission($request, 'forum.moderate');
+        $this->authorize('setLock', $thread);
 
         $validated = $request->validate([
             'locked' => 'required|boolean',
@@ -223,7 +181,7 @@ class ForumController extends Controller
 
     public function setPostVisibility(Request $request, ForumPost $post)
     {
-        $this->ensurePermission($request, 'forum.moderate');
+        $this->authorize('setVisibility', $post);
 
         $validated = $request->validate([
             'hidden' => 'required|boolean',
@@ -240,13 +198,7 @@ class ForumController extends Controller
 
     public function destroyThread(Request $request, ForumThread $thread)
     {
-        /** @var User $user */
-        $user = $request->user();
-
-        $isThreadStarter = (int) $thread->created_by_user_id === (int) $user->id;
-        if (!$isThreadStarter && !$this->canModerate($user)) {
-            abort(403, 'Only the thread starter, forum moderators, or admins can delete this thread.');
-        }
+        $this->authorize('delete', $thread);
 
         $thread->delete();
 
@@ -255,11 +207,7 @@ class ForumController extends Controller
 
     public function destroyPost(Request $request, ForumPost $post)
     {
-        /** @var User $user */
-        $user = $request->user();
-        if (!$this->canModerate($user)) {
-            abort(403, 'Only forum moderators or admins can delete posts.');
-        }
+        $this->authorize('delete', $post);
 
         $thread = $post->thread;
         $post->delete();
