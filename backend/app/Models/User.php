@@ -101,6 +101,8 @@ class User extends Authenticatable
                 'finance.view',
                 'finance.input',
                 'finance.request_edit',
+                'applications.fee.set',
+                'applications.fee.pay',
             ],
             'auditor' => [
                 'finance.view',

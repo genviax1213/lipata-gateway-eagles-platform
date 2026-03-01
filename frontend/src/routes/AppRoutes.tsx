@@ -16,6 +16,7 @@ import CmsPosts from "../pages/CmsPosts";
 import NewsArticle from "../pages/NewsArticle";
 import UserRoles from "../pages/UserRoles";
 import Forum from "../pages/Forum";
+import TreasurerDashboard from "../pages/TreasurerDashboard";
 import ProtectedRoute from "./ProtectedRoute";
 import GuestRoute from "./GuestRoute";
 import Layout from "../components/layout/Layout";
@@ -151,6 +152,17 @@ export default function AppRoutes() {
               <ProtectedRoute>
                 <AdminLayout>
                   <Forum />
+                </AdminLayout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/portal/treasurer"
+            element={
+              <ProtectedRoute>
+                <AdminLayout>
+                  <TreasurerDashboard />
                 </AdminLayout>
               </ProtectedRoute>
             }

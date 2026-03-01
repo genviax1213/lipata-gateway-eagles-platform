@@ -29,6 +29,7 @@ Route::prefix('v1')->group(function () {
             return $request->user()->load('role.permissions:id,name');
         });
         Route::get('/dashboard/me', [DashboardController::class, 'me']);
+        Route::get('/dashboard/treasurer', [DashboardController::class, 'treasurer']);
 
         Route::get('/cms/posts', [PostController::class, 'index']);
         Route::post('/cms/posts', [PostController::class, 'store']);

@@ -43,9 +43,10 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const isApplicant = roleName === "applicant";
   const showRoleDelegation = isAdminUser(user) || hasPermission(user, "roles.delegate");
   const canViewMembers = hasPermission(user, "members.view");
-  const canViewPosts = hasPermission(user, "posts.view");
+  const canManageCmsPosts = hasPermission(user, "posts.create");
   const canViewFinance = hasPermission(user, "finance.view");
   const canViewForum = !isApplicant;
+  const canUseTreasurerDashboard = hasPermission(user, "applications.fee.set") || hasPermission(user, "applications.fee.pay");
   const portalTitle = getPortalTitle(user);
   const portalShortTitle = toShortTitle(portalTitle);
 
@@ -55,11 +56,12 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       { to: "/portal/members", label: "Members", short: "MB", show: canViewMembers },
       { to: "/portal/contributions", label: canViewFinance ? "Finance" : "My Contributions", short: "FN", show: true },
       { to: "/portal/forum", label: "Forum", short: "FR", show: canViewForum },
+      { to: "/portal/treasurer", label: "Treasurer", short: "TR", show: canUseTreasurerDashboard },
       { to: "/portal/analytics", label: "Analytics", short: "AN", show: true },
-      { to: "/portal/posts", label: "CMS Posts", short: "CP", show: canViewPosts },
+      { to: "/portal/posts", label: "CMS Posts", short: "CP", show: canManageCmsPosts },
       { to: "/portal/user-roles", label: "User Roles", short: "UR", show: showRoleDelegation },
     ],
-    [canViewFinance, canViewForum, canViewMembers, canViewPosts, showRoleDelegation],
+    [canManageCmsPosts, canUseTreasurerDashboard, canViewFinance, canViewForum, canViewMembers, showRoleDelegation],
   );
 
   const linkStyle = ({ isActive }: { isActive: boolean }) => {

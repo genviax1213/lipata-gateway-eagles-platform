@@ -42,7 +42,7 @@ export function hasPermission(user: AuthUser, permissionName: string): boolean {
   }
 
   const financePermission =
-    (financeRole === "treasurer" && ["finance.view", "finance.input", "finance.request_edit"].includes(permissionName)) ||
+    (financeRole === "treasurer" && ["finance.view", "finance.input", "finance.request_edit", "applications.fee.set", "applications.fee.pay"].includes(permissionName)) ||
     (financeRole === "auditor" && ["finance.view", "finance.approve_edits"].includes(permissionName));
 
   const forumPermission =
