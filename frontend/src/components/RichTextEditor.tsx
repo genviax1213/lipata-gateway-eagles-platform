@@ -139,6 +139,9 @@ function ToolbarButton({ active = false, disabled = false, onClick, label }: Too
     <button
       type="button"
       disabled={disabled}
+      onMouseDown={(event) => {
+        event.preventDefault();
+      }}
       onClick={onClick}
       className={`rounded-md border px-3 py-1 text-xs ${
         active ? "border-gold bg-gold text-ink" : "border-white/30 text-offwhite"
@@ -158,6 +161,7 @@ export default function RichTextEditor({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const editorContainerRef = useRef<HTMLDivElement | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [selectedImagePos, setSelectedImagePos] = useState<number | null>(null);
   const [handlePos, setHandlePos] = useState<{ left: number; right: number; top: number } | null>(null);
   const [resizing, setResizing] = useState<{
     startX: number;
@@ -203,34 +207,42 @@ export default function RichTextEditor({
       const editedFile = await cropAndResizeEditorImage(file);
       if (!editedFile) return;
       const imageUrl = await onUploadImage(editedFile);
-      editor
-        .chain()
-        .focus()
-        .setImage({ src: imageUrl, alt: editedFile.name })
-        .updateAttributes("image", { align: "left", width: "420" })
-        .run();
+      editor.chain().focus().setImage({
+        src: imageUrl,
+        alt: editedFile.name,
+        align: "left",
+        width: "420",
+      } as unknown as { src: string; alt?: string }).run();
     } finally {
       setUploadingImage(false);
     }
   };
 
-  const imageIsSelected = !!editor?.isActive("image");
-  const currentImageAlign = imageIsSelected ? String(editor?.getAttributes("image").align ?? "") : "";
+  const selectedImageNode = editor && selectedImagePos !== null
+    ? editor.state.doc.nodeAt(selectedImagePos)
+    : null;
+  const imageIsSelected = !!selectedImageNode && selectedImageNode.type.name === "image";
+  const currentImageAlign = imageIsSelected ? String(selectedImageNode?.attrs.align ?? "") : "";
   const selectedImageWidth = imageIsSelected
-    ? Number.parseInt(String(editor?.getAttributes("image").width ?? ""), 10)
+    ? Number.parseInt(String(selectedImageNode?.attrs.width ?? ""), 10)
     : Number.NaN;
   const currentImageWidth = Number.isFinite(selectedImageWidth) && selectedImageWidth > 0
     ? selectedImageWidth
     : null;
 
+  const updateSelectedImageAttrs = (attrs: Record<string, string | null>) => {
+    if (!editor || selectedImagePos === null) return;
+    editor.chain().focus().setNodeSelection(selectedImagePos).updateAttributes("image", attrs).run();
+  };
+
   const setImageWidth = (width: number | null) => {
-    if (!editor) return;
+    if (!editor || selectedImagePos === null) return;
     if (width === null) {
-      editor.chain().focus().updateAttributes("image", { width: null }).run();
+      updateSelectedImageAttrs({ width: null });
       return;
     }
     const bounded = Math.max(160, Math.min(2000, Math.round(width)));
-    editor.chain().focus().updateAttributes("image", { width: String(bounded) }).run();
+    updateSelectedImageAttrs({ width: String(bounded) });
   };
 
   const adjustImageWidth = (delta: number) => {
@@ -240,8 +252,8 @@ export default function RichTextEditor({
   };
 
   const setImageAlign = (align: "left" | "right" | "center") => {
-    if (!editor || !imageIsSelected) return;
-    editor.chain().focus().updateAttributes("image", { align }).run();
+    if (!editor || selectedImagePos === null) return;
+    updateSelectedImageAttrs({ align });
   };
 
   useEffect(() => {
@@ -249,6 +261,7 @@ export default function RichTextEditor({
 
     const updateHandlePosition = () => {
       if (!editorContainerRef.current || !editor.isActive("image")) {
+        setSelectedImagePos(null);
         setHandlePos(null);
         return;
       }
@@ -256,9 +269,11 @@ export default function RichTextEditor({
       const from = editor.state.selection.from;
       const domAtPos = editor.view.nodeDOM(from);
       if (!(domAtPos instanceof HTMLImageElement)) {
+        setSelectedImagePos(null);
         setHandlePos(null);
         return;
       }
+      setSelectedImagePos(from);
 
       const containerRect = editorContainerRef.current.getBoundingClientRect();
       const imageRect = domAtPos.getBoundingClientRect();
