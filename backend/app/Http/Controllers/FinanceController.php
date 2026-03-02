@@ -9,7 +9,6 @@ use App\Models\Post;
 use App\Models\User;
 use App\Support\TextCase;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class FinanceController extends Controller
@@ -20,6 +19,15 @@ class FinanceController extends Controller
         'project_contribution' => 'Project Contribution',
         'extra_contribution' => 'Extra Contribution',
     ];
+
+    private function ensurePermission(Request $request, string $permission): void
+    {
+        $user = $request->user();
+
+        if (!$user->hasPermission($permission)) {
+            abort(403, 'Insufficient finance privileges.');
+        }
+    }
 
     private function resolveActorMember(User $user): ?Member
     {
@@ -193,7 +201,7 @@ class FinanceController extends Controller
 
     public function searchMembers(Request $request)
     {
-        $this->authorize('viewFinanceDirectory', Member::class);
+        $this->ensurePermission($request, 'finance.view');
 
         $search = (string) $request->query('search', '');
         $query = Member::query()->with('user.role:id,name');
@@ -214,7 +222,7 @@ class FinanceController extends Controller
 
     public function memberContributions(Request $request, Member $member)
     {
-        $this->authorize('viewFinancialContributions', $member);
+        $this->ensurePermission($request, 'finance.view');
 
         return response()->json($this->contributionDataForMember($member));
     }
@@ -236,6 +244,8 @@ class FinanceController extends Controller
 
     public function storeContribution(Request $request)
     {
+        $this->ensurePermission($request, 'finance.input');
+
         $validated = $request->validate([
             'member_id' => 'required|integer|exists:members,id',
             'amount' => 'required|numeric|min:0.01',
@@ -285,7 +295,7 @@ class FinanceController extends Controller
 
     public function requestContributionEdit(Request $request, Contribution $contribution)
     {
-        $this->authorize('requestEdit', $contribution);
+        $this->ensurePermission($request, 'finance.request_edit');
 
         $validated = $request->validate([
             'requested_amount' => 'required|numeric|min:0.01',
@@ -316,7 +326,7 @@ class FinanceController extends Controller
 
     public function editRequests(Request $request)
     {
-        $this->authorize('viewEditRequests', ContributionEditRequest::class);
+        $this->ensurePermission($request, 'finance.approve_edits');
 
         $status = (string) $request->query('status', 'pending');
         $allowed = ['pending', 'approved', 'rejected'];
@@ -339,7 +349,7 @@ class FinanceController extends Controller
 
     public function approveEditRequest(Request $request, ContributionEditRequest $contributionEditRequest)
     {
-        $this->authorize('approve', $contributionEditRequest);
+        $this->ensurePermission($request, 'finance.approve_edits');
 
         if ($contributionEditRequest->status !== 'pending') {
             return response()->json(['message' => 'Edit request is already reviewed.'], 422);
@@ -355,13 +365,6 @@ class FinanceController extends Controller
         $contributionEditRequest->review_notes = null;
         $contributionEditRequest->save();
 
-        Log::info('finance.edit_request_approved', [
-            'actor_user_id' => $request->user()->id,
-            'request_id' => $contributionEditRequest->id,
-            'contribution_id' => $contribution->id,
-            'ip' => $request->ip(),
-        ]);
-
         return response()->json([
             'message' => 'Contribution edit request approved.',
             'request' => $contributionEditRequest->fresh(),
@@ -371,7 +374,7 @@ class FinanceController extends Controller
 
     public function rejectEditRequest(Request $request, ContributionEditRequest $contributionEditRequest)
     {
-        $this->authorize('reject', $contributionEditRequest);
+        $this->ensurePermission($request, 'finance.approve_edits');
 
         if ($contributionEditRequest->status !== 'pending') {
             return response()->json(['message' => 'Edit request is already reviewed.'], 422);
@@ -386,14 +389,6 @@ class FinanceController extends Controller
         $contributionEditRequest->reviewed_at = now();
         $contributionEditRequest->review_notes = $validated['review_notes'] ?? null;
         $contributionEditRequest->save();
-
-        Log::info('finance.edit_request_rejected', [
-            'actor_user_id' => $request->user()->id,
-            'request_id' => $contributionEditRequest->id,
-            'contribution_id' => $contributionEditRequest->contribution_id,
-            'review_notes' => $contributionEditRequest->review_notes,
-            'ip' => $request->ip(),
-        ]);
 
         return response()->json([
             'message' => 'Contribution edit request rejected.',

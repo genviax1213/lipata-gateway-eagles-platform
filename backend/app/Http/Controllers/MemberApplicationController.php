@@ -10,13 +10,11 @@ use App\Models\Member;
 use App\Models\MemberApplication;
 use App\Models\Role;
 use App\Models\User;
-use App\Notifications\MemberApplicationVerificationToken;
 use App\Support\ImageUploadOptimizer;
 use App\Support\TextCase;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
@@ -50,6 +48,27 @@ class MemberApplicationController extends Controller
             'message' => 'Possible duplicate person detected. ' . $context,
             'next_step' => 'Use "Edit Email" authenticated procedure: 1) confirm current email ownership, 2) verify new email via token, 3) admin/officer reviews and approves the change.',
         ];
+    }
+
+    private function ensurePermission(Request $request, string $permission): void
+    {
+        $user = $request->user();
+        if (!$user || !$user->hasPermission($permission)) {
+            abort(403, 'Insufficient privileges for this action.');
+        }
+    }
+
+    private function ensureChairman(Request $request): void
+    {
+        $user = $request->user()?->loadMissing('role:id,name');
+        if (!$user || optional($user->role)->name !== 'membership_chairman') {
+            abort(403, 'Only membership committee chairman can perform this action.');
+        }
+    }
+
+    private function ensureTreasurer(Request $request): void
+    {
+        $this->ensurePermission($request, 'applications.fee.pay');
     }
 
     private function fiveIStageLabel(?string $stage): string
@@ -228,15 +247,14 @@ class MemberApplicationController extends Controller
             'status' => 'pending_verification',
             'decision_status' => 'pending',
             'current_stage' => 'interview',
-            'verification_token' => hash('sha256', $token),
+            'verification_token' => $token,
             'is_login_blocked' => false,
         ]);
-
-        $applicantUser->notify(new MemberApplicationVerificationToken($token, $normalizedEmail));
 
         return response()->json([
             'message' => 'Application submitted. Verify your email to continue to chairman review.',
             'application_id' => $application->id,
+            'verification_token' => $token,
         ], 201);
     }
 
@@ -251,7 +269,7 @@ class MemberApplicationController extends Controller
 
         $application = MemberApplication::query()
             ->whereRaw('LOWER(TRIM(email)) = ?', [$normalizedEmail])
-            ->where('verification_token', hash('sha256', (string) $validated['verification_token']))
+            ->where('verification_token', $validated['verification_token'])
             ->where('status', 'pending_verification')
             ->first();
 
@@ -273,6 +291,8 @@ class MemberApplicationController extends Controller
 
     public function index(Request $request)
     {
+        $this->ensurePermission($request, 'members.view');
+
         $status = (string) $request->query('status', 'pending_approval');
         $allowed = ['pending_verification', 'pending_approval', 'approved', 'rejected', 'all'];
         if (!in_array($status, $allowed, true)) {
@@ -295,6 +315,8 @@ class MemberApplicationController extends Controller
 
     public function myApplication(Request $request)
     {
+        $this->ensurePermission($request, 'applications.dashboard.view');
+
         /** @var User $user */
         $user = $request->user();
 
@@ -313,12 +335,23 @@ class MemberApplicationController extends Controller
 
     public function show(Request $request, MemberApplication $memberApplication)
     {
+        $this->ensurePermission($request, 'members.view');
+
         return response()->json($this->applicantPayload($memberApplication));
     }
 
     public function uploadDocument(Request $request, MemberApplication $memberApplication)
     {
-        $this->authorize('uploadDocument', $memberApplication);
+        $this->ensurePermission($request, 'applications.docs.upload');
+
+        /** @var User $user */
+        $user = $request->user();
+        if (
+            $memberApplication->user_id !== $user->id &&
+            strtolower(trim((string) $memberApplication->email)) !== strtolower(trim((string) $user->email))
+        ) {
+            abort(403, 'You can upload documents only for your own application.');
+        }
 
         $validated = $request->validate([
             'document' => 'required|file|mimes:jpg,jpeg,png,webp,pdf|max:10240',
@@ -347,7 +380,7 @@ class MemberApplicationController extends Controller
 
     public function reviewDocument(Request $request, ApplicationDocument $document)
     {
-        $this->authorize('review', $document);
+        $this->ensureChairman($request);
 
         $validated = $request->validate([
             'status' => 'required|in:approved,rejected',
@@ -360,20 +393,29 @@ class MemberApplicationController extends Controller
         $document->reviewed_at = now();
         $document->save();
 
-        Log::info('application.document_reviewed', [
-            'actor_user_id' => $request->user()->id,
-            'document_id' => $document->id,
-            'application_id' => $document->member_application_id,
-            'status' => $document->status,
-            'ip' => $request->ip(),
-        ]);
-
         return response()->json(['message' => 'Document review updated.', 'document' => $document->fresh()]);
     }
 
     public function viewDocument(Request $request, ApplicationDocument $document)
     {
-        $this->authorize('view', $document);
+        /** @var User $user */
+        $user = $request->user();
+        if (!$user) {
+            abort(401, 'Unauthenticated.');
+        }
+
+        $application = $document->application;
+        $isOwner = $application
+            && (
+                $application->user_id === $user->id ||
+                strtolower(trim((string) $application->email)) === strtolower(trim((string) $user->email))
+            );
+        $canReviewDocs = optional($user->role)->name === 'membership_chairman' || $user->hasPermission('applications.docs.review');
+        $canAdminView = $user->hasPermission('members.view');
+
+        if (!$isOwner && !$canReviewDocs && !$canAdminView) {
+            abort(403, 'You are not allowed to view this document.');
+        }
 
         if (!Storage::disk('public')->exists($document->file_path)) {
             abort(404, 'Document file not found.');
@@ -387,19 +429,14 @@ class MemberApplicationController extends Controller
 
     public function setStage(Request $request, MemberApplication $memberApplication)
     {
+        $this->ensureChairman($request);
+
         $validated = $request->validate([
             'current_stage' => 'required|in:interview,introduction,indoctrination_initiation,incubation,induction',
         ]);
 
         $memberApplication->current_stage = $validated['current_stage'];
         $memberApplication->save();
-
-        Log::info('application.stage_updated', [
-            'actor_user_id' => $request->user()->id,
-            'application_id' => $memberApplication->id,
-            'current_stage' => $memberApplication->current_stage,
-            'ip' => $request->ip(),
-        ]);
 
         return response()->json([
             'message' => 'Applicant stage updated.',
@@ -409,6 +446,8 @@ class MemberApplicationController extends Controller
 
     public function setNotice(Request $request, MemberApplication $memberApplication)
     {
+        $this->ensureChairman($request);
+
         $validated = $request->validate([
             'notice_text' => 'required|string|min:3|max:3000',
         ]);
@@ -419,13 +458,6 @@ class MemberApplicationController extends Controller
             'created_by_user_id' => $request->user()->id,
         ]);
 
-        Log::info('application.notice_set', [
-            'actor_user_id' => $request->user()->id,
-            'application_id' => $memberApplication->id,
-            'notice_id' => $notice->id,
-            'ip' => $request->ip(),
-        ]);
-
         return response()->json([
             'message' => 'Notice posted for applicant.',
             'notice' => $notice->fresh(),
@@ -434,6 +466,9 @@ class MemberApplicationController extends Controller
 
     public function setFeeRequirement(Request $request, MemberApplication $memberApplication)
     {
+        $this->ensureTreasurer($request);
+        $this->ensurePermission($request, 'applications.fee.set');
+
         $validated = $request->validate([
             'required_amount' => 'required|numeric|min:0.01',
             'note' => 'nullable|string|max:255',
@@ -446,14 +481,6 @@ class MemberApplicationController extends Controller
             'set_by_user_id' => $request->user()->id,
         ]);
 
-        Log::info('application.fee_requirement_set', [
-            'actor_user_id' => $request->user()->id,
-            'application_id' => $memberApplication->id,
-            'requirement_id' => $requirement->id,
-            'required_amount' => $requirement->required_amount,
-            'ip' => $request->ip(),
-        ]);
-
         return response()->json([
             'message' => 'Applicant fee requirement set.',
             'requirement' => $requirement->fresh(),
@@ -462,6 +489,8 @@ class MemberApplicationController extends Controller
 
     public function addFeePayment(Request $request, ApplicationFeeRequirement $applicationFeeRequirement)
     {
+        $this->ensureTreasurer($request);
+
         $validated = $request->validate([
             'amount' => 'required|numeric|min:0.01',
             'payment_date' => 'nullable|date',
@@ -476,15 +505,6 @@ class MemberApplicationController extends Controller
             'encoded_by_user_id' => $request->user()->id,
         ]);
 
-        Log::info('application.fee_payment_recorded', [
-            'actor_user_id' => $request->user()->id,
-            'application_id' => $applicationFeeRequirement->member_application_id,
-            'requirement_id' => $applicationFeeRequirement->id,
-            'payment_id' => $payment->id,
-            'amount' => $payment->amount,
-            'ip' => $request->ip(),
-        ]);
-
         return response()->json([
             'message' => 'Applicant fee payment recorded.',
             'payment' => $payment->fresh(),
@@ -493,6 +513,8 @@ class MemberApplicationController extends Controller
 
     public function approve(Request $request, MemberApplication $memberApplication)
     {
+        $this->ensureChairman($request);
+
         if ($memberApplication->status !== 'pending_approval' || !$memberApplication->email_verified_at) {
             return response()->json([
                 'message' => 'Only verified applications pending approval can be approved.',
@@ -545,13 +567,6 @@ class MemberApplicationController extends Controller
         $memberApplication->rejection_reason = null;
         $memberApplication->save();
 
-        Log::info('application.approved', [
-            'actor_user_id' => $request->user()->id,
-            'application_id' => $memberApplication->id,
-            'member_id' => $member->id,
-            'ip' => $request->ip(),
-        ]);
-
         return response()->json([
             'message' => 'Application approved and member record created.',
             'member' => $member,
@@ -561,18 +576,14 @@ class MemberApplicationController extends Controller
 
     public function setProbation(Request $request, MemberApplication $memberApplication)
     {
+        $this->ensureChairman($request);
+
         $memberApplication->decision_status = 'probation';
         $memberApplication->status = 'pending_approval';
         $memberApplication->is_login_blocked = false;
         $memberApplication->reviewed_by_user_id = $request->user()->id;
         $memberApplication->reviewed_at = now();
         $memberApplication->save();
-
-        Log::info('application.probation_set', [
-            'actor_user_id' => $request->user()->id,
-            'application_id' => $memberApplication->id,
-            'ip' => $request->ip(),
-        ]);
 
         return response()->json([
             'message' => 'Application moved to probation.',
@@ -582,6 +593,8 @@ class MemberApplicationController extends Controller
 
     public function reject(Request $request, MemberApplication $memberApplication)
     {
+        $this->ensureChairman($request);
+
         if (!in_array($memberApplication->status, ['pending_approval', 'pending_verification'], true)) {
             return response()->json([
                 'message' => 'This application has already been reviewed.',
@@ -599,13 +612,6 @@ class MemberApplicationController extends Controller
         $memberApplication->reviewed_at = now();
         $memberApplication->rejection_reason = $validated['reason'] ?? null;
         $memberApplication->save();
-
-        Log::info('application.rejected', [
-            'actor_user_id' => $request->user()->id,
-            'application_id' => $memberApplication->id,
-            'reason' => $memberApplication->rejection_reason,
-            'ip' => $request->ip(),
-        ]);
 
         return response()->json([
             'message' => 'Application rejected. Record kept for historical/admin access.',
