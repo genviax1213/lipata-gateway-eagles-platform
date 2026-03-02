@@ -66,8 +66,8 @@ export default function Login() {
     try {
       await login(email, password);
       navigate("/portal");
-    } catch {
-      setError("Invalid credentials.");
+    } catch (err) {
+      setError(parseError(err, "Unable to log in right now. Please try again."));
     } finally {
       setSaving(false);
     }
@@ -144,9 +144,6 @@ export default function Login() {
               2. Open the reset email and use the provided reset link.
               <br />
               3. Set a new password and return to login.
-            </div>
-            <div className="mt-3 rounded-md border border-white/20 bg-white/10 px-4 py-3 text-xs text-mist/85">
-              Canonical login path: <span className="font-mono text-gold-soft">{canonicalRoutes.login}</span>
             </div>
           </aside>
 

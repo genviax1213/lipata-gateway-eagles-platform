@@ -1,7 +1,7 @@
 import { useState } from "react";
 import axios from "axios";
 import api from "../services/api";
-import { canonicalRoutes, microcopy } from "../content/portalCopy";
+import { microcopy } from "../content/portalCopy";
 import TaskHierarchyCard from "../components/TaskHierarchyCard";
 
 interface ApplicationForm {
@@ -149,10 +149,6 @@ export default function MemberApplication() {
           actions="Provide identity details, submit application, then verify using token from your email."
           nextStep={microcopy.nextStep.application}
         />
-        <div className="mb-6 rounded-md border border-white/20 bg-white/5 p-3 text-xs text-mist/85">
-          <p className="mt-2">Canonical onboarding route: <span className="font-mono text-gold-soft">{canonicalRoutes.memberApplication}</span></p>
-        </div>
-
         {error && (
           <p className="mb-4 rounded-md border border-red-300/30 bg-red-400/10 px-4 py-2 text-sm text-red-200" role="alert" aria-live="polite">
             {error}

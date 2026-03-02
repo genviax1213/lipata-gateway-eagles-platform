@@ -21,8 +21,23 @@ const api = axios.create({
 
 export async function ensureCsrfCookie(force = false): Promise<void> {
   if (csrfCookieLoaded && !force) return;
-  await axios.get(`${apiOrigin}/sanctum/csrf-cookie`, { withCredentials: true });
-  csrfCookieLoaded = true;
+  const candidates = [
+    `${apiOrigin}/sanctum/csrf-cookie`,
+    `${apiOrigin}/api/sanctum/csrf-cookie`,
+  ];
+
+  let lastError: unknown = null;
+  for (const endpoint of candidates) {
+    try {
+      await axios.get(endpoint, { withCredentials: true });
+      csrfCookieLoaded = true;
+      return;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError;
 }
 
 export function shouldUseLegacyTokenMode(): boolean {
