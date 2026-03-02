@@ -14,13 +14,18 @@ use App\Http\Controllers\DashboardController;
 Route::prefix('v1')->group(function () {
     Route::get('/content/{section}', [PostController::class, 'publicBySection']);
     Route::get('/content/post/{slug}', [PostController::class, 'publicBySlug']);
-    Route::post('/member-applications', [MemberApplicationController::class, 'submit']);
-    Route::post('/member-applications/verify', [MemberApplicationController::class, 'verify']);
+    Route::post('/member-applications', [MemberApplicationController::class, 'submit'])
+        ->middleware('throttle:application-submit');
+    Route::post('/member-applications/verify', [MemberApplicationController::class, 'verify'])
+        ->middleware('throttle:application-verify');
 
     // Login route
-    Route::post('/login', [AuthController::class, 'login']);
-    Route::post('/forgot-password', [AuthController::class, 'forgotPassword']);
-    Route::post('/reset-password', [AuthController::class, 'resetPassword']);
+    Route::post('/login', [AuthController::class, 'login'])
+        ->middleware('throttle:auth-login');
+    Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])
+        ->middleware('throttle:auth-forgot-password');
+    Route::post('/reset-password', [AuthController::class, 'resetPassword'])
+        ->middleware('throttle:auth-reset-password');
 
     // Protected routes
     Route::middleware('auth:sanctum')->group(function () {
@@ -28,59 +33,62 @@ Route::prefix('v1')->group(function () {
         Route::get('/user', function (Request $request) {
             return $request->user()->load('role.permissions:id,name');
         });
+        Route::post('/logout', [AuthController::class, 'logout']);
         Route::get('/dashboard/me', [DashboardController::class, 'me']);
-        Route::get('/dashboard/treasurer', [DashboardController::class, 'treasurer']);
+        Route::get('/dashboard/treasurer', [DashboardController::class, 'treasurer'])
+            ->middleware('portal.permission:applications.fee.set,applications.fee.pay');
 
-        Route::get('/cms/posts', [PostController::class, 'index']);
-        Route::post('/cms/posts', [PostController::class, 'store']);
-        Route::post('/cms/uploads/inline-image', [PostController::class, 'uploadInlineImage']);
-        Route::post('/cms/posts/{post}', [PostController::class, 'update']);
-        Route::put('/cms/posts/{post}', [PostController::class, 'update']);
-        Route::delete('/cms/posts/{post}', [PostController::class, 'destroy']);
+        Route::get('/cms/posts', [PostController::class, 'index'])->middleware('portal.permission:posts.create');
+        Route::post('/cms/posts', [PostController::class, 'store'])->middleware('portal.permission:posts.create');
+        Route::post('/cms/uploads/inline-image', [PostController::class, 'uploadInlineImage'])->middleware('portal.permission:posts.create');
+        Route::post('/cms/posts/{post}', [PostController::class, 'update'])->middleware('portal.permission:posts.update');
+        Route::put('/cms/posts/{post}', [PostController::class, 'update'])->middleware('portal.permission:posts.update');
+        Route::delete('/cms/posts/{post}', [PostController::class, 'destroy'])->middleware('portal.permission:posts.delete');
 
-        Route::get('/members', [MemberController::class, 'index']);
+        Route::get('/members', [MemberController::class, 'index'])->middleware('portal.permission:members.view');
         Route::post('/members', [MemberController::class, 'store']);
-        Route::put('/members/{member}', [MemberController::class, 'update']);
-        Route::delete('/members/{member}', [MemberController::class, 'destroy']);
-        Route::get('/member-applications', [MemberApplicationController::class, 'index']);
-        Route::get('/member-applications/me', [MemberApplicationController::class, 'myApplication']);
-        Route::get('/member-applications/{memberApplication}', [MemberApplicationController::class, 'show']);
-        Route::post('/member-applications/{memberApplication}/documents', [MemberApplicationController::class, 'uploadDocument']);
+        Route::put('/members/{member}', [MemberController::class, 'update'])->middleware('portal.permission:members.update');
+        Route::delete('/members/{member}', [MemberController::class, 'destroy'])->middleware('portal.permission:members.delete');
+        Route::get('/member-applications', [MemberApplicationController::class, 'index'])->middleware('portal.permission:members.view');
+        Route::get('/member-applications/me', [MemberApplicationController::class, 'myApplication'])->middleware('portal.permission:applications.dashboard.view');
+        Route::get('/member-applications/{memberApplication}', [MemberApplicationController::class, 'show'])->middleware('portal.permission:members.view');
+        Route::post('/member-applications/{memberApplication}/documents', [MemberApplicationController::class, 'uploadDocument'])->middleware('portal.permission:applications.docs.upload');
         Route::get('/member-applications/documents/{document}/view', [MemberApplicationController::class, 'viewDocument']);
-        Route::post('/member-applications/documents/{document}/review', [MemberApplicationController::class, 'reviewDocument']);
-        Route::post('/member-applications/{memberApplication}/stage', [MemberApplicationController::class, 'setStage']);
-        Route::post('/member-applications/{memberApplication}/notice', [MemberApplicationController::class, 'setNotice']);
-        Route::post('/member-applications/{memberApplication}/fee-requirements', [MemberApplicationController::class, 'setFeeRequirement']);
-        Route::post('/member-applications/fee-requirements/{applicationFeeRequirement}/payments', [MemberApplicationController::class, 'addFeePayment']);
-        Route::post('/member-applications/{memberApplication}/approve', [MemberApplicationController::class, 'approve']);
-        Route::post('/member-applications/{memberApplication}/probation', [MemberApplicationController::class, 'setProbation']);
-        Route::post('/member-applications/{memberApplication}/reject', [MemberApplicationController::class, 'reject']);
+        Route::post('/member-applications/documents/{document}/review', [MemberApplicationController::class, 'reviewDocument'])->middleware('role.required:membership_chairman');
+        Route::post('/member-applications/{memberApplication}/stage', [MemberApplicationController::class, 'setStage'])->middleware('role.required:membership_chairman');
+        Route::post('/member-applications/{memberApplication}/notice', [MemberApplicationController::class, 'setNotice'])->middleware('role.required:membership_chairman');
+        Route::post('/member-applications/{memberApplication}/fee-requirements', [MemberApplicationController::class, 'setFeeRequirement'])->middleware('portal.permission:applications.fee.set');
+        Route::post('/member-applications/fee-requirements/{applicationFeeRequirement}/payments', [MemberApplicationController::class, 'addFeePayment'])->middleware('portal.permission:applications.fee.pay');
+        Route::post('/member-applications/{memberApplication}/approve', [MemberApplicationController::class, 'approve'])->middleware('role.required:membership_chairman');
+        Route::post('/member-applications/{memberApplication}/probation', [MemberApplicationController::class, 'setProbation'])->middleware('role.required:membership_chairman');
+        Route::post('/member-applications/{memberApplication}/reject', [MemberApplicationController::class, 'reject'])->middleware('role.required:membership_chairman');
 
-        Route::get('/admin/roles', [AdminUserController::class, 'roles']);
-        Route::get('/admin/members', [AdminUserController::class, 'members']);
-        Route::put('/admin/members/{member}/role', [AdminUserController::class, 'assignRoleToMember']);
-        Route::get('/admin/users', [AdminUserController::class, 'index']);
-        Route::put('/admin/users/{user}', [AdminUserController::class, 'update']);
-        Route::delete('/admin/users/{user}', [AdminUserController::class, 'destroy']);
-        Route::put('/admin/users/{user}/role', [AdminUserController::class, 'updateRole']);
+        Route::get('/admin/roles', [AdminUserController::class, 'roles'])->middleware('portal.permission:members.view,members.create,members.update,members.delete');
+        Route::get('/admin/members', [AdminUserController::class, 'members'])->middleware('portal.permission:members.view,members.create,members.update,members.delete');
+        Route::put('/admin/members/{member}/role', [AdminUserController::class, 'assignRoleToMember'])->middleware('portal.permission:roles.delegate');
+        Route::get('/admin/users', [AdminUserController::class, 'index'])->middleware('portal.permission:members.view,members.create,members.update,members.delete');
+        Route::post('/admin/users', [AdminUserController::class, 'store'])->middleware('portal.permission:members.create');
+        Route::put('/admin/users/{user}', [AdminUserController::class, 'update'])->middleware('portal.permission:members.update');
+        Route::delete('/admin/users/{user}', [AdminUserController::class, 'destroy'])->middleware('portal.permission:members.delete');
+        Route::put('/admin/users/{user}/role', [AdminUserController::class, 'updateRole'])->middleware('portal.permission:roles.delegate');
 
-        Route::get('/finance/members', [FinanceController::class, 'searchMembers']);
+        Route::get('/finance/members', [FinanceController::class, 'searchMembers'])->middleware('portal.permission:finance.view');
         Route::get('/finance/my-contributions', [FinanceController::class, 'myContributions']);
-        Route::get('/finance/members/{member}/contributions', [FinanceController::class, 'memberContributions']);
-        Route::post('/finance/contributions', [FinanceController::class, 'storeContribution']);
-        Route::post('/finance/contributions/{contribution}/edit-requests', [FinanceController::class, 'requestContributionEdit']);
-        Route::get('/finance/edit-requests', [FinanceController::class, 'editRequests']);
-        Route::post('/finance/edit-requests/{contributionEditRequest}/approve', [FinanceController::class, 'approveEditRequest']);
-        Route::post('/finance/edit-requests/{contributionEditRequest}/reject', [FinanceController::class, 'rejectEditRequest']);
+        Route::get('/finance/members/{member}/contributions', [FinanceController::class, 'memberContributions'])->middleware('portal.permission:finance.view');
+        Route::post('/finance/contributions', [FinanceController::class, 'storeContribution'])->middleware('portal.permission:finance.input');
+        Route::post('/finance/contributions/{contribution}/edit-requests', [FinanceController::class, 'requestContributionEdit'])->middleware('portal.permission:finance.request_edit');
+        Route::get('/finance/edit-requests', [FinanceController::class, 'editRequests'])->middleware('portal.permission:finance.approve_edits');
+        Route::post('/finance/edit-requests/{contributionEditRequest}/approve', [FinanceController::class, 'approveEditRequest'])->middleware('portal.permission:finance.approve_edits');
+        Route::post('/finance/edit-requests/{contributionEditRequest}/reject', [FinanceController::class, 'rejectEditRequest'])->middleware('portal.permission:finance.approve_edits');
 
-        Route::get('/forum/threads', [ForumController::class, 'index']);
-        Route::post('/forum/threads', [ForumController::class, 'storeThread']);
-        Route::post('/forum/uploads/inline-image', [ForumController::class, 'uploadInlineImage']);
-        Route::get('/forum/threads/{thread}', [ForumController::class, 'show']);
-        Route::post('/forum/threads/{thread}/posts', [ForumController::class, 'storeReply']);
-        Route::post('/forum/threads/{thread}/lock', [ForumController::class, 'setThreadLock']);
+        Route::get('/forum/threads', [ForumController::class, 'index'])->middleware('forum.permission:forum.view');
+        Route::post('/forum/threads', [ForumController::class, 'storeThread'])->middleware('forum.permission:forum.create_thread');
+        Route::post('/forum/uploads/inline-image', [ForumController::class, 'uploadInlineImage'])->middleware('forum.permission:forum.reply');
+        Route::get('/forum/threads/{thread}', [ForumController::class, 'show'])->middleware('forum.permission:forum.view');
+        Route::post('/forum/threads/{thread}/posts', [ForumController::class, 'storeReply'])->middleware('forum.permission:forum.reply');
+        Route::post('/forum/threads/{thread}/lock', [ForumController::class, 'setThreadLock'])->middleware('forum.permission:forum.moderate');
         Route::delete('/forum/threads/{thread}', [ForumController::class, 'destroyThread']);
-        Route::post('/forum/posts/{post}/visibility', [ForumController::class, 'setPostVisibility']);
+        Route::post('/forum/posts/{post}/visibility', [ForumController::class, 'setPostVisibility'])->middleware('forum.permission:forum.moderate');
         Route::delete('/forum/posts/{post}', [ForumController::class, 'destroyPost']);
 
     });

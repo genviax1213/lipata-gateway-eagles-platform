@@ -13,16 +13,6 @@ use Illuminate\Support\Carbon;
 
 class DashboardController extends Controller
 {
-    private function ensureTreasurerDashboardAccess(User $user): void
-    {
-        if (
-            !$user->hasPermission('applications.fee.set') &&
-            !$user->hasPermission('applications.fee.pay')
-        ) {
-            abort(403, 'Insufficient treasurer privileges.');
-        }
-    }
-
     public function me(Request $request)
     {
         /** @var User $user */
@@ -91,7 +81,6 @@ class DashboardController extends Controller
     {
         /** @var User $user */
         $user = $request->user()->loadMissing('role.permissions:id,name');
-        $this->ensureTreasurerDashboardAccess($user);
 
         $today = Carbon::today();
         $monthStart = $today->copy()->startOfMonth();
