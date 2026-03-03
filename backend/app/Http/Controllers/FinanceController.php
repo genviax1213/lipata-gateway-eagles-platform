@@ -9,6 +9,8 @@ use App\Models\Post;
 use App\Models\User;
 use App\Support\TextCase;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
@@ -29,6 +31,25 @@ class FinanceController extends Controller
         }
 
         return Member::query()->where('email', $user->email)->first();
+    }
+
+    private function normalizeEmail(string $value): string
+    {
+        return Str::of($value)->lower()->trim()->value();
+    }
+
+    private function resolveMemberIdentity(?int $memberId, ?string $memberEmail): ?Member
+    {
+        $resolvedById = $memberId ? Member::query()->find($memberId) : null;
+        $resolvedByEmail = $memberEmail
+            ? Member::query()->whereRaw('LOWER(TRIM(email)) = ?', [$this->normalizeEmail($memberEmail)])->first()
+            : null;
+
+        if ($resolvedById && $resolvedByEmail && $resolvedById->id !== $resolvedByEmail->id) {
+            return null;
+        }
+
+        return $resolvedById ?? $resolvedByEmail;
     }
 
     private function categoryLabels(): array
@@ -196,6 +217,8 @@ class FinanceController extends Controller
         $this->authorize('viewFinanceDirectory', Member::class);
 
         $search = (string) $request->query('search', '');
+        // Limit search string length to prevent performance issues
+        $search = substr(trim($search), 0, 50);
         $query = Member::query()->with('user.role:id,name');
 
         if ($search !== '') {
@@ -203,13 +226,142 @@ class FinanceController extends Controller
                 $q->where('member_number', 'like', "%{$search}%")
                     ->orWhere('first_name', 'like', "%{$search}%")
                     ->orWhere('middle_name', 'like', "%{$search}%")
-                    ->orWhere('last_name', 'like', "%{$search}%");
+                    ->orWhere('last_name', 'like', "%{$search}%")
+                    ->orWhere('email', 'like', "%{$search}%");
             });
         }
 
         return response()->json(
             $query->orderBy('last_name')->orderBy('first_name')->limit(20)->get()
         );
+    }
+
+    public function complianceReport(Request $request)
+    {
+        $this->authorize('viewFinanceDirectory', Member::class);
+
+        $validated = $request->validate([
+            'month' => 'required|date_format:Y-m',
+            'years' => 'nullable|array',
+            'years.*' => 'integer|min:2000|max:2100',
+            'non_compliant_only' => 'nullable|in:true,false,1,0',
+        ]);
+
+        $month = (string) $validated['month'];
+        $selectedYears = collect($validated['years'] ?? [])
+            ->map(static fn ($year) => (int) $year)
+            ->unique()
+            ->values()
+            ->all();
+        $nonCompliantOnly = isset($validated['non_compliant_only'])
+            ? in_array((string) $validated['non_compliant_only'], ['1', 'true'], true)
+            : true;
+
+        $monthStart = Carbon::createFromFormat('Y-m', $month)->startOfMonth()->toDateString();
+        $monthEnd = Carbon::createFromFormat('Y-m', $month)->endOfMonth()->toDateString();
+
+        $members = Member::query()
+            ->select(['id', 'member_number', 'first_name', 'middle_name', 'last_name', 'email'])
+            ->orderBy('last_name')
+            ->orderBy('first_name')
+            ->get();
+
+        $monthlyCompliantMemberIds = Contribution::query()
+            ->where('category', 'monthly_contribution')
+            ->whereBetween('contribution_date', [$monthStart, $monthEnd])
+            ->pluck('member_id')
+            ->unique()
+            ->values();
+        $monthlyStatsByMember = Contribution::query()
+            ->selectRaw('member_id, COUNT(*) as monthly_entry_count, COALESCE(SUM(amount), 0) as monthly_total_amount')
+            ->where('category', 'monthly_contribution')
+            ->whereBetween('contribution_date', [$monthStart, $monthEnd])
+            ->groupBy('member_id')
+            ->get()
+            ->keyBy('member_id');
+
+        $driver = DB::connection()->getDriverName();
+        $yearExpr = $driver === 'sqlite'
+            ? "CAST(strftime('%Y', contribution_date) AS INTEGER)"
+            : 'YEAR(contribution_date)';
+
+        $availableYears = Contribution::query()
+            ->selectRaw("{$yearExpr} as year")
+            ->where('category', 'project_contribution')
+            ->whereNotNull('contribution_date')
+            ->groupByRaw($yearExpr)
+            ->orderByRaw("{$yearExpr} DESC")
+            ->pluck('year')
+            ->map(static fn ($year) => (int) $year)
+            ->values()
+            ->all();
+
+        $effectiveYears = !empty($selectedYears) ? $selectedYears : $availableYears;
+
+        $projectByMemberYear = collect();
+        if (!empty($effectiveYears)) {
+            $projectByMemberYear = Contribution::query()
+                ->selectRaw("member_id, {$yearExpr} as year")
+                ->where('category', 'project_contribution')
+                ->whereNotNull('contribution_date')
+                ->whereRaw("{$yearExpr} in (" . implode(',', array_fill(0, count($effectiveYears), '?')) . ')', $effectiveYears)
+                ->groupByRaw("member_id, {$yearExpr}")
+                ->get()
+                ->groupBy('member_id')
+                ->map(function ($rows) {
+                    return collect($rows)->pluck('year')->map(static fn ($year) => (int) $year)->unique()->values()->all();
+                });
+        }
+
+        $rows = $members->map(function (Member $member) use ($month, $monthlyCompliantMemberIds, $monthlyStatsByMember, $projectByMemberYear, $effectiveYears) {
+            $hasMonthlyForMonth = $monthlyCompliantMemberIds->contains($member->id);
+            $monthlyStats = $monthlyStatsByMember->get($member->id);
+            $memberProjectYears = collect($projectByMemberYear->get($member->id, []))
+                ->map(static fn ($year) => (int) $year)
+                ->all();
+            $missingProjectYears = collect($effectiveYears)
+                ->reject(fn ($year) => in_array((int) $year, $memberProjectYears, true))
+                ->values()
+                ->all();
+
+            $projectCompliant = empty($effectiveYears) ? true : empty($missingProjectYears);
+            $isNonCompliant = !$hasMonthlyForMonth || !$projectCompliant;
+
+            return [
+                'member' => [
+                    'id' => $member->id,
+                    'member_number' => $member->member_number,
+                    'first_name' => $member->first_name,
+                    'middle_name' => $member->middle_name,
+                    'last_name' => $member->last_name,
+                    'email' => $member->email,
+                ],
+                'month' => $month,
+                'has_monthly_for_month' => $hasMonthlyForMonth,
+                'monthly_entry_count' => (int) ($monthlyStats->monthly_entry_count ?? 0),
+                'monthly_total_amount' => (float) ($monthlyStats->monthly_total_amount ?? 0),
+                'selected_project_years' => $effectiveYears,
+                'missing_project_years' => $missingProjectYears,
+                'is_non_compliant' => $isNonCompliant,
+            ];
+        });
+
+        if ($nonCompliantOnly) {
+            $rows = $rows->where('is_non_compliant', true)->values();
+        } else {
+            $rows = $rows->values();
+        }
+
+        return response()->json([
+            'filters' => [
+                'month' => $month,
+                'years' => $selectedYears,
+                'effective_years' => $effectiveYears,
+                'non_compliant_only' => $nonCompliantOnly,
+            ],
+            'available_project_years' => $availableYears,
+            'data' => $rows,
+        ]);
     }
 
     public function memberContributions(Request $request, Member $member)
@@ -237,14 +389,38 @@ class FinanceController extends Controller
     public function storeContribution(Request $request)
     {
         $validated = $request->validate([
-            'member_id' => 'required|integer|exists:members,id',
+            'member_id' => 'nullable|integer|exists:members,id|required_without:member_email',
+            'member_email' => 'nullable|email|max:255|required_without:member_id',
             'amount' => 'required|numeric|min:0.01',
             'note' => 'nullable|string|max:255',
             'category' => 'required|in:monthly_contribution,alalayang_agila_contribution,project_contribution,extra_contribution',
             'contribution_date' => 'nullable|date',
             'beneficiary_member_id' => 'nullable|integer|exists:members,id',
+            'beneficiary_member_email' => 'nullable|email|max:255',
             'recipient_name' => 'nullable|string|max:255',
         ]);
+
+        $member = $this->resolveMemberIdentity(
+            isset($validated['member_id']) ? (int) $validated['member_id'] : null,
+            $validated['member_email'] ?? null,
+        );
+        if (!$member) {
+            return response()->json([
+                'message' => 'Member identity mismatch. Ensure member ID and email refer to the same record.',
+            ], 422);
+        }
+
+        $beneficiary = $this->resolveMemberIdentity(
+            isset($validated['beneficiary_member_id']) ? (int) $validated['beneficiary_member_id'] : null,
+            $validated['beneficiary_member_email'] ?? null,
+        );
+        if (($validated['beneficiary_member_id'] ?? null) || ($validated['beneficiary_member_email'] ?? null)) {
+            if (!$beneficiary) {
+                return response()->json([
+                    'message' => 'Beneficiary identity mismatch. Ensure beneficiary ID and email refer to the same record.',
+                ], 422);
+            }
+        }
 
         if (
             $validated['category'] === 'alalayang_agila_contribution' &&
@@ -257,20 +433,17 @@ class FinanceController extends Controller
         }
 
         $recipientName = isset($validated['recipient_name']) ? TextCase::title($validated['recipient_name']) : null;
-        if (!empty($validated['beneficiary_member_id']) && empty($recipientName)) {
-            $beneficiary = Member::query()->find($validated['beneficiary_member_id']);
-            if ($beneficiary) {
-                $recipientName = $this->formatMemberName($beneficiary);
-            }
+        if ($beneficiary && empty($recipientName)) {
+            $recipientName = $this->formatMemberName($beneficiary);
         }
 
         $created = Contribution::query()->create([
-            'member_id' => $validated['member_id'],
+            'member_id' => $member->id,
             'category' => $validated['category'],
             'contribution_date' => $validated['contribution_date'] ?? now()->toDateString(),
             'amount' => $validated['amount'],
             'note' => isset($validated['note']) ? TextCase::title($validated['note']) : null,
-            'beneficiary_member_id' => $validated['beneficiary_member_id'] ?? null,
+            'beneficiary_member_id' => $beneficiary?->id,
             'recipient_name' => $recipientName,
             'encoded_by_user_id' => $request->user()->id,
             'encoded_at' => now(),

@@ -528,6 +528,8 @@ class MemberApplicationController extends Controller
             'middle_name' => $memberApplication->middle_name,
             'last_name' => $memberApplication->last_name,
             'email' => $memberApplication->email,
+            'email_verified' => true,
+            'password_set' => true,
             'membership_status' => 'active',
             'user_id' => $memberApplication->user_id,
         ]);

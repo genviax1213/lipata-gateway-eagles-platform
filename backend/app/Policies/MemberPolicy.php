@@ -19,6 +19,10 @@ class MemberPolicy
 
     public function viewFinancialContributions(User $user, Member $member): bool
     {
+        // Allow if user is viewing their own member profile OR has explicit permission
+        if ($user->memberProfile?->id === $member->id) {
+            return true;
+        }
         return $user->hasPermission('finance.view');
     }
 }

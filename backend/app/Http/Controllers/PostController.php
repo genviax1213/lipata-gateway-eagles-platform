@@ -25,6 +25,10 @@ class PostController extends Controller
             ->latest('published_at')
             ->latest('id');
 
+        if (filter_var($request->query('featured_only', false), FILTER_VALIDATE_BOOLEAN)) {
+            $query->where('is_featured', true);
+        }
+
         $paginate = filter_var($request->query('paginate', false), FILTER_VALIDATE_BOOLEAN);
 
         if ($paginate) {

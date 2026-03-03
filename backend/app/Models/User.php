@@ -6,12 +6,16 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Laravel\Sanctum\HasApiTokens;
+use App\Support\RoleHierarchy;
+use App\Traits\Auditable;
 
 class User extends Authenticatable
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasApiTokens, HasFactory, Notifiable;
+    use HasApiTokens, HasFactory, Notifiable, Auditable;
 
     /**
      * The attributes that are mass assignable.
@@ -48,6 +52,26 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        static::created(function (User $user): void {
+            self::syncMemberProfile($user);
+        });
+
+        static::updated(function (User $user): void {
+            if (!$user->wasChanged(['email', 'email_verified_at', 'password', 'role_id'])) {
+                return;
+            }
+
+            self::syncMemberProfile($user, (string) $user->getOriginal('email'));
+        });
+    }
+
+    public function setEmailAttribute(?string $value): void
+    {
+        $this->attributes['email'] = $value === null ? null : Str::of($value)->trim()->lower()->value();
     }
 
     public function role()
@@ -96,21 +120,13 @@ class User extends Authenticatable
             return false;
         }
 
-        $map = [
-            'treasurer' => [
-                'finance.view',
-                'finance.input',
-                'finance.request_edit',
-                'applications.fee.set',
-                'applications.fee.pay',
-            ],
-            'auditor' => [
-                'finance.view',
-                'finance.approve_edits',
-            ],
-        ];
+        $permissions = match ($financeRole) {
+            RoleHierarchy::FINANCE_TREASURER => RoleHierarchy::treasurerPermissions(),
+            RoleHierarchy::FINANCE_AUDITOR => RoleHierarchy::auditorPermissions(),
+            default => [],
+        };
 
-        return in_array($permission, $map[$financeRole] ?? [], true);
+        return in_array($permission, $permissions, true);
     }
 
     private function hasForumPermission(string $permission): bool
@@ -120,15 +136,60 @@ class User extends Authenticatable
             return false;
         }
 
-        $map = [
-            'forum_moderator' => [
-                'forum.view',
-                'forum.create_thread',
-                'forum.reply',
-                'forum.moderate',
-            ],
-        ];
+        $permissions = match ($forumRole) {
+            RoleHierarchy::FORUM_MODERATOR => RoleHierarchy::forumModeratorPermissions(),
+            default => [],
+        };
 
-        return in_array($permission, $map[$forumRole] ?? [], true);
+        return in_array($permission, $permissions, true);
+    }
+
+    private static function syncMemberProfile(User $user, ?string $previousEmail = null): void
+    {
+        $normalizedEmail = Str::of((string) $user->email)->trim()->lower()->value();
+        if ($normalizedEmail === '') {
+            return;
+        }
+
+        $member = Member::query()
+            ->where('user_id', $user->id)
+            ->first();
+
+        if (!$member) {
+            $memberByEmail = Member::query()->where('email', $normalizedEmail)->first();
+            if ($memberByEmail && $memberByEmail->user_id === null) {
+                $member = $memberByEmail;
+            } elseif (!$memberByEmail && $previousEmail !== null && $previousEmail !== '') {
+                $normalizedPreviousEmail = Str::of($previousEmail)->trim()->lower()->value();
+                $memberByPreviousEmail = Member::query()->where('email', $normalizedPreviousEmail)->first();
+                if ($memberByPreviousEmail && $memberByPreviousEmail->user_id === null) {
+                    $member = $memberByPreviousEmail;
+                }
+            } elseif ($memberByEmail && $memberByEmail->user_id !== $user->id) {
+                Log::warning('user.member_profile_conflict', [
+                    'user_id' => $user->id,
+                    'email' => $normalizedEmail,
+                    'member_id' => $memberByEmail->id,
+                    'member_user_id' => $memberByEmail->user_id,
+                ]);
+                return;
+            }
+        }
+
+        $emailVerified = $user->email_verified_at !== null;
+        $passwordSet = !empty($user->password);
+
+        if (!$member) {
+            return;
+        }
+
+        $member->fill([
+            'user_id' => $user->id,
+            'email' => $normalizedEmail,
+            'email_verified' => $emailVerified,
+            'password_set' => $passwordSet,
+        ]);
+
+        $member->save();
     }
 }

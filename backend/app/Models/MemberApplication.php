@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Str;
 
 class MemberApplication extends Model
 {
@@ -57,5 +58,10 @@ class MemberApplication extends Model
     public function feeRequirements()
     {
         return $this->hasMany(ApplicationFeeRequirement::class, 'member_application_id');
+    }
+
+    public function setEmailAttribute(?string $value): void
+    {
+        $this->attributes['email'] = $value === null ? null : Str::of($value)->trim()->lower()->value();
     }
 }
