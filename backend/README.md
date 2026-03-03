@@ -58,10 +58,17 @@
 - `CORS_ALLOWED_ORIGINS`
 - `ADMIN_INITIAL_PASSWORD` (optional; if unset, seeder generates a random admin password)
 - `TEMP_LOGIN_PASSWORD` (required when running `TemporaryLoginSeeder`)
+- `ALLOW_MEMBER_HISTORY_SEEDER` (default `false`; set to `true` only when intentionally running member history seeding outside local/testing)
 
 Seeder note:
 - `AdminSeeder` sets initial admin password only when admin account does not yet exist.
 - Re-running seeders will not rotate an existing admin password.
+- `MemberContributionHistorySeeder` is restricted to `local`/`testing` by default and will throw outside those environments unless `ALLOW_MEMBER_HISTORY_SEEDER=true`.
+
+### Migration Release Note
+
+- `2026_03_02_090000_normalize_existing_email_identity_data.php` lowercases and trims email data in `users`, `members`, and `member_applications`.
+- This normalization is intentionally irreversible (`down()` is a no-op). Before production rollout, take a database backup/snapshot and include this migration in your release checklist.
 
 <p align="center">
 <a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
