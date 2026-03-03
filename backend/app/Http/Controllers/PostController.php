@@ -222,7 +222,7 @@ class PostController extends Controller
             'section' => $post->section,
             'excerpt' => $post->excerpt,
             'content' => $post->content,
-            'image_url' => $post->image_path ? asset('storage/' . $post->image_path) : null,
+            'image_url' => $this->resolveImageUrl($post->image_path),
             'is_featured' => (bool) $post->is_featured,
             'status' => $post->status,
             'published_at' => optional($post->published_at)?->toISOString(),
@@ -237,6 +237,20 @@ class PostController extends Controller
         }
 
         return $data;
+    }
+
+    private function resolveImageUrl(?string $imagePath): ?string
+    {
+        $path = trim((string) $imagePath);
+        if ($path === '') {
+            return null;
+        }
+
+        if (!Storage::disk('public')->exists($path)) {
+            return null;
+        }
+
+        return asset('storage/' . $path);
     }
 
     private function maxCmsImageKb(): int

@@ -30,7 +30,8 @@ export default function Landing() {
         const res = await api.get("/content/homepage_hero");
         if (!mounted) return;
         const heroItems = Array.isArray(res.data) ? res.data : [];
-        setHeroPost((heroItems[0] as CmsPost | undefined) ?? null);
+        const withImage = heroItems.find((item) => Boolean((item as CmsPost).image_url)) as CmsPost | undefined;
+        setHeroPost(withImage ?? ((heroItems[0] as CmsPost | undefined) ?? null));
       } catch {
         if (mounted) setHeroPost(null);
       }
@@ -48,7 +49,7 @@ export default function Landing() {
 
     const load = async () => {
       try {
-        const res = await api.get("/content/activities", {
+        const featuredRes = await api.get("/content/activities", {
           params: {
             paginate: true,
             page: communityPage,
@@ -59,9 +60,22 @@ export default function Landing() {
 
         if (!mounted) return;
 
-        const data = Array.isArray(res.data?.data) ? (res.data.data as CmsPost[]) : [];
-        setCommunityPosts(data);
-        setCommunityLastPage(Number(res.data?.last_page ?? 1));
+        const featuredData = Array.isArray(featuredRes.data?.data) ? (featuredRes.data.data as CmsPost[]) : [];
+        if (featuredData.length > 0) {
+          setCommunityPosts(featuredData);
+          setCommunityLastPage(Number(featuredRes.data?.last_page ?? 1));
+        } else {
+          const fallbackRes = await api.get("/content/activities", {
+            params: {
+              paginate: true,
+              page: communityPage,
+              per_page: 6,
+            },
+          });
+          const fallbackData = Array.isArray(fallbackRes.data?.data) ? (fallbackRes.data.data as CmsPost[]) : [];
+          setCommunityPosts(fallbackData);
+          setCommunityLastPage(Number(fallbackRes.data?.last_page ?? 1));
+        }
       } catch {
         if (!mounted) return;
         setCommunityPosts([]);

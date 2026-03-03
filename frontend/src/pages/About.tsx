@@ -76,7 +76,7 @@ export default function About() {
               </div>
             )}
           </>
-        ) : (
+        ) : !loading ? (
           <>
             <img
               src={unsplashImages.philippinesLandscape.imageUrl}
@@ -101,6 +101,8 @@ export default function About() {
               united in service and fellowship.
             </p>
           </>
+        ) : (
+          <div className="h-80 w-full animate-pulse rounded-md border border-white/20 bg-white/5" />
         )}
 
         {!loading && posts.length > 0 && (
