@@ -10,6 +10,7 @@ import { htmlToPlainText, sanitizeRichHtml } from "../utils/richText";
 
 const sectionOptions = [
   "homepage_hero",
+  "homepage_community",
   "activities",
   "about",
   "history",
@@ -40,6 +41,13 @@ type FormState = {
   is_featured: boolean;
   published_at: string;
   image: File | null;
+  selected_image_path: string;
+};
+
+type AvailableCmsImage = {
+  path: string;
+  name: string;
+  url: string;
 };
 
 type ProcessedImageMeta = {
@@ -71,6 +79,7 @@ const initialForm: FormState = {
   is_featured: false,
   published_at: "",
   image: null,
+  selected_image_path: "",
 };
 
 function titleCaseWords(value: string): string {
@@ -268,6 +277,7 @@ export default function CmsPosts() {
   const canUpdatePosts = hasPermission(user, "posts.update");
   const canDeletePosts = hasPermission(user, "posts.delete");
   const [posts, setPosts] = useState<CmsPost[]>([]);
+  const [availableImages, setAvailableImages] = useState<AvailableCmsImage[]>([]);
   const [form, setForm] = useState<FormState>(initialForm);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
@@ -288,7 +298,11 @@ export default function CmsPosts() {
   const [sourceImageUrl, setSourceImageUrl] = useState("");
   const pointerDragRef = useRef<{ pointerId: number; startX: number; startY: number; originX: number; originY: number } | null>(null);
   const editingPost = editingId ? posts.find((p) => p.id === editingId) : null;
-  const previewImageUrl = previewUploadUrl || editingPost?.image_url || "";
+  const selectedLibraryImage = useMemo(
+    () => availableImages.find((image) => image.path === form.selected_image_path) ?? null,
+    [availableImages, form.selected_image_path],
+  );
+  const previewImageUrl = previewUploadUrl || selectedLibraryImage?.url || editingPost?.image_url || "";
   const cropRendered = sourceImage
     ? renderedCropDimensions(sourceImage.width, sourceImage.height, crop.zoom)
     : { width: CROP_FRAME_WIDTH, height: CROP_FRAME_HEIGHT };
@@ -305,9 +319,10 @@ export default function CmsPosts() {
       form.excerpt.trim() !== "" ||
       htmlToPlainText(form.content).trim() !== "" ||
       form.image !== null ||
+      form.selected_image_path !== "" ||
       sourceImage !== null
     );
-  }, [editingId, form.title, form.excerpt, form.content, form.image, sourceImage]);
+  }, [editingId, form.title, form.excerpt, form.content, form.image, form.selected_image_path, sourceImage]);
 
   function getApiErrorMessage(err: unknown): string {
     if (!axios.isAxiosError(err)) return "Unexpected error while saving post.";
@@ -329,6 +344,12 @@ export default function CmsPosts() {
     setPosts(Array.isArray(list) ? list : []);
   }
 
+  async function fetchAvailableImages() {
+    const res = await api.get("/cms/posts/available-images");
+    const list = res.data as AvailableCmsImage[] | undefined;
+    setAvailableImages(Array.isArray(list) ? list : []);
+  }
+
   useEffect(() => {
     if (!canManageCmsPosts) {
       setLoading(false);
@@ -339,7 +360,7 @@ export default function CmsPosts() {
 
     const load = async () => {
       try {
-        await fetchPosts();
+        await Promise.all([fetchPosts(), fetchAvailableImages()]);
       } catch {
         if (mounted) setError("Unable to load CMS posts.");
       } finally {
@@ -528,6 +549,7 @@ export default function CmsPosts() {
       is_featured: post.is_featured,
       published_at: toDateTimeLocal(post.published_at),
       image: null,
+      selected_image_path: "",
     });
     setMessage("");
     setError("");
@@ -565,6 +587,7 @@ export default function CmsPosts() {
         content: form.content,
         status: form.status,
         is_featured: form.is_featured ? 1 : 0,
+        ...(form.selected_image_path ? { selected_image_path: form.selected_image_path } : {}),
         ...(form.published_at
           ? { published_at: new Date(form.published_at).toISOString() }
           : {}),
@@ -579,6 +602,7 @@ export default function CmsPosts() {
         payload.append("status", basePayload.status);
         payload.append("is_featured", String(basePayload.is_featured));
         if (basePayload.published_at) payload.append("published_at", basePayload.published_at);
+        if (basePayload.selected_image_path) payload.append("selected_image_path", basePayload.selected_image_path);
         payload.append("image", imageToUpload);
 
         if (editingId) {
@@ -598,6 +622,7 @@ export default function CmsPosts() {
       }
 
       await fetchPosts();
+      await fetchAvailableImages();
       resetForm();
     } catch (err: unknown) {
       setError(getApiErrorMessage(err));
@@ -615,7 +640,7 @@ export default function CmsPosts() {
     try {
       await api.delete(`/cms/posts/${id}`);
       if (editingId === id) resetForm();
-      await fetchPosts();
+      await Promise.all([fetchPosts(), fetchAvailableImages()]);
       setMessage("Post deleted.");
     } catch (err: unknown) {
       setError(getApiErrorMessage(err));
@@ -641,7 +666,8 @@ export default function CmsPosts() {
       </p>
       <p className="mb-4 text-xs text-mist/75">
         Use <span className="text-gold-soft">homepage_hero</span> for homepage main hero content/image,
-        and mark <span className="text-gold-soft">activities</span> posts as featured for Community In Action cards.
+        <span className="mx-1 text-gold-soft">homepage_community</span> for homepage community cards,
+        and <span className="text-gold-soft">activities</span> for the Activities page archive.
       </p>
 
       {error && <p className="mb-4 rounded-md border border-red-300/30 bg-red-400/10 px-4 py-2 text-sm text-red-200">{error}</p>}
@@ -722,10 +748,41 @@ export default function CmsPosts() {
             type="file"
             accept="image/*"
             onChange={(e) => {
-              void handleImageChange(e.target.files?.[0] ?? null);
+              const file = e.target.files?.[0] ?? null;
+              if (file) {
+                setForm((prev) => ({ ...prev, selected_image_path: "" }));
+              }
+              void handleImageChange(file);
             }}
             className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite md:col-span-2"
           />
+          <div className="md:col-span-2">
+            <label className="mb-1 block text-xs text-mist/80">Use Existing Unlinked CMS Image</label>
+            <select
+              aria-label="Use existing unlinked image"
+              value={form.selected_image_path}
+              onChange={(e) => {
+                const value = e.target.value;
+                setForm((prev) => ({ ...prev, selected_image_path: value, image: null }));
+                setProcessedImageMeta(null);
+                setSourceImage(null);
+                setCrop({ x: 0, y: 0, zoom: 1 });
+              }}
+              className="w-full rounded-md border border-white/25 bg-white/10 px-4 py-2.5 text-offwhite"
+            >
+              <option value="" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>
+                None
+              </option>
+              {availableImages.map((image) => (
+                <option key={image.path} value={image.path} style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>
+                  {image.name}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-mist/70">
+              Only images not currently connected to any CMS post content or post image are listed here.
+            </p>
+          </div>
           {sourceImage && sourceImageUrl && (
             <div className="md:col-span-2 rounded-lg border border-white/20 bg-white/5 p-3">
               <p className="mb-2 text-xs text-mist/80">
