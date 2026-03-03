@@ -57,6 +57,7 @@
 - `SANCTUM_STATEFUL_DOMAINS`
 - `CORS_ALLOWED_ORIGINS`
 - `ADMIN_INITIAL_PASSWORD` (optional; if unset, seeder generates a random admin password)
+- `TEMP_LOGIN_PASSWORD` (required when running `TemporaryLoginSeeder`)
 
 Seeder note:
 - `AdminSeeder` sets initial admin password only when admin account does not yet exist.

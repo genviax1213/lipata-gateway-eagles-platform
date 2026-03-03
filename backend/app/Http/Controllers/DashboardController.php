@@ -8,6 +8,8 @@ use App\Models\ApplicationFeeRequirement;
 use App\Models\Member;
 use App\Models\MemberApplication;
 use App\Models\User;
+use App\Support\RoleHierarchy;
+use App\Support\Permissions;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 
@@ -24,12 +26,12 @@ class DashboardController extends Controller
             ->latest('id')
             ->first();
 
-        if ($application && $user->hasPermission('applications.dashboard.view')) {
+        if ($application && $user->hasPermission(Permissions::APPLICATIONS_DASHBOARD_VIEW)) {
             return response()->json([
                 'view' => 'applicant',
-                'can_upload_documents' => $user->hasPermission('applications.docs.upload'),
-                'can_review_applications' => optional($user->role)->name === 'membership_chairman',
-                'can_set_fee' => $user->hasPermission('applications.fee.set'),
+                'can_upload_documents' => $user->hasPermission(Permissions::APPLICATIONS_DOCS_UPLOAD),
+                'can_review_applications' => RoleHierarchy::canReviewApplications(optional($user->role)->name ?? ''),
+                'can_set_fee' => $user->hasPermission(Permissions::APPLICATIONS_FEE_SET),
                 'application' => [
                     'id' => $application->id,
                     'status' => $application->status,

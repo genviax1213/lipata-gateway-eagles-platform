@@ -14,12 +14,18 @@ use Illuminate\Support\Str;
 
 class AuthController extends Controller
 {
+    private function normalizeEmail(string $value): string
+    {
+        return Str::of($value)->lower()->trim()->value();
+    }
+
     public function login(Request $request)
     {
         $credentials = $request->validate([
             'email' => 'required|email',
             'password' => 'required'
         ]);
+        $credentials['email'] = $this->normalizeEmail((string) $credentials['email']);
 
         if (!Auth::attempt($credentials)) {
             Log::warning('auth.login_failed', [
@@ -75,6 +81,7 @@ class AuthController extends Controller
         $validated = $request->validate([
             'email' => 'required|email',
         ]);
+        $validated['email'] = $this->normalizeEmail((string) $validated['email']);
 
         $user = User::query()->where('email', $validated['email'])->first();
         if ($user) {
@@ -94,6 +101,7 @@ class AuthController extends Controller
             'email' => 'required|email',
             'password' => 'required|string|min:8|confirmed',
         ]);
+        $validated['email'] = $this->normalizeEmail((string) $validated['email']);
 
         $status = Password::reset(
             $validated,

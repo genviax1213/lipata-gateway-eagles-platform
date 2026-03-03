@@ -3,10 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Models\Member;
+use App\Models\MemberApplication;
 use App\Models\Role;
 use App\Models\User;
 use App\Support\TextCase;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -15,6 +17,11 @@ class AdminUserController extends Controller
 {
     private const FINANCE_ROLES = ['auditor', 'treasurer'];
     private const FORUM_ROLES = ['forum_moderator'];
+
+    private function normalizeEmail(string $value): string
+    {
+        return Str::of($value)->lower()->trim()->value();
+    }
 
     public function index(Request $request)
     {
@@ -43,7 +50,7 @@ class AdminUserController extends Controller
         $search = (string) $request->query('search', '');
         $query = Member::query()
             ->with(['user.role:id,name'])
-            ->select(['id', 'member_number', 'first_name', 'middle_name', 'last_name', 'email', 'membership_status', 'user_id'])
+            ->select(['id', 'member_number', 'first_name', 'middle_name', 'last_name', 'email', 'membership_status', 'email_verified', 'password_set', 'user_id'])
             ->orderBy('last_name')
             ->orderBy('first_name');
 
@@ -88,10 +95,11 @@ class AdminUserController extends Controller
                 'message' => 'Selected member has no email on file. Cannot provision portal access.',
             ], 422);
         }
+        $memberEmail = $this->normalizeEmail((string) $member->email);
 
         $linkedUser = $member->user;
         if (!$linkedUser) {
-            $linkedUser = User::query()->where('email', $member->email)->first();
+            $linkedUser = User::query()->where('email', $memberEmail)->first();
         }
 
         if ($linkedUser) {
@@ -118,7 +126,8 @@ class AdminUserController extends Controller
         if (!$linkedUser) {
             $linkedUser = User::query()->create([
                 'name' => (string) TextCase::title(trim($member->first_name . ' ' . ($member->middle_name ? $member->middle_name . ' ' : '') . $member->last_name)),
-                'email' => $member->email,
+                'email' => $memberEmail,
+                'email_verified_at' => now(),
                 'password' => Hash::make(Str::random(48)),
                 'role_id' => $selectedRole->id,
                 'finance_role' => null,
@@ -134,8 +143,13 @@ class AdminUserController extends Controller
 
         if (!$member->user_id || $member->user_id !== $linkedUser->id) {
             $member->user_id = $linkedUser->id;
-            $member->save();
         }
+        if ($member->email !== $memberEmail) {
+            $member->email = $memberEmail;
+        }
+        $member->email_verified = (bool) $linkedUser->email_verified_at;
+        $member->password_set = !empty($linkedUser->password);
+        $member->save();
 
         Log::info('admin.role_assigned', [
             'actor_user_id' => $authUser->id,
@@ -197,6 +211,7 @@ class AdminUserController extends Controller
         /** @var User $actor */
         $actor = $request->user();
         $this->authorize('manageAdminUsers', [User::class, 'members.create']);
+        $request->merge(['email' => $this->normalizeEmail((string) $request->input('email', ''))]);
 
         $validated = $request->validate([
             'name' => 'required|string|max:120',
@@ -230,6 +245,7 @@ class AdminUserController extends Controller
         /** @var User $actor */
         $actor = $request->user();
         $this->authorize('manageAdminUsers', [User::class, 'members.update']);
+        $request->merge(['email' => $this->normalizeEmail((string) $request->input('email', ''))]);
 
         $validated = $request->validate([
             'name' => 'required|string|max:120',
@@ -242,13 +258,27 @@ class AdminUserController extends Controller
         $this->authorize('manageRoleAssignment', [User::class, $user, $selectedRole, 'update']);
 
         $previousRole = optional($user->role)->name;
-        $user->name = (string) TextCase::title($validated['name']);
-        $user->email = $validated['email'];
-        $user->role_id = $validated['role_id'];
-        if (!empty($validated['password'])) {
-            $user->password = Hash::make($validated['password']);
-        }
-        $user->save();
+        DB::transaction(function () use ($user, $validated): void {
+            $previousEmail = (string) $user->email;
+
+            $user->name = (string) TextCase::title($validated['name']);
+            $user->email = $validated['email'];
+            $user->role_id = $validated['role_id'];
+            if (!empty($validated['password'])) {
+                $user->password = Hash::make($validated['password']);
+            }
+            $user->save();
+
+            Member::query()
+                ->where('user_id', $user->id)
+                ->orWhereRaw('LOWER(TRIM(email)) = ?', [$previousEmail])
+                ->update(['email' => $validated['email']]);
+
+            MemberApplication::query()
+                ->where('user_id', $user->id)
+                ->orWhereRaw('LOWER(TRIM(email)) = ?', [$previousEmail])
+                ->update(['email' => $validated['email']]);
+        });
 
         Log::info('admin.user_updated', [
             'actor_user_id' => $actor->id,
