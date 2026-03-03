@@ -17,6 +17,7 @@ export default function MemberModal({
 }: Props) {
   const [form, setForm] = useState<MemberForm>({
     member_number: member?.member_number || "",
+    email: member?.email || "",
     first_name: member?.first_name || "",
     middle_name: member?.middle_name || "",
     last_name: member?.last_name || "",
@@ -26,14 +27,19 @@ export default function MemberModal({
     date_of_birth: member?.date_of_birth || "",
     batch: member?.batch || "",
     induction_date: member?.induction_date || "",
-    membership_status: member?.membership_status || "active",
+    email_verified: member?.email_verified ?? false,
+    password_set: member?.password_set ?? false,
   });
 
   function handleChange(e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
     const { name, value } = e.target;
+    const nextValue = e.target instanceof HTMLInputElement && e.target.type === "checkbox"
+      ? e.target.checked
+      : value;
+
     setForm((prev) => ({
       ...prev,
-      [name]: value,
+      [name]: nextValue,
     }));
   }
 
@@ -64,6 +70,25 @@ export default function MemberModal({
             {errors.member_number && (
               <p className="text-sm text-red-300">
                 {errors.member_number[0]}
+              </p>
+            )}
+          </div>
+
+          <div>
+            <label htmlFor="email" className="mb-2 block text-xs uppercase tracking-wider text-gold-soft">
+              Email (Canonical Membership Key)
+            </label>
+            <input
+              id="email"
+              name="email"
+              type="email"
+              value={form.email}
+              onChange={handleChange}
+              className="w-full rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite placeholder:text-mist/70 focus:border-gold focus:outline-none"
+            />
+            {errors.email && (
+              <p className="text-sm text-red-300">
+                {errors.email[0]}
               </p>
             )}
           </div>
@@ -123,21 +148,27 @@ export default function MemberModal({
             )}
           </div>
 
-          <div>
-            <label htmlFor="membership_status" className="mb-2 block text-xs uppercase tracking-wider text-gold-soft">
-              Membership Status
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <label className="flex items-center gap-2 rounded-md border border-white/20 bg-white/5 px-3 py-2 text-sm text-offwhite">
+              <input
+                id="email_verified"
+                name="email_verified"
+                type="checkbox"
+                checked={form.email_verified}
+                onChange={handleChange}
+              />
+              Email Verified
             </label>
-            <select
-              id="membership_status"
-              name="membership_status"
-              value={form.membership_status}
-              onChange={handleChange}
-              className="w-full rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite focus:border-gold focus:outline-none"
-            >
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-              <option value="applicant">Applicant</option>
-            </select>
+            <label className="flex items-center gap-2 rounded-md border border-white/20 bg-white/5 px-3 py-2 text-sm text-offwhite">
+              <input
+                id="password_set"
+                name="password_set"
+                type="checkbox"
+                checked={form.password_set}
+                onChange={handleChange}
+              />
+              Password Set
+            </label>
           </div>
 
           <div>

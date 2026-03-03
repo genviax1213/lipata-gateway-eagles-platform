@@ -8,6 +8,10 @@ import TaskHierarchyCard from "../components/TaskHierarchyCard";
 
 type AuthMode = "login" | "forgot" | "reset";
 
+function normalizeEmail(value: string): string {
+  return value.trim().toLowerCase();
+}
+
 export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
@@ -37,10 +41,10 @@ export default function Login() {
     if (resetRoute || tokenFromQuery) {
       setMode("reset");
       setResetToken(tokenFromQuery);
-      setResetEmail(emailFromQuery);
+      setResetEmail(normalizeEmail(emailFromQuery));
       if (emailFromQuery) {
-        setForgotEmail(emailFromQuery);
-        setEmail(emailFromQuery);
+        setForgotEmail(normalizeEmail(emailFromQuery));
+        setEmail(normalizeEmail(emailFromQuery));
       }
     }
   }, [emailFromQuery, location.pathname, tokenFromQuery]);
@@ -80,7 +84,7 @@ export default function Login() {
     setSaving(true);
 
     try {
-      await api.post("/forgot-password", { email: forgotEmail.trim() });
+      await api.post("/forgot-password", { email: normalizeEmail(forgotEmail) });
       setNotice("If your email exists in the system, a password reset link has been sent.");
     } catch (err) {
       setError(parseError(err, "Failed to send password reset link."));
@@ -97,7 +101,7 @@ export default function Login() {
 
     try {
       await api.post("/reset-password", {
-        email: resetEmail.trim(),
+        email: normalizeEmail(resetEmail),
         token: resetToken.trim(),
         password: resetPassword,
         password_confirmation: resetPasswordConfirmation,
@@ -109,7 +113,7 @@ export default function Login() {
       setResetPassword("");
       setResetPasswordConfirmation("");
       setResetToken("");
-      setEmail(resetEmail.trim());
+      setEmail(normalizeEmail(resetEmail));
       navigate(canonicalRoutes.login, { replace: true });
     } catch (err) {
       setError(parseError(err, "Failed to reset password."));

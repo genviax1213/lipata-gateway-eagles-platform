@@ -10,7 +10,6 @@ import { htmlToPlainText, sanitizeRichHtml } from "../utils/richText";
 
 const sectionOptions = [
   "homepage_hero",
-  "homepage_community",
   "activities",
   "about",
   "history",
@@ -65,7 +64,7 @@ type SourceImageState = {
 
 const initialForm: FormState = {
   title: "",
-  section: "homepage_community",
+  section: "activities",
   excerpt: "",
   content: "",
   status: "published",
@@ -642,7 +641,7 @@ export default function CmsPosts() {
       </p>
       <p className="mb-4 text-xs text-mist/75">
         Use <span className="text-gold-soft">homepage_hero</span> for homepage main hero content/image,
-        and <span className="text-gold-soft">homepage_community</span> for the paginated Community In Action cards.
+        and mark <span className="text-gold-soft">activities</span> posts as featured for Community In Action cards.
       </p>
 
       {error && <p className="mb-4 rounded-md border border-red-300/30 bg-red-400/10 px-4 py-2 text-sm text-red-200">{error}</p>}

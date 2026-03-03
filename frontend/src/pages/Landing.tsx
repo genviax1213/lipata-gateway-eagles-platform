@@ -15,6 +15,13 @@ export default function Landing() {
     ? htmlToPlainText(heroPost.content).replace(/\s+/g, " ").trim()
     : "";
 
+  const contentSnippet = (value: string, max = 120): string => {
+    const plain = htmlToPlainText(value).replace(/\s+/g, " ").trim();
+    if (!plain) return "";
+    if (plain.length <= max) return plain;
+    return `${plain.slice(0, max).trim()}...`;
+  };
+
   useEffect(() => {
     let mounted = true;
 
@@ -41,11 +48,12 @@ export default function Landing() {
 
     const load = async () => {
       try {
-        const res = await api.get("/content/homepage_community", {
+        const res = await api.get("/content/activities", {
           params: {
             paginate: true,
             page: communityPage,
             per_page: 6,
+            featured_only: true,
           },
         });
 
@@ -108,6 +116,34 @@ export default function Landing() {
             </Link>
             .
           </p>
+
+          <div className="mt-6 lg:hidden">
+            <div className="surface-card card-lift overflow-hidden p-3">
+              {heroPost?.image_url ? (
+                <img
+                  src={heroPost.image_url}
+                  alt={heroPost.title}
+                  className="h-56 w-full rounded-lg object-cover"
+                />
+              ) : (
+                <div className="flex h-56 w-full items-center justify-center rounded-lg border border-white/20 bg-white/5 text-center text-sm text-mist/75">
+                  No hero image yet. Upload one in CMS section
+                  <br />
+                  <span className="text-gold-soft">homepage_hero</span>.
+                </div>
+              )}
+              {heroContentPreview && (
+                <p className="mt-2 line-clamp-2 text-xs text-mist/80">{heroContentPreview}</p>
+              )}
+              {heroPost?.slug && (
+                <div className="mt-3">
+                  <Link to={`/news/${heroPost.slug}`} className="btn-secondary">
+                    Learn More
+                  </Link>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
         <aside className="relative z-10 hidden lg:block">
@@ -158,7 +194,9 @@ export default function Landing() {
                   />
                 )}
                 <h3 className="font-heading text-2xl text-offwhite">{post.title}</h3>
-                {post.excerpt && <p className="mt-2 text-sm text-mist/85">{post.excerpt}</p>}
+                <p className="mt-2 line-clamp-2 text-sm text-mist/85">
+                  {post.excerpt ?? contentSnippet(post.content)}
+                </p>
                 {post.slug && (
                   <div className="mt-4 flex flex-wrap gap-3">
                     <Link to={`/news/${post.slug}`} className="btn-secondary">
@@ -175,8 +213,8 @@ export default function Landing() {
         ) : (
           !loadingCommunity && (
             <div className="rounded-xl border border-white/20 bg-white/5 p-6 text-sm text-mist/80">
-              No Community In Action posts yet. Add published posts in CMS section
-              <span className="ml-1 text-gold-soft">homepage_community</span>.
+              No featured activity highlights yet. Add published posts in CMS section
+              <span className="ml-1 text-gold-soft">activities</span> and set them as featured.
               <div className="mt-3">
                 <Link to="/activities" className="text-gold-soft hover:text-gold">
                   Browse Activities Archive

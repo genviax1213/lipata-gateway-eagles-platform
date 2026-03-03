@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { Component, useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Image from "@tiptap/extension-image";
@@ -11,6 +12,36 @@ type RichTextEditorProps = {
   onUploadImage: (file: File) => Promise<string>;
   disabled?: boolean;
 };
+
+type RichTextEditorBoundaryProps = {
+  children: ReactNode;
+  fallback: ReactNode;
+};
+
+type RichTextEditorBoundaryState = {
+  hasError: boolean;
+};
+
+class RichTextEditorBoundary extends Component<RichTextEditorBoundaryProps, RichTextEditorBoundaryState> {
+  state: RichTextEditorBoundaryState = { hasError: false };
+
+  static getDerivedStateFromError(): RichTextEditorBoundaryState {
+    return { hasError: true };
+  }
+
+  componentDidUpdate(prevProps: RichTextEditorBoundaryProps): void {
+    if (this.state.hasError && prevProps.children !== this.props.children) {
+      this.setState({ hasError: false });
+    }
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback;
+    }
+    return this.props.children;
+  }
+}
 
 const ResizableImage = Image.extend({
   addAttributes() {
@@ -152,7 +183,7 @@ function ToolbarButton({ active = false, disabled = false, onClick, label }: Too
   );
 }
 
-export default function RichTextEditor({
+function RichTextEditorImpl({
   value,
   onChange,
   onUploadImage,
@@ -207,12 +238,30 @@ export default function RichTextEditor({
       const editedFile = await cropAndResizeEditorImage(file);
       if (!editedFile) return;
       const imageUrl = await onUploadImage(editedFile);
-      editor.chain().focus().setImage({
-        src: imageUrl,
-        alt: editedFile.name,
-        align: "left",
-        width: "420",
-      } as unknown as { src: string; alt?: string }).run();
+      const labelInput = window.prompt("Enter image label (Cancel to skip):", "");
+      const labelText = labelInput?.trim() ?? "";
+      const escapedLabel = labelText
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+
+      const chain = editor
+        .chain()
+        .focus()
+        .setImage({
+          src: imageUrl,
+          alt: "Image",
+          align: "left",
+          width: "420",
+        } as unknown as { src: string; alt?: string });
+
+      if (labelInput !== null && labelText) {
+        chain.insertContent(`<p class="image-label"><em>${escapedLabel}</em></p>`);
+      }
+
+      chain.run();
     } finally {
       setUploadingImage(false);
     }
@@ -284,11 +333,24 @@ export default function RichTextEditor({
     if (pos === null) return;
     const imageNode = editor.state.doc.nodeAt(pos);
     if (!imageNode || imageNode.type.name !== "image") return;
+
+    const labelInput = window.prompt("Enter image label (Cancel to skip):", "");
+    if (labelInput === null) return;
+    const labelText = labelInput.trim();
+    if (!labelText) return;
+
+    const escapedLabel = labelText
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#39;");
+
     const insertPos = pos + imageNode.nodeSize;
     editor
       .chain()
       .focus()
-      .insertContentAt(insertPos, '<p class="image-label"><em>Type image label here...</em></p>')
+      .insertContentAt(insertPos, `<p class="image-label"><em>${escapedLabel}</em></p>`)
       .setTextSelection(insertPos + 1)
       .run();
   };
@@ -548,5 +610,27 @@ export default function RichTextEditor({
         )}
       </div>
     </div>
+  );
+}
+
+export default function RichTextEditor(props: RichTextEditorProps) {
+  return (
+    <RichTextEditorBoundary
+      fallback={(
+        <div className="rounded-lg border border-white/25 bg-white/10 p-3 md:col-span-2">
+          <p className="mb-2 text-xs text-mist/80">
+            Rich editor failed to initialize on this browser. Using basic editor mode.
+          </p>
+          <textarea
+            value={props.value}
+            onChange={(event) => props.onChange(event.target.value)}
+            disabled={props.disabled}
+            className="min-h-60 w-full rounded-md border border-white/20 bg-ink/35 px-3 py-2 text-offwhite"
+          />
+        </div>
+      )}
+    >
+      <RichTextEditorImpl {...props} />
+    </RichTextEditorBoundary>
   );
 }

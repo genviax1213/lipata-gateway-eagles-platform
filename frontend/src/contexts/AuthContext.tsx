@@ -1,7 +1,13 @@
 import { useState, useEffect } from "react";
 import type { ReactNode } from "react";
+import axios from "axios";
 import api, { ensureCsrfCookie, shouldUseLegacyTokenMode } from "../services/api";
+import AuthLoadingScreen from "../components/AuthLoadingScreen";
 import { AuthContext } from "./auth-context";
+
+function normalizeEmail(value: string): string {
+  return value.trim().toLowerCase();
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<Record<string, unknown> | null>(null);
@@ -13,11 +19,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const res = await api.get("/user");
       setUser(res.data);
-    } catch {
-      if (token) {
-        localStorage.removeItem("auth_token");
+    } catch (error) {
+      const status = axios.isAxiosError(error) ? error.response?.status : null;
+      const isAuthFailure = status === 401 || status === 419;
+
+      if (isAuthFailure) {
+        if (token) {
+          localStorage.removeItem("auth_token");
+        }
+        setUser(null);
       }
-      setUser(null);
     }
   };
 
@@ -57,7 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error("Unable to initialize CSRF cookie for session authentication.");
       }
     }
-    const res = await api.post("/login", { email, password });
+    const res = await api.post("/login", { email: normalizeEmail(email), password });
     const token = typeof res.data?.token === "string" ? res.data.token : null;
     if (token && shouldUseLegacyTokenMode()) {
       localStorage.setItem("auth_token", token);
@@ -79,7 +90,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  if (loading) return null;
+  if (loading) return <AuthLoadingScreen />;
 
   return (
     <AuthContext.Provider value={{ user, login, logout }}>
