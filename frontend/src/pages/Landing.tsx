@@ -29,10 +29,9 @@ export default function Landing() {
         const res = await api.get("/content/homepage_hero");
         if (!mounted) return;
         const heroItems = Array.isArray(res.data) ? (res.data as CmsPost[]) : [];
-        const withImage = heroItems.filter((item) => Boolean(item.image_url));
-        const selected = withImage.length > 0 ? withImage : heroItems;
-        setHeroPosts(selected);
-        setHeroPost(selected[0] ?? null);
+        setHeroPosts(heroItems);
+        const initial = heroItems.find((item) => Boolean(item.image_url)) ?? heroItems[0] ?? null;
+        setHeroPost(initial);
       } catch {
         if (mounted) {
           setHeroPosts([]);

@@ -40,6 +40,7 @@ Route::prefix('v1')->group(function () {
 
         Route::get('/cms/posts', [PostController::class, 'index'])->middleware('portal.permission:posts.create');
         Route::get('/cms/posts/available-images', [PostController::class, 'availableImages'])->middleware('portal.permission:posts.create');
+        Route::get('/cms/posts/image-library', [PostController::class, 'imageLibrary'])->middleware('portal.permission:posts.create');
         Route::post('/cms/posts', [PostController::class, 'store'])->middleware('portal.permission:posts.create');
         Route::post('/cms/uploads/inline-image', [PostController::class, 'uploadInlineImage'])->middleware('portal.permission:posts.create');
         Route::post('/cms/posts/{post}', [PostController::class, 'update'])->middleware('portal.permission:posts.update');

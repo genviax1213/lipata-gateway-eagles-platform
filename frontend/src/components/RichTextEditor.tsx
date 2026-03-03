@@ -10,6 +10,7 @@ type RichTextEditorProps = {
   value: string;
   onChange: (html: string) => void;
   onUploadImage: (file: File) => Promise<string>;
+  onPickExistingImage?: () => Promise<string | null>;
   disabled?: boolean;
 };
 
@@ -187,6 +188,7 @@ function RichTextEditorImpl({
   value,
   onChange,
   onUploadImage,
+  onPickExistingImage,
   disabled = false,
 }: RichTextEditorProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -265,6 +267,48 @@ function RichTextEditorImpl({
     } finally {
       setUploadingImage(false);
     }
+  };
+
+  const handleInsertImage = async () => {
+    if (disabled || uploadingImage) return;
+
+    if (onPickExistingImage) {
+      const useExisting = window.confirm(
+        "Use existing host image? Click OK for library, Cancel for local upload.",
+      );
+      if (useExisting) {
+        const existingUrl = await onPickExistingImage();
+        if (!existingUrl || !editor) return;
+
+        const labelInput = window.prompt("Enter image label (Cancel to skip):", "");
+        const labelText = labelInput?.trim() ?? "";
+        const escapedLabel = labelText
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#39;");
+
+        const chain = editor
+          .chain()
+          .focus()
+          .setImage({
+            src: existingUrl,
+            alt: "Image",
+            align: "left",
+            width: "420",
+          } as unknown as { src: string; alt?: string });
+
+        if (labelInput !== null && labelText) {
+          chain.insertContent(`<p class="image-label"><em>${escapedLabel}</em></p>`);
+        }
+
+        chain.run();
+        return;
+      }
+    }
+
+    fileInputRef.current?.click();
   };
 
   const selectedImageNode = editor && selectedImagePos !== null
@@ -498,7 +542,7 @@ function RichTextEditorImpl({
         <ToolbarButton
           label={uploadingImage ? "Uploading..." : "Image"}
           disabled={disabled || uploadingImage}
-          onClick={() => fileInputRef.current?.click()}
+          onClick={() => void handleInsertImage()}
         />
         <ToolbarButton
           label="Link"

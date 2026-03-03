@@ -48,6 +48,14 @@ type AvailableCmsImage = {
   path: string;
   name: string;
   url: string;
+  is_linked: boolean;
+  links: Array<{
+    post_id: number;
+    title: string;
+    slug: string;
+    section: string;
+    usage: string[];
+  }>;
 };
 
 type ProcessedImageMeta = {
@@ -278,6 +286,7 @@ export default function CmsPosts() {
   const canDeletePosts = hasPermission(user, "posts.delete");
   const [posts, setPosts] = useState<CmsPost[]>([]);
   const [availableImages, setAvailableImages] = useState<AvailableCmsImage[]>([]);
+  const [imageFilter, setImageFilter] = useState<"all" | "linked" | "unlinked">("all");
   const [form, setForm] = useState<FormState>(initialForm);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
@@ -302,6 +311,11 @@ export default function CmsPosts() {
     () => availableImages.find((image) => image.path === form.selected_image_path) ?? null,
     [availableImages, form.selected_image_path],
   );
+  const filteredLibraryImages = useMemo(() => {
+    if (imageFilter === "all") return availableImages;
+    if (imageFilter === "linked") return availableImages.filter((image) => image.is_linked);
+    return availableImages.filter((image) => !image.is_linked);
+  }, [availableImages, imageFilter]);
   const previewImageUrl = previewUploadUrl || selectedLibraryImage?.url || editingPost?.image_url || "";
   const cropRendered = sourceImage
     ? renderedCropDimensions(sourceImage.width, sourceImage.height, crop.zoom)
@@ -345,9 +359,25 @@ export default function CmsPosts() {
   }
 
   async function fetchAvailableImages() {
-    const res = await api.get("/cms/posts/available-images");
+    const res = await api.get("/cms/posts/image-library");
     const list = res.data as AvailableCmsImage[] | undefined;
     setAvailableImages(Array.isArray(list) ? list : []);
+  }
+
+  async function pickExistingInlineImage(): Promise<string | null> {
+    if (!form.selected_image_path) {
+      window.alert("Select and check an image from the image library panel first.");
+      return null;
+    }
+
+    const selected = availableImages.find((image) => image.path === form.selected_image_path);
+    if (!selected) {
+      window.alert("Selected library image is no longer available. Refreshing library.");
+      await fetchAvailableImages();
+      return null;
+    }
+
+    return selected.url;
   }
 
   useEffect(() => {
@@ -736,6 +766,7 @@ export default function CmsPosts() {
             value={form.content}
             onChange={(html) => setForm((prev) => ({ ...prev, content: html }))}
             onUploadImage={uploadInlineImage}
+            onPickExistingImage={pickExistingInlineImage}
             disabled={saving || processingImage}
           />
           <p className="md:col-span-2 -mt-2 text-right text-xs text-mist/75">
@@ -757,31 +788,95 @@ export default function CmsPosts() {
             className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite md:col-span-2"
           />
           <div className="md:col-span-2">
-            <label className="mb-1 block text-xs text-mist/80">Use Existing Unlinked CMS Image</label>
-            <select
-              aria-label="Use existing unlinked image"
-              value={form.selected_image_path}
-              onChange={(e) => {
-                const value = e.target.value;
-                setForm((prev) => ({ ...prev, selected_image_path: value, image: null }));
-                setProcessedImageMeta(null);
-                setSourceImage(null);
-                setCrop({ x: 0, y: 0, zoom: 1 });
-              }}
-              className="w-full rounded-md border border-white/25 bg-white/10 px-4 py-2.5 text-offwhite"
-            >
-              <option value="" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>
-                None
-              </option>
-              {availableImages.map((image) => (
-                <option key={image.path} value={image.path} style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>
-                  {image.name}
-                </option>
-              ))}
-            </select>
-            <p className="mt-1 text-xs text-mist/70">
-              Only images not currently connected to any CMS post content or post image are listed here.
+            <p className="mb-2 text-xs text-mist/80">
+              Image Library: choose linked/unlinked host images for post featured image and editor Image button.
             </p>
+            <div className="mb-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setImageFilter("all")}
+                className={`rounded-md border px-3 py-1 text-xs ${imageFilter === "all" ? "border-gold bg-gold text-ink" : "border-white/30 text-offwhite"}`}
+              >
+                All
+              </button>
+              <button
+                type="button"
+                onClick={() => setImageFilter("linked")}
+                className={`rounded-md border px-3 py-1 text-xs ${imageFilter === "linked" ? "border-gold bg-gold text-ink" : "border-white/30 text-offwhite"}`}
+              >
+                Linked
+              </button>
+              <button
+                type="button"
+                onClick={() => setImageFilter("unlinked")}
+                className={`rounded-md border px-3 py-1 text-xs ${imageFilter === "unlinked" ? "border-gold bg-gold text-ink" : "border-white/30 text-offwhite"}`}
+              >
+                Unlinked
+              </button>
+              <button
+                type="button"
+                onClick={() => void fetchAvailableImages()}
+                className="rounded-md border border-white/30 px-3 py-1 text-xs text-offwhite"
+              >
+                Refresh
+              </button>
+            </div>
+
+            {filteredLibraryImages.length === 0 ? (
+              <p className="text-xs text-mist/70">No images found for this filter.</p>
+            ) : (
+              <div className="grid gap-3 md:grid-cols-2">
+                {filteredLibraryImages.map((image) => (
+                  <label
+                    key={image.path}
+                    className={`rounded-md border p-2 ${form.selected_image_path === image.path ? "border-gold/70 bg-gold/10" : "border-white/20 bg-white/5"}`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <input
+                        type="checkbox"
+                        checked={form.selected_image_path === image.path}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setForm((prev) => ({
+                            ...prev,
+                            selected_image_path: checked ? image.path : "",
+                            image: checked ? null : prev.image,
+                          }));
+                          if (checked) {
+                            setProcessedImageMeta(null);
+                            setSourceImage(null);
+                            setCrop({ x: 0, y: 0, zoom: 1 });
+                          }
+                        }}
+                        className="mt-1"
+                      />
+                      <img
+                        src={image.url}
+                        alt={image.name}
+                        className="h-16 w-28 rounded border border-white/20 object-cover"
+                      />
+                      <div className="min-w-0">
+                        <p className="truncate text-xs text-offwhite">{image.name}</p>
+                        <p className={`text-xs ${image.is_linked ? "text-gold-soft" : "text-mist/75"}`}>
+                          {image.is_linked ? "Linked" : "Unlinked"}
+                        </p>
+                        {image.links.length > 0 ? (
+                          <div className="mt-1 space-y-1">
+                            {image.links.map((link) => (
+                              <p key={`${image.path}-${link.post_id}`} className="text-[11px] text-mist/75">
+                                {link.section} / {link.title} ({link.usage.join(", ")})
+                              </p>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="mt-1 text-[11px] text-mist/65">No current link.</p>
+                        )}
+                      </div>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            )}
           </div>
           {sourceImage && sourceImageUrl && (
             <div className="md:col-span-2 rounded-lg border border-white/20 bg-white/5 p-3">

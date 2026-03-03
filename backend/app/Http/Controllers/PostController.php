@@ -79,6 +79,13 @@ class PostController extends Controller
         return response()->json($this->unlinkedPostImages());
     }
 
+    public function imageLibrary(Request $request)
+    {
+        $this->authorize('viewCmsIndex', Post::class);
+
+        return response()->json($this->postImageLibrary());
+    }
+
     public function store(Request $request)
     {
         if ($response = $this->rejectIfPayloadTooLarge($request)) {
@@ -116,11 +123,11 @@ class PostController extends Controller
             );
         } elseif (array_key_exists('selected_image_path', $validated)) {
             $selectedImagePath = $this->normalizeStorageImagePath($validated['selected_image_path']);
-            if ($selectedImagePath && $this->isSelectableUnlinkedImage($selectedImagePath)) {
+            if ($selectedImagePath && $this->isSelectableLibraryImage($selectedImagePath)) {
                 $validated['image_path'] = $selectedImagePath;
             } elseif ($selectedImagePath) {
                 return response()->json([
-                    'message' => 'Selected image is not available. Please pick an unlinked image from the list.',
+                    'message' => 'Selected image is not available. Please pick one from the image library list.',
                 ], 422);
             }
         }
@@ -170,11 +177,11 @@ class PostController extends Controller
             );
         } elseif (array_key_exists('selected_image_path', $validated)) {
             $selectedImagePath = $this->normalizeStorageImagePath($validated['selected_image_path']);
-            if ($selectedImagePath && $this->isSelectableUnlinkedImage($selectedImagePath)) {
+            if ($selectedImagePath && $this->isSelectableLibraryImage($selectedImagePath)) {
                 $validated['image_path'] = $selectedImagePath;
             } elseif ($selectedImagePath) {
                 return response()->json([
-                    'message' => 'Selected image is not available. Please pick an unlinked image from the list.',
+                    'message' => 'Selected image is not available. Please pick one from the image library list.',
                 ], 422);
             }
         }
@@ -282,45 +289,78 @@ class PostController extends Controller
 
     private function unlinkedPostImages(): array
     {
+        return array_values(array_filter($this->postImageLibrary(), fn (array $image): bool => !$image['is_linked']));
+    }
+
+    private function postImageLibrary(): array
+    {
         $files = Storage::disk('public')->allFiles('posts');
         if ($files === []) {
             return [];
         }
 
-        $connectedPaths = $this->collectConnectedPostImagePaths();
-        $unlinked = array_values(array_filter($files, function (string $path) use ($connectedPaths): bool {
-            $normalized = $this->normalizeStorageImagePath($path);
-            return $normalized !== null && !isset($connectedPaths[$normalized]);
-        }));
+        $usageIndex = $this->collectPostImageUsageIndex();
+        $library = [];
 
-        sort($unlinked);
+        foreach ($files as $file) {
+            $path = $this->normalizeStorageImagePath($file);
+            if (!$path) {
+                continue;
+            }
 
-        return array_map(function (string $path): array {
-            return [
+            $links = array_values($usageIndex[$path] ?? []);
+            usort($links, fn (array $a, array $b): int => ($a['post_id'] <=> $b['post_id']));
+
+            $library[] = [
                 'path' => $path,
                 'name' => basename($path),
                 'url' => asset('storage/' . $path),
+                'is_linked' => count($links) > 0,
+                'links' => $links,
             ];
-        }, $unlinked);
+        }
+
+        usort($library, fn (array $a, array $b): int => strcmp($a['name'], $b['name']));
+
+        return $library;
     }
 
-    private function collectConnectedPostImagePaths(): array
+    private function collectPostImageUsageIndex(): array
     {
-        $connected = [];
-        $posts = Post::query()->select(['image_path', 'content'])->get();
+        $usage = [];
+        $posts = Post::query()->select(['id', 'title', 'slug', 'section', 'image_path', 'content'])->get();
 
         foreach ($posts as $post) {
             $imagePath = $this->normalizeStorageImagePath($post->image_path);
             if ($imagePath) {
-                $connected[$imagePath] = true;
+                $usage[$imagePath] = $usage[$imagePath] ?? [];
+                $existing = $usage[$imagePath][$post->id] ?? $this->newImageUsageEntry($post);
+                $existing['usage'][] = 'featured_image';
+                $existing['usage'] = array_values(array_unique($existing['usage']));
+                $usage[$imagePath][$post->id] = $existing;
             }
 
             foreach ($this->extractPostImagePathsFromContent((string) $post->content) as $contentImagePath) {
-                $connected[$contentImagePath] = true;
+                $usage[$contentImagePath] = $usage[$contentImagePath] ?? [];
+                $existing = $usage[$contentImagePath][$post->id] ?? $this->newImageUsageEntry($post);
+                $existing['usage'][] = 'content_inline';
+                $existing['usage'] = array_values(array_unique($existing['usage']));
+                $usage[$contentImagePath][$post->id] = $existing;
             }
         }
 
-        return $connected;
+        return $usage;
+    }
+
+    private function newImageUsageEntry(Post $post): array
+    {
+        return [
+            'post_id' => $post->id,
+            'title' => $post->title,
+            'slug' => $post->slug,
+            'section' => $post->section,
+            'usage' => [],
+        ];
     }
 
     private function extractPostImagePathsFromContent(string $content): array
@@ -373,20 +413,10 @@ class PostController extends Controller
         return $value;
     }
 
-    private function isSelectableUnlinkedImage(string $path): bool
+    private function isSelectableLibraryImage(string $path): bool
     {
         $normalized = $this->normalizeStorageImagePath($path);
-        if (!$normalized || !Storage::disk('public')->exists($normalized)) {
-            return false;
-        }
-
-        foreach ($this->unlinkedPostImages() as $image) {
-            if (($image['path'] ?? null) === $normalized) {
-                return true;
-            }
-        }
-
-        return false;
+        return $normalized !== null && Storage::disk('public')->exists($normalized);
     }
 
     private function maxCmsImageKb(): int

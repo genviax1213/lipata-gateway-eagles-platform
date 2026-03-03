@@ -76,7 +76,7 @@ class CmsImageLibraryTest extends TestCase
         ]);
     }
 
-    public function test_store_post_rejects_selected_image_path_when_not_unlinked(): void
+    public function test_store_post_can_reuse_selected_image_path_even_when_linked(): void
     {
         $officer = $this->officerUser();
 
@@ -104,9 +104,10 @@ class CmsImageLibraryTest extends TestCase
             'selected_image_path' => 'posts/in-use.jpg',
         ]);
 
-        $response->assertStatus(422);
-        $response->assertJsonFragment([
-            'message' => 'Selected image is not available. Please pick an unlinked image from the list.',
+        $response->assertCreated();
+        $this->assertDatabaseHas('posts', [
+            'title' => 'Another Post',
+            'image_path' => 'posts/in-use.jpg',
         ]);
     }
 
@@ -119,4 +120,3 @@ class CmsImageLibraryTest extends TestCase
         ]);
     }
 }
-
