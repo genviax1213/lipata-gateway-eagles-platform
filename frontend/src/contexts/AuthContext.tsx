@@ -13,7 +13,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const syncUserSession = async () => {
+  const syncUserSession = async (clearOnAuthFailure = true) => {
     const token = localStorage.getItem("auth_token");
 
     try {
@@ -23,7 +23,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const status = axios.isAxiosError(error) ? error.response?.status : null;
       const isAuthFailure = status === 401 || status === 419;
 
-      if (isAuthFailure) {
+      if (isAuthFailure && clearOnAuthFailure) {
         if (token) {
           localStorage.removeItem("auth_token");
         }
@@ -47,16 +47,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     };
 
-    const onFocus = () => {
-      void syncUserSession();
-    };
-
     window.addEventListener("storage", onStorage);
-    window.addEventListener("focus", onFocus);
 
     return () => {
       window.removeEventListener("storage", onStorage);
-      window.removeEventListener("focus", onFocus);
     };
   }, []);
 

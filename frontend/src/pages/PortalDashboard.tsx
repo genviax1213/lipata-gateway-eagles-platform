@@ -147,11 +147,17 @@ export default function PortalDashboard() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [contributionInfo, setContributionInfo] = useState("");
 
   const parseError = (err: unknown, fallback: string): string => {
     if (!axios.isAxiosError(err)) return fallback;
     const message = (err.response?.data as { message?: string; errors?: Record<string, string[]> } | undefined)?.message;
-    if (message) return message;
+    if (message) {
+      if (message.toLowerCase().includes("unauthenticated")) {
+        return "Your session appears to have expired. Please log in again.";
+      }
+      return message;
+    }
     const errors = (err.response?.data as { errors?: Record<string, string[]> } | undefined)?.errors;
     if (errors) {
       const first = Object.values(errors).flat()[0];
@@ -163,6 +169,7 @@ export default function PortalDashboard() {
   const loadDashboard = useCallback(async () => {
     setLoading(true);
     setError("");
+    setContributionInfo("");
 
     try {
       const dashRes = await api.get<DashboardPayload>("/dashboard/me");
@@ -179,11 +186,18 @@ export default function PortalDashboard() {
         try {
           const memberRes = await api.get<MemberContributionPayload>("/finance/my-contributions");
           setMemberData(memberRes.data);
+          setContributionInfo("");
         } catch {
           setMemberData(null);
+          setContributionInfo(
+            typeof dashRes.data.message === "string" && dashRes.data.message.trim() !== ""
+              ? dashRes.data.message
+              : "No linked member contribution profile found for this account yet.",
+          );
         }
       } else {
         setMemberData(null);
+        setContributionInfo("");
       }
 
       if (canChairmanReview || canChairmanSetContributionTarget || canChairmanLogContributionPayment) {
@@ -579,6 +593,9 @@ export default function PortalDashboard() {
         <div className="space-y-5">
           <div className="rounded-xl border border-white/20 bg-white/10 p-4">
             <h2 className="mb-2 font-heading text-2xl text-offwhite">My Contributions</h2>
+            {!memberData && contributionInfo && (
+              <p className="mb-3 rounded-md border border-white/20 bg-white/5 px-3 py-2 text-sm text-mist/85">{contributionInfo}</p>
+            )}
             <div className="mb-3 flex flex-wrap items-center gap-3">
               <button className={`rounded-md border px-3 py-1 text-sm ${selectedTab === "alalayang_agila_contribution" ? "border-gold text-gold-soft" : "border-white/30 text-offwhite"}`} onClick={() => setSelectedTab("alalayang_agila_contribution")}>Alalayang Agila</button>
               <button className={`rounded-md border px-3 py-1 text-sm ${selectedTab === "monthly_contribution" ? "border-gold text-gold-soft" : "border-white/30 text-offwhite"}`} onClick={() => setSelectedTab("monthly_contribution")}>Monthly Contribution</button>
