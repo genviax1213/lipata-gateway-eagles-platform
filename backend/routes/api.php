@@ -72,6 +72,7 @@ Route::prefix('v1')->group(function () {
         Route::put('/admin/users/{user}', [AdminUserController::class, 'update'])->middleware('portal.permission:members.update');
         Route::delete('/admin/users/{user}', [AdminUserController::class, 'destroy'])->middleware('portal.permission:members.delete');
         Route::put('/admin/users/{user}/role', [AdminUserController::class, 'updateRole'])->middleware('portal.permission:roles.delegate');
+        Route::post('/admin/users/me/link-member-profile', [AdminUserController::class, 'linkCurrentUserMemberProfile'])->middleware('portal.permission:members.update');
 
         Route::get('/finance/members', [FinanceController::class, 'searchMembers'])->middleware('portal.permission:finance.view');
         Route::get('/finance/compliance', [FinanceController::class, 'complianceReport'])->middleware('portal.permission:finance.view');

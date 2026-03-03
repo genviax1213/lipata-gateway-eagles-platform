@@ -309,4 +309,63 @@ class AdminUserController extends Controller
 
         return response()->json(['message' => 'User deleted']);
     }
+
+    public function linkCurrentUserMemberProfile(Request $request)
+    {
+        /** @var User $actor */
+        $actor = $request->user()->loadMissing('role:id,name');
+        $this->authorize('manageAdminUsers', [User::class, 'members.update']);
+
+        if (optional($actor->role)->name !== 'admin') {
+            return response()->json([
+                'message' => 'Only administrators can use this utility.',
+            ], 403);
+        }
+
+        $normalizedEmail = $this->normalizeEmail((string) $actor->email);
+        if ($normalizedEmail === '') {
+            return response()->json([
+                'message' => 'Current admin account has no valid email.',
+            ], 422);
+        }
+
+        $member = Member::query()
+            ->where('user_id', $actor->id)
+            ->first();
+
+        if (!$member) {
+            $member = Member::query()
+                ->whereRaw('LOWER(TRIM(email)) = ?', [$normalizedEmail])
+                ->first();
+        }
+
+        if (!$member) {
+            return response()->json([
+                'message' => 'No member profile found for your admin email. Add/import member data first, then try again.',
+            ], 404);
+        }
+
+        if ($member->user_id !== null && (int) $member->user_id !== (int) $actor->id) {
+            return response()->json([
+                'message' => 'Matched member profile is already linked to a different user account.',
+            ], 409);
+        }
+
+        $member->user_id = $actor->id;
+        $member->email = $normalizedEmail;
+        $member->email_verified = (bool) $actor->email_verified_at;
+        $member->password_set = !empty($actor->password);
+        $member->save();
+
+        Log::info('admin.self_member_linked', [
+            'actor_user_id' => $actor->id,
+            'member_id' => $member->id,
+            'ip' => $request->ip(),
+        ]);
+
+        return response()->json([
+            'message' => 'Admin account linked to member profile.',
+            'member' => $member->fresh(),
+        ]);
+    }
 }

@@ -148,6 +148,7 @@ export default function PortalDashboard() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [contributionInfo, setContributionInfo] = useState("");
+  const [linkingMemberProfile, setLinkingMemberProfile] = useState(false);
 
   const parseError = (err: unknown, fallback: string): string => {
     if (!axios.isAxiosError(err)) return fallback;
@@ -453,6 +454,21 @@ export default function PortalDashboard() {
     }
   };
 
+  const linkAdminMemberProfile = async () => {
+    setError("");
+    setNotice("");
+    setLinkingMemberProfile(true);
+    try {
+      const res = await api.post<{ message?: string }>("/admin/users/me/link-member-profile");
+      setNotice(res.data?.message ?? "Admin account linked to member profile.");
+      await loadDashboard();
+    } catch (err) {
+      setError(parseError(err, "Failed to link admin account to a member profile."));
+    } finally {
+      setLinkingMemberProfile(false);
+    }
+  };
+
   const viewDocument = async (documentId: number, originalName: string) => {
     setError("");
     try {
@@ -594,7 +610,18 @@ export default function PortalDashboard() {
           <div className="rounded-xl border border-white/20 bg-white/10 p-4">
             <h2 className="mb-2 font-heading text-2xl text-offwhite">My Contributions</h2>
             {!memberData && contributionInfo && (
-              <p className="mb-3 rounded-md border border-white/20 bg-white/5 px-3 py-2 text-sm text-mist/85">{contributionInfo}</p>
+              <div className="mb-3 rounded-md border border-white/20 bg-white/5 px-3 py-2">
+                <p className="text-sm text-mist/85">{contributionInfo}</p>
+                {isAdmin && (
+                  <button
+                    className="mt-2 rounded border border-gold/40 px-3 py-1 text-xs text-gold-soft disabled:opacity-50"
+                    onClick={() => void linkAdminMemberProfile()}
+                    disabled={linkingMemberProfile}
+                  >
+                    {linkingMemberProfile ? "Linking..." : "Link My Admin Account to Member Profile"}
+                  </button>
+                )}
+              </div>
             )}
             <div className="mb-3 flex flex-wrap items-center gap-3">
               <button className={`rounded-md border px-3 py-1 text-sm ${selectedTab === "alalayang_agila_contribution" ? "border-gold text-gold-soft" : "border-white/30 text-offwhite"}`} onClick={() => setSelectedTab("alalayang_agila_contribution")}>Alalayang Agila</button>
