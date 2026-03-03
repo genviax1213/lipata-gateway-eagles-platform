@@ -16,13 +16,6 @@ class EnsureForumPermission
             return response()->json(['message' => 'Unauthenticated.'], 401);
         }
 
-        if (
-            in_array($permission, ['forum.view', 'forum.create_thread', 'forum.reply'], true)
-            && optional($user->role)->name !== 'applicant'
-        ) {
-            return $next($request);
-        }
-
         if (!$user->hasPermission($permission)) {
             return response()->json(['message' => 'Insufficient forum privileges.'], 403);
         }

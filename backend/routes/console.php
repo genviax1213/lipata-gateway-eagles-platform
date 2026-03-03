@@ -1,10 +1,12 @@
 <?php
 
 use App\Models\Member;
+use App\Models\ApplicationDocument;
 use App\Support\TextCase;
 use Carbon\Carbon;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 Artisan::command('inspire', function () {
@@ -184,3 +186,72 @@ Artisan::command('members:import-sheet {path : Absolute or relative CSV path}', 
 
     return 0;
 })->purpose('Import members from a Google Sheet CSV export');
+
+Artisan::command('documents:migrate-applicant-storage {--dry-run : Show migration results without writing changes} {--chunk=200 : Chunk size}', function () {
+    $dryRun = (bool) $this->option('dry-run');
+    $chunkSize = max(1, (int) $this->option('chunk'));
+
+    $stats = [
+        'scanned' => 0,
+        'already_local' => 0,
+        'migrated' => 0,
+        'missing_public' => 0,
+        'failed' => 0,
+    ];
+
+    ApplicationDocument::query()
+        ->where('file_path', 'like', 'application-docs/%')
+        ->orderBy('id')
+        ->chunkById($chunkSize, function ($documents) use (&$stats, $dryRun) {
+            foreach ($documents as $document) {
+                $stats['scanned']++;
+                $path = (string) $document->file_path;
+
+                if (Storage::disk('local')->exists($path)) {
+                    $stats['already_local']++;
+                    continue;
+                }
+
+                if (!Storage::disk('public')->exists($path)) {
+                    $stats['missing_public']++;
+                    continue;
+                }
+
+                if ($dryRun) {
+                    $stats['migrated']++;
+                    continue;
+                }
+
+                try {
+                    $stream = Storage::disk('public')->readStream($path);
+                    if (!is_resource($stream)) {
+                        throw new RuntimeException("Unable to open source stream for {$path}");
+                    }
+
+                    $written = Storage::disk('local')->writeStream($path, $stream);
+                    if (is_resource($stream)) {
+                        fclose($stream);
+                    }
+                    if (!$written) {
+                        throw new RuntimeException("Unable to write destination stream for {$path}");
+                    }
+
+                    Storage::disk('public')->delete($path);
+                    $stats['migrated']++;
+                } catch (\Throwable $exception) {
+                    $stats['failed']++;
+                    $this->warn("Failed migrating document #{$document->id} ({$path}): {$exception->getMessage()}");
+                }
+            }
+        });
+
+    $mode = $dryRun ? 'DRY RUN' : 'EXECUTION';
+    $this->info("Applicant document migration ({$mode}) complete.");
+    $this->line("Scanned: {$stats['scanned']}");
+    $this->line("Already local: {$stats['already_local']}");
+    $this->line($dryRun ? "Would migrate: {$stats['migrated']}" : "Migrated: {$stats['migrated']}");
+    $this->line("Missing in public disk: {$stats['missing_public']}");
+    $this->line("Failed: {$stats['failed']}");
+
+    return $stats['failed'] > 0 ? 1 : 0;
+})->purpose('Migrate applicant documents from public disk to local private disk');

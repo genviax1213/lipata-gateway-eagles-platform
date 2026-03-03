@@ -84,6 +84,7 @@ jobs:
       SSH_HOST: ${{ secrets.SSH_HOST != '' && secrets.SSH_HOST || 'serverbyt.net' }}
       SSH_USER: ${{ secrets.SSH_USER }}
       SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      PUBLIC_BASE_URL: ${{ vars.PUBLIC_BASE_URL != '' && vars.PUBLIC_BASE_URL || 'https://lgec.org' }}
       FRONTEND_REMOTE_DIR: ${{ secrets.FRONTEND_REMOTE_DIR }}
       REMOTE_APP_DIR: ${{ secrets.REMOTE_APP_DIR }}
       REMOTE_BACKEND_DIR: ${{ secrets.REMOTE_BACKEND_DIR }}
@@ -133,6 +134,26 @@ jobs:
             BACKEND_DIR="\$APP_DIR/backend"
           fi
 
+          # Prevent direct web access to backend source tree.
+          cat > "\$BACKEND_DIR/.htaccess" <<'HTACCESS'
+          <IfModule mod_authz_core.c>
+              Require all denied
+          </IfModule>
+          <IfModule !mod_authz_core.c>
+              Deny from all
+          </IfModule>
+HTACCESS
+
+          # Remove known sensitive leftovers from older/manual deploys.
+          rm -f "\$BACKEND_DIR/stackcp.ppk" "\$BACKEND_DIR/stackcp.pub"
+          rm -f "\$BACKEND_DIR/phpunit.xml" "\$BACKEND_DIR/.phpunit.result.cache"
+          rm -f "\$BACKEND_DIR/database/schema/mysql-schema.sql"
+
+          # Extra key-material cleanup if any were accidentally copied.
+          find "\$BACKEND_DIR" -maxdepth 2 -type f \\
+            \\( -name '*.ppk' -o -name '*.pem' -o -name '*.key' -o -name 'id_rsa*' -o -name 'id_ed25519*' \\) \\
+            -delete || true
+
           cd "\$APP_DIR"
           git fetch --all --prune
           git checkout "${DEPLOY_BRANCH}"
@@ -161,3 +182,22 @@ jobs:
             ${RESTART_COMMAND}
           fi
           EOF
+
+      - name: Security Exposure Smoke Checks
+        run: |
+          set -e
+          for path in \
+            /backend/composer.lock \
+            /backend/phpunit.xml \
+            /backend/storage/logs/laravel.log \
+            /backend/database/schema/mysql-schema.sql \
+            /backend/stackcp.pub \
+            /backend/stackcp.ppk; do
+            code="$(curl -s -o /tmp/security-check-body -w '%{http_code}' "${PUBLIC_BASE_URL}${path}")"
+            if [ "$code" = "200" ]; then
+              echo "Security check failed: ${PUBLIC_BASE_URL}${path} is publicly accessible (HTTP 200)."
+              head -n 5 /tmp/security-check-body || true
+              exit 1
+            fi
+            echo "OK: ${PUBLIC_BASE_URL}${path} -> HTTP $code"
+          done

@@ -328,7 +328,7 @@ class MemberApplicationController extends Controller
         $path = ImageUploadOptimizer::storeOptimizedOrOriginal(
             $uploadedFile,
             'application-docs',
-            'public',
+            'local',
             2000,
             2000,
             82,
@@ -375,11 +375,12 @@ class MemberApplicationController extends Controller
     {
         $this->authorize('view', $document);
 
-        if (!Storage::disk('public')->exists($document->file_path)) {
+        $disk = $this->resolveDocumentDisk($document);
+        if (!Storage::disk($disk)->exists($document->file_path)) {
             abort(404, 'Document file not found.');
         }
 
-        return Storage::disk('public')->response(
+        return Storage::disk($disk)->response(
             $document->file_path,
             $document->original_name
         );
@@ -563,6 +564,12 @@ class MemberApplicationController extends Controller
 
     public function setProbation(Request $request, MemberApplication $memberApplication)
     {
+        if (!in_array($memberApplication->status, ['pending_verification', 'pending_approval'], true)) {
+            return response()->json([
+                'message' => 'Only pending applications can be moved to probation.',
+            ], 422);
+        }
+
         $memberApplication->decision_status = 'probation';
         $memberApplication->status = 'pending_approval';
         $memberApplication->is_login_blocked = false;
@@ -613,6 +620,20 @@ class MemberApplicationController extends Controller
             'message' => 'Application rejected. Record kept for historical/admin access.',
             'application' => $memberApplication->fresh(),
         ]);
+    }
+
+    private function resolveDocumentDisk(ApplicationDocument $document): string
+    {
+        // Backward compatible: existing records may still point to legacy public storage.
+        if (Storage::disk('local')->exists($document->file_path)) {
+            return 'local';
+        }
+
+        if (Storage::disk('public')->exists($document->file_path)) {
+            return 'public';
+        }
+
+        return 'local';
     }
 
     private function generateMemberNumber(): string
