@@ -22,6 +22,17 @@ use Illuminate\Support\Str;
 
 class MemberApplicationController extends Controller
 {
+    private function applicantContributionCategoryLabels(): array
+    {
+        return ApplicationFeeRequirement::CATEGORY_LABELS;
+    }
+
+    private function resolveCategoryRequirement(MemberApplication $application, string $category): ?ApplicationFeeRequirement
+    {
+        return $application->feeRequirements
+            ->first(fn (ApplicationFeeRequirement $req) => $req->category === $category);
+    }
+
     private function normalizeName(string $value): string
     {
         return Str::of($value)->lower()->squish()->value();
@@ -77,26 +88,40 @@ class MemberApplicationController extends Controller
 
         $requiredAmount = 0.0;
         $paidAmount = 0.0;
+        $categoryLabels = $this->applicantContributionCategoryLabels();
 
-        $feeRequirements = $application->feeRequirements->map(function (ApplicationFeeRequirement $requirement) use (&$requiredAmount, &$paidAmount) {
-            $requiredAmount += (float) $requirement->required_amount;
+        $feeRequirements = collect($categoryLabels)->map(function (string $label, string $category) use ($application, &$requiredAmount, &$paidAmount) {
+            $requirement = $this->resolveCategoryRequirement($application, $category);
+            $targetAmount = $requirement ? (float) $requirement->required_amount : 0.0;
+            $requiredAmount += $targetAmount;
 
-            $payments = $requirement->payments->map(function (ApplicationFeePayment $payment) use (&$paidAmount) {
+            $payments = ($requirement?->payments ?? collect())->map(function (ApplicationFeePayment $payment) use (&$paidAmount) {
+                $paid = (float) $payment->amount;
                 $paidAmount += (float) $payment->amount;
                 return [
                     'id' => $payment->id,
                     'amount' => $payment->amount,
+                    'partial_amount' => $paid,
                     'payment_date' => optional($payment->payment_date)->toDateString(),
                     'note' => $payment->note,
                     'encoded_by' => $payment->encodedBy ? ['id' => $payment->encodedBy->id, 'name' => $payment->encodedBy->name] : null,
                 ];
             })->values();
 
+            $partialTotal = (float) $payments->sum('partial_amount');
+            $variance = $targetAmount - $partialTotal;
+
             return [
-                'id' => $requirement->id,
-                'required_amount' => $requirement->required_amount,
-                'note' => $requirement->note,
-                'set_by' => $requirement->setBy ? ['id' => $requirement->setBy->id, 'name' => $requirement->setBy->name] : null,
+                'id' => $requirement?->id,
+                'category' => $category,
+                'category_label' => $label,
+                'target_payment' => round($targetAmount, 2),
+                'partial_payment_total' => round($partialTotal, 2),
+                'variance' => round($variance, 2),
+                'required_amount' => round($targetAmount, 2),
+                'paid_amount' => round($partialTotal, 2),
+                'note' => $requirement?->note,
+                'set_by' => $requirement?->setBy ? ['id' => $requirement->setBy->id, 'name' => $requirement->setBy->name] : null,
                 'payments' => $payments,
             ];
         })->values();
@@ -135,6 +160,8 @@ class MemberApplicationController extends Controller
                 'required_total' => $requiredAmount,
                 'paid_total' => $paidAmount,
                 'balance' => max($requiredAmount - $paidAmount, 0),
+                'variance_total' => round($requiredAmount - $paidAmount, 2),
+                'category_labels' => $categoryLabels,
                 'requirements' => $feeRequirements,
             ],
         ];
@@ -436,20 +463,29 @@ class MemberApplicationController extends Controller
     public function setFeeRequirement(Request $request, MemberApplication $memberApplication)
     {
         $validated = $request->validate([
+            'category' => 'required|in:project,community_service,fellowship,five_i_activities',
             'required_amount' => 'required|numeric|min:0.01',
             'note' => 'nullable|string|max:255',
         ]);
 
-        $requirement = ApplicationFeeRequirement::query()->create([
+        $requirement = ApplicationFeeRequirement::query()->updateOrCreate(
+            [
+                'member_application_id' => $memberApplication->id,
+                'category' => $validated['category'],
+            ],
+            [
             'member_application_id' => $memberApplication->id,
+            'category' => $validated['category'],
             'required_amount' => $validated['required_amount'],
             'note' => $validated['note'] ?? null,
             'set_by_user_id' => $request->user()->id,
-        ]);
+            ]
+        );
 
         Log::info('application.fee_requirement_set', [
             'actor_user_id' => $request->user()->id,
             'application_id' => $memberApplication->id,
+            'category' => $requirement->category,
             'requirement_id' => $requirement->id,
             'required_amount' => $requirement->required_amount,
             'ip' => $request->ip(),
@@ -489,6 +525,51 @@ class MemberApplicationController extends Controller
         return response()->json([
             'message' => 'Applicant fee payment recorded.',
             'payment' => $payment->fresh(),
+        ], 201);
+    }
+
+    public function addCategoryFeePayment(Request $request, MemberApplication $memberApplication)
+    {
+        $validated = $request->validate([
+            'category' => 'required|in:project,community_service,fellowship,five_i_activities',
+            'amount' => 'required|numeric|min:0.01',
+            'payment_date' => 'nullable|date',
+            'note' => 'nullable|string|max:255',
+        ]);
+
+        $requirement = ApplicationFeeRequirement::query()
+            ->where('member_application_id', $memberApplication->id)
+            ->where('category', $validated['category'])
+            ->first();
+
+        if (!$requirement) {
+            return response()->json([
+                'message' => 'Set target payment for this category before encoding a partial/full payment.',
+            ], 422);
+        }
+
+        $payment = ApplicationFeePayment::query()->create([
+            'application_fee_requirement_id' => $requirement->id,
+            'amount' => $validated['amount'],
+            'payment_date' => $validated['payment_date'] ?? now()->toDateString(),
+            'note' => $validated['note'] ?? null,
+            'encoded_by_user_id' => $request->user()->id,
+        ]);
+
+        Log::info('application.fee_payment_recorded', [
+            'actor_user_id' => $request->user()->id,
+            'application_id' => $memberApplication->id,
+            'category' => $requirement->category,
+            'requirement_id' => $requirement->id,
+            'payment_id' => $payment->id,
+            'amount' => $payment->amount,
+            'ip' => $request->ip(),
+        ]);
+
+        return response()->json([
+            'message' => 'Applicant fee payment recorded.',
+            'payment' => $payment->fresh(),
+            'requirement' => $requirement->fresh(),
         ], 201);
     }
 

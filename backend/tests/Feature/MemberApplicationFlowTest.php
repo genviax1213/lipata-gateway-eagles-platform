@@ -295,7 +295,7 @@ class MemberApplicationFlowTest extends TestCase
         ])->assertStatus(403);
     }
 
-    public function test_non_treasurer_cannot_set_applicant_fee_requirement(): void
+    public function test_non_chairman_cannot_set_applicant_contribution_target(): void
     {
         $officerRole = Role::query()->where('name', 'officer')->firstOrFail();
         $officer = User::factory()->create(['role_id' => $officerRole->id]);
@@ -318,17 +318,15 @@ class MemberApplicationFlowTest extends TestCase
 
         $this->postJson("/api/v1/member-applications/{$application->id}/fee-requirements", [
             'required_amount' => 1000,
-            'note' => 'Should be blocked for non-treasurer',
+            'category' => 'project',
+            'note' => 'Should be blocked for non-chairman',
         ])->assertStatus(403);
     }
 
-    public function test_treasurer_can_set_and_pay_applicant_fee_requirement(): void
+    public function test_membership_chairman_can_set_and_pay_applicant_contribution_target(): void
     {
-        $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
-        $treasurer = User::factory()->create([
-            'role_id' => $adminRole->id,
-            'finance_role' => 'treasurer',
-        ]);
+        $chairmanRole = Role::query()->where('name', 'membership_chairman')->firstOrFail();
+        $chairman = User::factory()->create(['role_id' => $chairmanRole->id]);
 
         $application = \App\Models\MemberApplication::query()->create([
             'first_name' => 'Fee',
@@ -344,18 +342,20 @@ class MemberApplicationFlowTest extends TestCase
             'email_verified_at' => now(),
         ]);
 
-        Sanctum::actingAs($treasurer);
+        Sanctum::actingAs($chairman);
 
         $setRequirement = $this->postJson("/api/v1/member-applications/{$application->id}/fee-requirements", [
+            'category' => 'project',
             'required_amount' => 2000,
-            'note' => 'Required applicant processing fee',
+            'note' => 'Applicant project target',
         ]);
 
         $setRequirement->assertStatus(201);
         $requirementId = (int) $setRequirement->json('requirement.id');
         $this->assertGreaterThan(0, $requirementId);
 
-        $addPayment = $this->postJson("/api/v1/member-applications/fee-requirements/{$requirementId}/payments", [
+        $addPayment = $this->postJson("/api/v1/member-applications/{$application->id}/fee-payments", [
+            'category' => 'project',
             'amount' => 500,
             'note' => 'Partial payment',
         ]);

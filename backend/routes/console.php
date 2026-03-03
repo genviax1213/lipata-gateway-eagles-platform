@@ -1,10 +1,13 @@
 <?php
 
 use App\Models\Member;
+use App\Models\Role;
+use App\Models\User;
 use App\Models\ApplicationDocument;
 use App\Support\TextCase;
 use Carbon\Carbon;
 use Illuminate\Foundation\Inspiring;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -255,3 +258,192 @@ Artisan::command('documents:migrate-applicant-storage {--dry-run : Show migratio
 
     return $stats['failed'] > 0 ? 1 : 0;
 })->purpose('Migrate applicant documents from public disk to local private disk');
+
+Artisan::command('members:export-json {path : Target JSON path (absolute or relative to backend base)}', function (string $path) {
+    $outputPath = Str::startsWith($path, DIRECTORY_SEPARATOR)
+        ? $path
+        : base_path($path);
+
+    $dir = dirname($outputPath);
+    if (!is_dir($dir)) {
+        mkdir($dir, 0775, true);
+    }
+
+    $members = Member::query()
+        ->orderBy('id')
+        ->get([
+            'member_number',
+            'first_name',
+            'middle_name',
+            'last_name',
+            'spouse_name',
+            'email',
+            'membership_status',
+            'contact_number',
+            'address',
+            'date_of_birth',
+            'batch',
+            'induction_date',
+            'source_submitted_at',
+        ])
+        ->map(fn (Member $member) => [
+            'member_number' => $member->member_number,
+            'first_name' => $member->first_name,
+            'middle_name' => $member->middle_name,
+            'last_name' => $member->last_name,
+            'spouse_name' => $member->spouse_name,
+            'email' => $member->email,
+            'membership_status' => $member->membership_status,
+            'contact_number' => $member->contact_number,
+            'address' => $member->address,
+            'date_of_birth' => $member->date_of_birth,
+            'batch' => $member->batch,
+            'induction_date' => $member->induction_date,
+            'source_submitted_at' => $member->source_submitted_at,
+        ])
+        ->values()
+        ->all();
+
+    file_put_contents($outputPath, json_encode($members, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+    $this->info('Exported members: '.count($members));
+    $this->line("Path: {$outputPath}");
+
+    return 0;
+})->purpose('Export members-only dataset to JSON for host sync');
+
+Artisan::command('members:import-json {path : Source JSON path (absolute or relative to backend base)} {--sync-users : Create/link member users after import} {--default-password= : Initial password for newly created member users} {--skip-temp-users : Do not alter temporary accounts}', function (string $path) {
+    $sourcePath = Str::startsWith($path, DIRECTORY_SEPARATOR)
+        ? $path
+        : base_path($path);
+
+    if (!is_file($sourcePath)) {
+        $this->error("JSON file not found: {$sourcePath}");
+        return 1;
+    }
+
+    $json = file_get_contents($sourcePath);
+    $rows = json_decode((string) $json, true);
+    if (!is_array($rows)) {
+        $this->error('Invalid JSON payload.');
+        return 1;
+    }
+
+    $syncUsers = (bool) $this->option('sync-users');
+    $skipTempUsers = (bool) $this->option('skip-temp-users');
+    $defaultPassword = trim((string) $this->option('default-password'));
+    if ($syncUsers && $defaultPassword === '') {
+        $defaultPassword = (string) env('MEMBER_SYNC_DEFAULT_PASSWORD', '');
+    }
+
+    $memberRoleId = Role::query()->where('name', 'member')->value('id');
+
+    $stats = [
+        'members_created' => 0,
+        'members_updated' => 0,
+        'users_created' => 0,
+        'users_linked' => 0,
+        'users_updated' => 0,
+        'users_skipped_temp' => 0,
+        'rows_skipped' => 0,
+    ];
+
+    foreach ($rows as $row) {
+        if (!is_array($row)) {
+            $stats['rows_skipped']++;
+            continue;
+        }
+
+        $memberNumber = trim((string) ($row['member_number'] ?? ''));
+        $email = Str::of((string) ($row['email'] ?? ''))->trim()->lower()->value();
+        $firstName = trim((string) ($row['first_name'] ?? ''));
+        $lastName = trim((string) ($row['last_name'] ?? ''));
+        if ($memberNumber === '' || $firstName === '' || $lastName === '') {
+            $stats['rows_skipped']++;
+            continue;
+        }
+
+        $member = Member::query()->firstOrNew(['member_number' => $memberNumber]);
+
+        $member->fill([
+            'first_name' => $firstName,
+            'middle_name' => trim((string) ($row['middle_name'] ?? '')) ?: null,
+            'last_name' => $lastName,
+            'spouse_name' => trim((string) ($row['spouse_name'] ?? '')) ?: null,
+            'email' => $email !== '' ? $email : null,
+            'membership_status' => in_array(($row['membership_status'] ?? ''), ['active', 'inactive', 'applicant'], true)
+                ? $row['membership_status']
+                : 'active',
+            'contact_number' => trim((string) ($row['contact_number'] ?? '')) ?: null,
+            'address' => trim((string) ($row['address'] ?? '')) ?: null,
+            'date_of_birth' => $row['date_of_birth'] ?? null,
+            'batch' => trim((string) ($row['batch'] ?? '')) ?: null,
+            'induction_date' => $row['induction_date'] ?? null,
+            'source_submitted_at' => $row['source_submitted_at'] ?? null,
+        ]);
+        $member->save();
+        $stats[$member->wasRecentlyCreated ? 'members_created' : 'members_updated']++;
+
+        if (!$syncUsers || $email === '') {
+            continue;
+        }
+
+        $isTempAccount = Str::startsWith($email, 'temp.') || $email === 'admin@lipataeagles.ph';
+        if ($skipTempUsers && $isTempAccount) {
+            $stats['users_skipped_temp']++;
+            continue;
+        }
+
+        $user = null;
+        if ($member->user_id) {
+            $user = User::query()->find($member->user_id);
+        }
+        if (!$user) {
+            $user = User::query()->where('email', $email)->first();
+        }
+
+        if (!$user) {
+            if ($defaultPassword === '') {
+                $defaultPassword = Str::random(24);
+            }
+
+            $user = User::query()->create([
+                'name' => trim($firstName.' '.($member->middle_name ? $member->middle_name.' ' : '').$lastName),
+                'email' => $email,
+                'password' => Hash::make($defaultPassword),
+                'role_id' => $memberRoleId,
+            ]);
+            $stats['users_created']++;
+        } else {
+            $updates = [];
+            $fullName = trim($firstName.' '.($member->middle_name ? $member->middle_name.' ' : '').$lastName);
+            if ($user->name !== $fullName) {
+                $updates['name'] = $fullName;
+            }
+            if ($user->email !== $email) {
+                $updates['email'] = $email;
+            }
+            if ($user->role_id === null && $memberRoleId) {
+                $updates['role_id'] = $memberRoleId;
+            }
+            if ($updates !== []) {
+                $user->fill($updates)->save();
+                $stats['users_updated']++;
+            }
+        }
+
+        if ($member->user_id !== $user->id) {
+            $member->user_id = $user->id;
+            $member->email_verified = $user->email_verified_at !== null;
+            $member->password_set = !empty($user->password);
+            $member->save();
+            $stats['users_linked']++;
+        }
+    }
+
+    $this->info('Members import/sync complete.');
+    foreach ($stats as $key => $value) {
+        $this->line("{$key}: {$value}");
+    }
+
+    return 0;
+})->purpose('Import members-only dataset and optionally sync users/member links without touching temp accounts');

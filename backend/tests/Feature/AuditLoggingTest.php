@@ -324,11 +324,8 @@ class AuditLoggingTest extends TestCase
     {
         Log::spy();
 
-        $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
-        $treasurer = User::factory()->create([
-            'role_id' => $adminRole->id,
-            'finance_role' => 'treasurer',
-        ]);
+        $chairmanRole = Role::query()->where('name', 'membership_chairman')->firstOrFail();
+        $chairman = User::factory()->create(['role_id' => $chairmanRole->id]);
 
         $application = MemberApplication::query()->create([
             'first_name' => 'Fee',
@@ -344,18 +341,20 @@ class AuditLoggingTest extends TestCase
             'email_verified_at' => now(),
         ]);
 
-        Sanctum::actingAs($treasurer);
+        Sanctum::actingAs($chairman);
 
         $this->postJson("/api/v1/member-applications/{$application->id}/fee-requirements", [
+            'category' => 'project',
             'required_amount' => 1500,
-            'note' => 'Initial applicant fee requirement',
+            'note' => 'Initial applicant contribution target',
         ])->assertStatus(201);
 
         Log::shouldHaveReceived('info')
-            ->withArgs(function (string $event, array $context) use ($treasurer, $application) {
+            ->withArgs(function (string $event, array $context) use ($chairman, $application) {
                 return $event === 'application.fee_requirement_set'
-                    && (int) ($context['actor_user_id'] ?? 0) === (int) $treasurer->id
+                    && (int) ($context['actor_user_id'] ?? 0) === (int) $chairman->id
                     && (int) ($context['application_id'] ?? 0) === (int) $application->id
+                    && ($context['category'] ?? null) === 'project'
                     && isset($context['requirement_id'])
                     && (float) ($context['required_amount'] ?? 0) === 1500.0;
             })
@@ -366,11 +365,8 @@ class AuditLoggingTest extends TestCase
     {
         Log::spy();
 
-        $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
-        $treasurer = User::factory()->create([
-            'role_id' => $adminRole->id,
-            'finance_role' => 'treasurer',
-        ]);
+        $chairmanRole = Role::query()->where('name', 'membership_chairman')->firstOrFail();
+        $chairman = User::factory()->create(['role_id' => $chairmanRole->id]);
 
         $application = MemberApplication::query()->create([
             'first_name' => 'Fee',
@@ -386,9 +382,10 @@ class AuditLoggingTest extends TestCase
             'email_verified_at' => now(),
         ]);
 
-        Sanctum::actingAs($treasurer);
+        Sanctum::actingAs($chairman);
 
         $requirementResponse = $this->postJson("/api/v1/member-applications/{$application->id}/fee-requirements", [
+            'category' => 'project',
             'required_amount' => 1200,
             'note' => 'Payment audit requirement',
         ])->assertStatus(201);
@@ -396,16 +393,18 @@ class AuditLoggingTest extends TestCase
         $requirementId = (int) $requirementResponse->json('requirement.id');
         $this->assertGreaterThan(0, $requirementId);
 
-        $this->postJson("/api/v1/member-applications/fee-requirements/{$requirementId}/payments", [
+        $this->postJson("/api/v1/member-applications/{$application->id}/fee-payments", [
+            'category' => 'project',
             'amount' => 1200,
             'note' => 'Paid in full',
         ])->assertStatus(201);
 
         Log::shouldHaveReceived('info')
-            ->withArgs(function (string $event, array $context) use ($treasurer, $application, $requirementId) {
+            ->withArgs(function (string $event, array $context) use ($chairman, $application, $requirementId) {
                 return $event === 'application.fee_payment_recorded'
-                    && (int) ($context['actor_user_id'] ?? 0) === (int) $treasurer->id
+                    && (int) ($context['actor_user_id'] ?? 0) === (int) $chairman->id
                     && (int) ($context['application_id'] ?? 0) === (int) $application->id
+                    && ($context['category'] ?? null) === 'project'
                     && (int) ($context['requirement_id'] ?? 0) === $requirementId
                     && isset($context['payment_id'])
                     && (float) ($context['amount'] ?? 0) === 1200.0;

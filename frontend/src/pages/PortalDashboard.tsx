@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import api from "../services/api";
 import { useAuth } from "../contexts/useAuth";
-import { hasPermission } from "../utils/auth";
+import { hasPermission, isAdminUser } from "../utils/auth";
 import { roleGlossary } from "../content/portalCopy";
 import TaskHierarchyCard from "../components/TaskHierarchyCard";
 
@@ -28,12 +28,19 @@ interface ApplicationDocument {
 }
 
 interface ApplicationFeeRequirement {
-  id: number;
+  id: number | null;
+  category: "project" | "community_service" | "fellowship" | "five_i_activities";
+  category_label: string;
+  target_payment: number;
+  partial_payment_total: number;
+  variance: number;
   required_amount: number | string;
   note: string | null;
+  set_by?: { id: number; name: string } | null;
   payments: Array<{
     id: number;
     amount: number | string;
+    partial_amount?: number;
     payment_date: string;
     encoded_by?: { id: number; name: string } | null;
   }>;
@@ -53,6 +60,8 @@ interface ApplicantDetails {
     required_total: number;
     paid_total: number;
     balance: number;
+    variance_total?: number;
+    category_labels?: Record<string, string>;
     requirements: ApplicationFeeRequirement[];
   };
 }
@@ -116,8 +125,9 @@ export default function PortalDashboard() {
   const canChairmanSetNotice = hasPermission(user, "applications.notice.set");
   const canChairmanSetStage = hasPermission(user, "applications.stage.set");
   const canChairmanReviewDocs = hasPermission(user, "applications.docs.review");
-  const canTreasurerSetFee = hasPermission(user, "applications.fee.set");
-  const canTreasurerPay = hasPermission(user, "applications.fee.pay");
+  const canChairmanSetContributionTarget = hasPermission(user, "applications.fee.set");
+  const canChairmanLogContributionPayment = hasPermission(user, "applications.fee.pay");
+  const isAdmin = isAdminUser(user);
 
   const [dashboard, setDashboard] = useState<DashboardPayload | null>(null);
   const [applicantDetails, setApplicantDetails] = useState<ApplicantDetails | null>(null);
@@ -127,9 +137,9 @@ export default function PortalDashboard() {
   const [selectedApplicationDetails, setSelectedApplicationDetails] = useState<ApplicantDetails | null>(null);
   const [noticeText, setNoticeText] = useState("");
   const [stageValue, setStageValue] = useState("interview");
+  const [selectedContributionCategory, setSelectedContributionCategory] = useState<"project" | "community_service" | "fellowship" | "five_i_activities">("project");
   const [requiredAmount, setRequiredAmount] = useState("");
   const [paymentAmount, setPaymentAmount] = useState("");
-  const [selectedFeeRequirementId, setSelectedFeeRequirementId] = useState<number | null>(null);
   const [documentFile, setDocumentFile] = useState<File | null>(null);
   const [selectedTab, setSelectedTab] = useState<"alalayang_agila_contribution" | "monthly_contribution" | "extra_contribution">("monthly_contribution");
   const [yearFilter, setYearFilter] = useState("");
@@ -176,7 +186,7 @@ export default function PortalDashboard() {
         setMemberData(null);
       }
 
-      if (canChairmanReview || canTreasurerSetFee || canTreasurerPay) {
+      if (canChairmanReview || canChairmanSetContributionTarget || canChairmanLogContributionPayment) {
         const rows = await api.get<{ data: ApplicationRow[] }>("/member-applications", { params: { status: "all" } });
         setApplications(rows.data.data ?? []);
       } else {
@@ -187,7 +197,7 @@ export default function PortalDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [canChairmanReview, canTreasurerPay, canTreasurerSetFee, canViewApplicantDashboard]);
+  }, [canChairmanLogContributionPayment, canChairmanReview, canChairmanSetContributionTarget, canViewApplicantDashboard]);
 
   useEffect(() => {
     void loadDashboard();
@@ -283,15 +293,15 @@ export default function PortalDashboard() {
     }
 
     if (canChairmanReview) actions.push("Approve/probation/reject applicants");
-    if (canTreasurerSetFee || canTreasurerPay) actions.push("Manage applicant fees");
+    if (canChairmanSetContributionTarget || canChairmanLogContributionPayment) actions.push("Manage applicant journey contribution targets and payments");
     if (canChairmanReviewDocs) actions.push("Review applicant documents");
 
     return actions.length > 0 ? actions.join("; ") : "No additional actions assigned.";
   }, [
     canChairmanReview,
     canChairmanReviewDocs,
-    canTreasurerPay,
-    canTreasurerSetFee,
+    canChairmanLogContributionPayment,
+    canChairmanSetContributionTarget,
     canUploadApplicantDocs,
     canViewApplicantDashboard,
     dashboard?.view,
@@ -301,11 +311,11 @@ export default function PortalDashboard() {
     if (dashboard?.view === "applicant") {
       return "Complete outstanding requirements and monitor chairman notices for the next interview/approval update.";
     }
-    if (canChairmanReview || canTreasurerSetFee || canTreasurerPay) {
+    if (canChairmanReview || canChairmanSetContributionTarget || canChairmanLogContributionPayment) {
       return "Review Application Committee Panel items with pending status and complete today’s required actions.";
     }
     return "Review your latest contribution records and check back for new notices.";
-  }, [canChairmanReview, canTreasurerPay, canTreasurerSetFee, dashboard?.view]);
+  }, [canChairmanLogContributionPayment, canChairmanReview, canChairmanSetContributionTarget, dashboard?.view]);
 
   const uploadDocument = async () => {
     if (!applicantDetails || !documentFile || !canUploadApplicantDocs) return;
@@ -384,10 +394,11 @@ export default function PortalDashboard() {
     setNotice("");
     try {
       await api.post(`/member-applications/${selectedApplication.id}/fee-requirements`, {
+        category: selectedContributionCategory,
         required_amount: Number(requiredAmount),
-        note: "Treasurer mandated fee",
+        note: "Membership chairman target contribution",
       });
-      setNotice("Required applicant fee set.");
+      setNotice("Applicant target contribution set.");
       setRequiredAmount("");
       await loadDashboard();
     } catch (err) {
@@ -396,15 +407,16 @@ export default function PortalDashboard() {
   };
 
   const addFeePayment = async () => {
-    if (!selectedFeeRequirementId || !paymentAmount) return;
+    if (!selectedApplication || !paymentAmount) return;
 
     setError("");
     setNotice("");
     try {
-      await api.post(`/member-applications/fee-requirements/${selectedFeeRequirementId}/payments`, {
+      await api.post(`/member-applications/${selectedApplication.id}/fee-payments`, {
+        category: selectedContributionCategory,
         amount: Number(paymentAmount),
       });
-      setNotice("Applicant payment logged.");
+      setNotice("Applicant partial/full payment logged.");
       setPaymentAmount("");
       await loadDashboard();
     } catch (err) {
@@ -463,17 +475,19 @@ export default function PortalDashboard() {
         <TaskHierarchyCard status={statusSummary} actions={availableActionsSummary} nextStep={nextStepSummary} />
       </div>
 
-      <div className="mb-4 rounded-xl border border-white/20 bg-white/10 p-4">
-        <h2 className="mb-2 font-heading text-xl text-offwhite">Role Glossary</h2>
-        <div className="grid gap-2 md:grid-cols-2">
-          {roleGlossary.map((item) => (
-            <div key={item.role} className="rounded border border-white/20 bg-white/5 px-3 py-2">
-              <p className="text-xs font-semibold uppercase tracking-wide text-gold-soft">{item.role}</p>
-              <p className="text-xs text-mist/85">{item.meaning}</p>
-            </div>
-          ))}
+      {isAdmin && (
+        <div className="mb-4 rounded-xl border border-white/20 bg-white/10 p-4">
+          <h2 className="mb-2 font-heading text-xl text-offwhite">Role Glossary</h2>
+          <div className="grid gap-2 md:grid-cols-2">
+            {roleGlossary.map((item) => (
+              <div key={item.role} className="rounded border border-white/20 bg-white/5 px-3 py-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gold-soft">{item.role}</p>
+                <p className="text-xs text-mist/85">{item.meaning}</p>
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {error && <p className="mb-4 rounded-md border border-red-300/30 bg-red-400/10 px-4 py-2 text-sm text-red-200" role="alert" aria-live="polite">{error}</p>}
       {notice && <p className="mb-4 rounded-md border border-gold/30 bg-gold/10 px-4 py-2 text-sm text-gold-soft" role="status" aria-live="polite">{notice}</p>}
@@ -543,16 +557,17 @@ export default function PortalDashboard() {
           </div>
 
           <div className="rounded-xl border border-white/20 bg-white/10 p-4">
-            <h2 className="mb-2 font-heading text-2xl text-offwhite">Mandated Contributions / Fees</h2>
-            <p className="text-sm text-mist/85">Required Total: <span className="text-offwhite">{money(applicantDetails.fees.required_total)}</span></p>
-            <p className="text-sm text-mist/85">Paid Total: <span className="text-offwhite">{money(applicantDetails.fees.paid_total)}</span></p>
-            <p className="text-sm text-mist/85">Balance: <span className="text-gold-soft">{money(applicantDetails.fees.balance)}</span></p>
+            <h2 className="mb-2 font-heading text-2xl text-offwhite">Applicant Journey Contributions</h2>
+            <p className="text-sm text-mist/85">Target Total: <span className="text-offwhite">{money(applicantDetails.fees.required_total)}</span></p>
+            <p className="text-sm text-mist/85">Partial/Full Paid Total: <span className="text-offwhite">{money(applicantDetails.fees.paid_total)}</span></p>
+            <p className="text-sm text-mist/85">Variance: <span className="text-gold-soft">{money(applicantDetails.fees.variance_total ?? applicantDetails.fees.balance)}</span></p>
             {applicantDetails.fees.requirements.map((req) => (
-              <div key={req.id} className="mt-2 rounded-md border border-white/20 bg-white/5 p-3">
-                <p className="text-sm text-offwhite">Requirement: {money(req.required_amount)}</p>
+              <div key={req.category} className="mt-2 rounded-md border border-white/20 bg-white/5 p-3">
+                <p className="text-sm text-offwhite">{req.category_label}</p>
+                <p className="text-xs text-mist/70">Target: {money(req.target_payment)} | Paid: {money(req.partial_payment_total)} | Variance: {money(req.variance)}</p>
                 <p className="text-xs text-mist/70">{req.note ?? "-"}</p>
                 {req.payments.map((p) => (
-                  <p key={p.id} className="text-xs text-mist/80">{p.payment_date} - {money(p.amount)} by {p.encoded_by?.name ?? "Treasurer"}</p>
+                  <p key={p.id} className="text-xs text-mist/80">{p.payment_date} - {money(p.amount)} by {p.encoded_by?.name ?? "Membership Chairman"}</p>
                 ))}
               </div>
             ))}
@@ -621,7 +636,7 @@ export default function PortalDashboard() {
         </div>
       )}
 
-      {(canChairmanReview || canTreasurerSetFee || canTreasurerPay || canChairmanSetNotice || canChairmanSetStage || canChairmanReviewDocs) && (
+      {(canChairmanReview || canChairmanSetContributionTarget || canChairmanLogContributionPayment || canChairmanSetNotice || canChairmanSetStage || canChairmanReviewDocs) && (
         <div className="mt-6 rounded-xl border border-white/20 bg-white/10 p-4">
           <h2 className="mb-3 font-heading text-2xl text-offwhite">Application Committee Panel</h2>
           <div className="mb-3 overflow-x-auto rounded-lg border border-white/20">
@@ -681,21 +696,31 @@ export default function PortalDashboard() {
                 </div>
               )}
 
-              {(canTreasurerSetFee || canTreasurerPay) && (
+              {(canChairmanSetContributionTarget || canChairmanLogContributionPayment) && (
                 <div className="flex flex-wrap items-center gap-2">
-                  {canTreasurerSetFee && (
+                  <label htmlFor="committee-contribution-category" className="text-xs font-semibold text-mist/85">Category</label>
+                  <select
+                    id="committee-contribution-category"
+                    value={selectedContributionCategory}
+                    onChange={(e) => setSelectedContributionCategory(e.target.value as "project" | "community_service" | "fellowship" | "five_i_activities")}
+                    className="rounded-md border border-white/25 bg-white/10 px-2 py-1 text-offwhite"
+                  >
+                    <option value="project" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Projects</option>
+                    <option value="community_service" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Community Service</option>
+                    <option value="fellowship" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Fellowship</option>
+                    <option value="five_i_activities" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>5I Activities</option>
+                  </select>
+                  {canChairmanSetContributionTarget && (
                     <>
-                      <label htmlFor="committee-required-fee" className="text-xs font-semibold text-mist/85">Required Fee</label>
-                      <input id="committee-required-fee" value={requiredAmount} onChange={(e) => setRequiredAmount(e.target.value)} type="number" step="0.01" placeholder="Required fee amount" className="rounded-md border border-white/25 bg-white/10 px-2 py-1 text-offwhite" />
-                      <button className="btn-secondary" onClick={() => void setFeeRequirement()}>Set Fee</button>
+                      <label htmlFor="committee-required-fee" className="text-xs font-semibold text-mist/85">Target Payment</label>
+                      <input id="committee-required-fee" value={requiredAmount} onChange={(e) => setRequiredAmount(e.target.value)} type="number" step="0.01" placeholder="Target amount" className="rounded-md border border-white/25 bg-white/10 px-2 py-1 text-offwhite" />
+                      <button className="btn-secondary" onClick={() => void setFeeRequirement()}>Set Target</button>
                     </>
                   )}
-                  {canTreasurerPay && (
+                  {canChairmanLogContributionPayment && (
                     <>
-                      <label htmlFor="committee-requirement-id" className="text-xs font-semibold text-mist/85">Requirement ID</label>
-                      <input id="committee-requirement-id" value={selectedFeeRequirementId ?? ""} onChange={(e) => setSelectedFeeRequirementId(Number(e.target.value) || null)} placeholder="Requirement ID" className="w-[8rem] rounded-md border border-white/25 bg-white/10 px-2 py-1 text-offwhite" />
-                      <label htmlFor="committee-payment-amount" className="text-xs font-semibold text-mist/85">Payment Amount</label>
-                      <input id="committee-payment-amount" value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} type="number" step="0.01" placeholder="Payment amount" className="rounded-md border border-white/25 bg-white/10 px-2 py-1 text-offwhite" />
+                      <label htmlFor="committee-payment-amount" className="text-xs font-semibold text-mist/85">Partial/Full Payment</label>
+                      <input id="committee-payment-amount" value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} type="number" step="0.01" placeholder="Amount paid" className="rounded-md border border-white/25 bg-white/10 px-2 py-1 text-offwhite" />
                       <button className="btn-secondary" onClick={() => void addFeePayment()}>Log Payment</button>
                     </>
                   )}

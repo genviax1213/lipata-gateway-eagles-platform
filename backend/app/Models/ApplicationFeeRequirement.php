@@ -9,8 +9,21 @@ class ApplicationFeeRequirement extends Model
 {
     use HasFactory;
 
+    public const CATEGORY_PROJECT = 'project';
+    public const CATEGORY_COMMUNITY_SERVICE = 'community_service';
+    public const CATEGORY_FELLOWSHIP = 'fellowship';
+    public const CATEGORY_FIVE_I_ACTIVITIES = 'five_i_activities';
+
+    public const CATEGORY_LABELS = [
+        self::CATEGORY_PROJECT => 'Projects',
+        self::CATEGORY_COMMUNITY_SERVICE => 'Community Service',
+        self::CATEGORY_FELLOWSHIP => 'Fellowship',
+        self::CATEGORY_FIVE_I_ACTIVITIES => "5I Activities",
+    ];
+
     protected $fillable = [
         'member_application_id',
+        'category',
         'required_amount',
         'note',
         'set_by_user_id',

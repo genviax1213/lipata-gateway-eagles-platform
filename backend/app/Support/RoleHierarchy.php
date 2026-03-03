@@ -36,8 +36,6 @@ class RoleHierarchy
             Permissions::FINANCE_VIEW,
             Permissions::FINANCE_INPUT,
             Permissions::FINANCE_REQUEST_EDIT,
-            Permissions::APPLICATIONS_FEE_SET,
-            Permissions::APPLICATIONS_FEE_PAY,
         ];
     }
 

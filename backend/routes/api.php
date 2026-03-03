@@ -36,7 +36,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/logout', [AuthController::class, 'logout']);
         Route::get('/dashboard/me', [DashboardController::class, 'me']);
         Route::get('/dashboard/treasurer', [DashboardController::class, 'treasurer'])
-            ->middleware('portal.permission:applications.fee.set,applications.fee.pay');
+            ->middleware('portal.permission:finance.input');
 
         Route::get('/cms/posts', [PostController::class, 'index'])->middleware('portal.permission:posts.create');
         Route::post('/cms/posts', [PostController::class, 'store'])->middleware('portal.permission:posts.create');
@@ -57,8 +57,9 @@ Route::prefix('v1')->group(function () {
         Route::post('/member-applications/documents/{document}/review', [MemberApplicationController::class, 'reviewDocument'])->middleware('role.required:membership_chairman');
         Route::post('/member-applications/{memberApplication}/stage', [MemberApplicationController::class, 'setStage'])->middleware('role.required:membership_chairman');
         Route::post('/member-applications/{memberApplication}/notice', [MemberApplicationController::class, 'setNotice'])->middleware('role.required:membership_chairman');
-        Route::post('/member-applications/{memberApplication}/fee-requirements', [MemberApplicationController::class, 'setFeeRequirement'])->middleware('portal.permission:applications.fee.set');
-        Route::post('/member-applications/fee-requirements/{applicationFeeRequirement}/payments', [MemberApplicationController::class, 'addFeePayment'])->middleware('portal.permission:applications.fee.pay');
+        Route::post('/member-applications/{memberApplication}/fee-requirements', [MemberApplicationController::class, 'setFeeRequirement'])->middleware('role.required:membership_chairman');
+        Route::post('/member-applications/{memberApplication}/fee-payments', [MemberApplicationController::class, 'addCategoryFeePayment'])->middleware('role.required:membership_chairman');
+        Route::post('/member-applications/fee-requirements/{applicationFeeRequirement}/payments', [MemberApplicationController::class, 'addFeePayment'])->middleware('role.required:membership_chairman');
         Route::post('/member-applications/{memberApplication}/approve', [MemberApplicationController::class, 'approve'])->middleware('role.required:membership_chairman');
         Route::post('/member-applications/{memberApplication}/probation', [MemberApplicationController::class, 'setProbation'])->middleware('role.required:membership_chairman');
         Route::post('/member-applications/{memberApplication}/reject', [MemberApplicationController::class, 'reject'])->middleware('role.required:membership_chairman');

@@ -35,8 +35,8 @@ class RoleSeeder extends Seeder
             'applications.docs.review' => 'Approve/reject applicant documents',
             'applications.docs.upload' => 'Upload applicant documents',
             'applications.dashboard.view' => 'View applicant dashboard',
-            'applications.fee.set' => 'Set required applicant fees',
-            'applications.fee.pay' => 'Log applicant fee payments',
+            'applications.fee.set' => 'Set applicant journey contribution target payments',
+            'applications.fee.pay' => 'Log applicant journey contribution partial/full payments',
         ];
 
         $permissionIds = [];
@@ -128,8 +128,6 @@ class RoleSeeder extends Seeder
             $permissionIds['forum.view'],
             $permissionIds['forum.create_thread'],
             $permissionIds['forum.reply'],
-            $permissionIds['applications.fee.set'],
-            $permissionIds['applications.fee.pay'],
         ]);
 
         $auditor->permissions()->sync([
@@ -154,6 +152,8 @@ class RoleSeeder extends Seeder
             $permissionIds['applications.notice.set'],
             $permissionIds['applications.stage.set'],
             $permissionIds['applications.docs.review'],
+            $permissionIds['applications.fee.set'],
+            $permissionIds['applications.fee.pay'],
         ]);
     }
 }
