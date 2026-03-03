@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Models\Role;
 use App\Models\User;
+use RuntimeException;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 
@@ -11,7 +12,10 @@ class TemporaryLoginSeeder extends Seeder
 {
     public function run(): void
     {
-        $tempPassword = (string) env('TEMP_LOGIN_PASSWORD', 'TempPass!2026');
+        $tempPassword = trim((string) env('TEMP_LOGIN_PASSWORD', ''));
+        if ($tempPassword === '') {
+            throw new RuntimeException('TEMP_LOGIN_PASSWORD must be set before running TemporaryLoginSeeder.');
+        }
 
         $roles = Role::query()
             ->whereIn('name', ['admin', 'officer', 'member', 'treasurer', 'auditor', 'applicant', 'membership_chairman'])
@@ -101,6 +105,7 @@ class TemporaryLoginSeeder extends Seeder
                 [
                     'name' => $account['name'],
                     'password' => Hash::make($tempPassword),
+                    'email_verified_at' => now(),
                     'role_id' => $roleId,
                     'finance_role' => $account['finance_role'],
                     'forum_role' => $account['forum_role'],

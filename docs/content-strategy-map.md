@@ -28,7 +28,7 @@
 - Canonical password reset: `/member-reset-password`
 
 ## Homepage vs Activities Intent
-- Homepage `Community In Action` (`homepage_community`):
+- Homepage `Community In Action` (featured `activities`):
   - Purpose: curated highlights and high-impact teaser stories.
   - Scope: limited subset designed to drive exploration.
   - Primary CTA: `Read Article` and `View Activities`.
@@ -38,9 +38,9 @@
   - Primary CTA: deep reading and historical reference.
 
 Editorial rule:
-- If content is selected as a top highlight, publish to `homepage_community`.
-- If content is part of the complete activity record, publish to `activities`.
-- A post may appear in both only when intentionally promoted, with homepage treated as teaser and Activities as canonical archive context.
+- Publish activity content to `activities`.
+- Mark selected `activities` posts as featured to surface them in homepage highlights.
+- Activities remains the canonical archive; homepage remains the teaser surface.
 
 ## Microcopy Standards
 - Errors: short, specific, action-oriented

@@ -302,7 +302,7 @@ class RolePermissionAuthorizationTest extends TestCase
         $memberCreate->assertStatus(200);
     }
 
-    public function test_admin_cannot_access_finance_without_finance_role(): void
+    public function test_admin_can_view_finance_members_without_finance_secondary_role(): void
     {
         $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
         $admin = User::factory()->create([
@@ -313,6 +313,36 @@ class RolePermissionAuthorizationTest extends TestCase
         Sanctum::actingAs($admin);
 
         $response = $this->getJson('/api/v1/finance/members');
+
+        $response->assertStatus(200);
+    }
+
+    public function test_admin_cannot_input_contribution_without_finance_secondary_role(): void
+    {
+        $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
+        $admin = User::factory()->create([
+            'email' => 'admin-view-only@lipataeagles.ph',
+            'role_id' => $adminRole->id,
+            'finance_role' => null,
+        ]);
+        $target = Member::query()->create([
+            'member_number' => 'M-ADM-VIEW-001',
+            'first_name' => 'View',
+            'middle_name' => null,
+            'last_name' => 'Only',
+            'email' => 'view-only-target@example.com',
+            'membership_status' => 'active',
+        ]);
+
+        Sanctum::actingAs($admin);
+
+        $response = $this->postJson('/api/v1/finance/contributions', [
+            'member_id' => $target->id,
+            'member_email' => $target->email,
+            'amount' => 500,
+            'category' => 'monthly_contribution',
+            'contribution_date' => now()->toDateString(),
+        ]);
 
         $response->assertStatus(403);
     }

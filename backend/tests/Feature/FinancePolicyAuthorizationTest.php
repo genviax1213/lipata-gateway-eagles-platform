@@ -297,4 +297,82 @@ class FinancePolicyAuthorizationTest extends TestCase
         $this->getJson('/api/v1/finance/members')
             ->assertStatus(200);
     }
+
+    public function test_member_without_finance_role_cannot_view_compliance_report(): void
+    {
+        $memberRole = Role::query()->where('name', 'member')->firstOrFail();
+        $member = User::factory()->create(['role_id' => $memberRole->id]);
+
+        Sanctum::actingAs($member);
+
+        $this->getJson('/api/v1/finance/compliance?month=2026-03&years[]=2026')
+            ->assertStatus(403);
+    }
+
+    public function test_auditor_can_view_compliance_report_and_non_compliance_flags(): void
+    {
+        $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
+        $auditor = User::factory()->create([
+            'role_id' => $adminRole->id,
+            'finance_role' => 'auditor',
+        ]);
+
+        $memberCompliant = Member::query()->create([
+            'member_number' => 'M-COMP-001',
+            'first_name' => 'Compliant',
+            'middle_name' => null,
+            'last_name' => 'Member',
+            'email' => 'compliant-member@example.com',
+            'membership_status' => 'active',
+        ]);
+
+        $memberNonCompliant = Member::query()->create([
+            'member_number' => 'M-COMP-002',
+            'first_name' => 'Non',
+            'middle_name' => null,
+            'last_name' => 'Compliant',
+            'email' => 'noncompliant-member@example.com',
+            'membership_status' => 'active',
+        ]);
+
+        Contribution::query()->create([
+            'member_id' => $memberCompliant->id,
+            'category' => 'monthly_contribution',
+            'contribution_date' => '2026-03-01',
+            'amount' => 500,
+            'note' => 'Monthly due',
+            'encoded_by_user_id' => $auditor->id,
+            'encoded_at' => now(),
+        ]);
+        Contribution::query()->create([
+            'member_id' => $memberCompliant->id,
+            'category' => 'project_contribution',
+            'contribution_date' => '2026-01-15',
+            'amount' => 1000,
+            'note' => 'Project support',
+            'encoded_by_user_id' => $auditor->id,
+            'encoded_at' => now(),
+        ]);
+
+        Sanctum::actingAs($auditor);
+
+        $response = $this->getJson('/api/v1/finance/compliance?month=2026-03&years[]=2026&non_compliant_only=false');
+
+        $response->assertStatus(200)
+            ->assertJsonPath('filters.month', '2026-03')
+            ->assertJsonPath('filters.years.0', 2026);
+
+        $rows = collect($response->json('data'));
+        $compliantRow = $rows->firstWhere('member.id', $memberCompliant->id);
+        $nonCompliantRow = $rows->firstWhere('member.id', $memberNonCompliant->id);
+
+        $this->assertNotNull($compliantRow);
+        $this->assertNotNull($nonCompliantRow);
+        $this->assertTrue((bool) $compliantRow['has_monthly_for_month']);
+        $this->assertSame([], $compliantRow['missing_project_years']);
+        $this->assertFalse((bool) $compliantRow['is_non_compliant']);
+        $this->assertFalse((bool) $nonCompliantRow['has_monthly_for_month']);
+        $this->assertSame([2026], $nonCompliantRow['missing_project_years']);
+        $this->assertTrue((bool) $nonCompliantRow['is_non_compliant']);
+    }
 }

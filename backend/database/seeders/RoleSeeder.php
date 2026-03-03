@@ -50,7 +50,7 @@ class RoleSeeder extends Seeder
 
         $admin = Role::query()->updateOrCreate(
             ['name' => 'admin'],
-            ['description' => 'Administrative access except finance']
+            ['description' => 'Administrative access with finance view-only baseline']
         );
 
         $officer = Role::query()->updateOrCreate(
@@ -93,6 +93,7 @@ class RoleSeeder extends Seeder
             $permissionIds['members.update'],
             $permissionIds['members.delete'],
             $permissionIds['roles.delegate'],
+            $permissionIds['finance.view'],
             $permissionIds['forum.view'],
             $permissionIds['forum.create_thread'],
             $permissionIds['forum.reply'],

@@ -46,9 +46,9 @@ Route::prefix('v1')->group(function () {
         Route::delete('/cms/posts/{post}', [PostController::class, 'destroy'])->middleware('portal.permission:posts.delete');
 
         Route::get('/members', [MemberController::class, 'index'])->middleware('portal.permission:members.view');
-        Route::post('/members', [MemberController::class, 'store']);
-        Route::put('/members/{member}', [MemberController::class, 'update'])->middleware('portal.permission:members.update');
-        Route::delete('/members/{member}', [MemberController::class, 'destroy'])->middleware('portal.permission:members.delete');
+        Route::post('/members', [MemberController::class, 'store'])->middleware('throttle:members-write');
+        Route::put('/members/{member}', [MemberController::class, 'update'])->middleware('throttle:members-write', 'portal.permission:members.update');
+        Route::delete('/members/{member}', [MemberController::class, 'destroy'])->middleware('throttle:members-write', 'portal.permission:members.delete');
         Route::get('/member-applications', [MemberApplicationController::class, 'index'])->middleware('portal.permission:members.view');
         Route::get('/member-applications/me', [MemberApplicationController::class, 'myApplication'])->middleware('portal.permission:applications.dashboard.view');
         Route::get('/member-applications/{memberApplication}', [MemberApplicationController::class, 'show'])->middleware('portal.permission:members.view');
@@ -73,6 +73,7 @@ Route::prefix('v1')->group(function () {
         Route::put('/admin/users/{user}/role', [AdminUserController::class, 'updateRole'])->middleware('portal.permission:roles.delegate');
 
         Route::get('/finance/members', [FinanceController::class, 'searchMembers'])->middleware('portal.permission:finance.view');
+        Route::get('/finance/compliance', [FinanceController::class, 'complianceReport'])->middleware('portal.permission:finance.view');
         Route::get('/finance/my-contributions', [FinanceController::class, 'myContributions']);
         Route::get('/finance/members/{member}/contributions', [FinanceController::class, 'memberContributions'])->middleware('portal.permission:finance.view');
         Route::post('/finance/contributions', [FinanceController::class, 'storeContribution'])->middleware('portal.permission:finance.input');
