@@ -6,10 +6,9 @@ import { htmlToPlainText } from "../utils/richText";
 import { canonicalRoutes } from "../content/portalCopy";
 
 export default function Landing() {
+  const [heroPosts, setHeroPosts] = useState<CmsPost[]>([]);
   const [heroPost, setHeroPost] = useState<CmsPost | null>(null);
   const [communityPosts, setCommunityPosts] = useState<CmsPost[]>([]);
-  const [communityPage, setCommunityPage] = useState(1);
-  const [communityLastPage, setCommunityLastPage] = useState(1);
   const [loadingCommunity, setLoadingCommunity] = useState(true);
   const heroContentPreview = heroPost?.content
     ? htmlToPlainText(heroPost.content).replace(/\s+/g, " ").trim()
@@ -29,11 +28,16 @@ export default function Landing() {
       try {
         const res = await api.get("/content/homepage_hero");
         if (!mounted) return;
-        const heroItems = Array.isArray(res.data) ? res.data : [];
-        const withImage = heroItems.find((item) => Boolean((item as CmsPost).image_url)) as CmsPost | undefined;
-        setHeroPost(withImage ?? ((heroItems[0] as CmsPost | undefined) ?? null));
+        const heroItems = Array.isArray(res.data) ? (res.data as CmsPost[]) : [];
+        const withImage = heroItems.filter((item) => Boolean(item.image_url));
+        const selected = withImage.length > 0 ? withImage : heroItems;
+        setHeroPosts(selected);
+        setHeroPost(selected[0] ?? null);
       } catch {
-        if (mounted) setHeroPost(null);
+        if (mounted) {
+          setHeroPosts([]);
+          setHeroPost(null);
+        }
       }
     };
 
@@ -49,37 +53,14 @@ export default function Landing() {
 
     const load = async () => {
       try {
-        const featuredRes = await api.get("/content/activities", {
-          params: {
-            paginate: true,
-            page: communityPage,
-            per_page: 6,
-            featured_only: true,
-          },
-        });
+        const res = await api.get("/content/homepage_community");
 
         if (!mounted) return;
-
-        const featuredData = Array.isArray(featuredRes.data?.data) ? (featuredRes.data.data as CmsPost[]) : [];
-        if (featuredData.length > 0) {
-          setCommunityPosts(featuredData);
-          setCommunityLastPage(Number(featuredRes.data?.last_page ?? 1));
-        } else {
-          const fallbackRes = await api.get("/content/activities", {
-            params: {
-              paginate: true,
-              page: communityPage,
-              per_page: 6,
-            },
-          });
-          const fallbackData = Array.isArray(fallbackRes.data?.data) ? (fallbackRes.data.data as CmsPost[]) : [];
-          setCommunityPosts(fallbackData);
-          setCommunityLastPage(Number(fallbackRes.data?.last_page ?? 1));
-        }
+        const data = Array.isArray(res.data) ? (res.data as CmsPost[]) : [];
+        setCommunityPosts(data);
       } catch {
         if (!mounted) return;
         setCommunityPosts([]);
-        setCommunityLastPage(1);
       }
       setLoadingCommunity(false);
     };
@@ -89,7 +70,22 @@ export default function Landing() {
     return () => {
       mounted = false;
     };
-  }, [communityPage]);
+  }, []);
+
+  useEffect(() => {
+    if (heroPosts.length <= 1) return;
+
+    const timer = setInterval(() => {
+      setHeroPost((current) => {
+        if (!current) return heroPosts[0] ?? null;
+        const currentIndex = heroPosts.findIndex((item) => item.id === current.id);
+        const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % heroPosts.length : 0;
+        return heroPosts[nextIndex] ?? null;
+      });
+    }, 5000);
+
+    return () => clearInterval(timer);
+  }, [heroPosts]);
 
   return (
     <section className="hero-gradient relative overflow-hidden">
@@ -192,8 +188,8 @@ export default function Landing() {
       <div className="section-wrap relative z-10 pb-16">
         <h2 className="mb-4 font-heading text-3xl text-offwhite">Community In Action</h2>
         <p className="mb-5 max-w-3xl text-sm text-mist/85">
-          Curated highlights from our most visible initiatives. For the complete activity archive and full timeline,
-          visit the Activities page.
+          Curated highlights from our homepage_community CMS section. For the complete activity archive and full
+          timeline, visit the Activities page.
         </p>
 
         {communityPosts.length > 0 ? (
@@ -227,8 +223,8 @@ export default function Landing() {
         ) : (
           !loadingCommunity && (
             <div className="rounded-xl border border-white/20 bg-white/5 p-6 text-sm text-mist/80">
-              No featured activity highlights yet. Add published posts in CMS section
-              <span className="ml-1 text-gold-soft">activities</span> and set them as featured.
+              No community highlights yet. Add published posts in CMS section
+              <span className="ml-1 text-gold-soft">homepage_community</span>.
               <div className="mt-3">
                 <Link to="/activities" className="text-gold-soft hover:text-gold">
                   Browse Activities Archive
@@ -236,36 +232,6 @@ export default function Landing() {
               </div>
             </div>
           )
-        )}
-
-        {(communityPosts.length > 0 || loadingCommunity) && (
-          <div className="mt-6 flex items-center justify-center gap-4 text-sm text-mist/90">
-            <button
-              type="button"
-              disabled={communityPage === 1}
-              onClick={() => {
-                setLoadingCommunity(true);
-                setCommunityPage((p) => Math.max(1, p - 1));
-              }}
-              className="rounded-md border border-white/25 px-4 py-2 disabled:opacity-50"
-            >
-              Prev
-            </button>
-            <span>
-              Page {communityPage} of {communityLastPage}
-            </span>
-            <button
-              type="button"
-              disabled={communityPage >= communityLastPage}
-              onClick={() => {
-                setLoadingCommunity(true);
-                setCommunityPage((p) => Math.min(communityLastPage, p + 1));
-              }}
-              className="rounded-md border border-white/25 px-4 py-2 disabled:opacity-50"
-            >
-              Next
-            </button>
-          </div>
         )}
       </div>
     </section>
