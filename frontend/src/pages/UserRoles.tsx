@@ -141,6 +141,15 @@ export default function UserRoles() {
     }
   };
 
+  const resetRoleSelection = () => {
+    setSelectedMemberId(null);
+    setSelectedRoleId("");
+    setSelectedFinanceRole("");
+    setSelectedForumRole("");
+    setError("");
+    setNotice("");
+  };
+
   if (!canDelegateRoles) {
     return (
       <section>
@@ -268,6 +277,14 @@ export default function UserRoles() {
             className="btn-primary disabled:opacity-45"
           >
             {saving ? "Saving..." : "Save Roles"}
+          </button>
+          <button
+            type="button"
+            onClick={resetRoleSelection}
+            disabled={saving}
+            className="rounded-md border border-white/30 px-3 py-2 text-sm text-offwhite/90 transition hover:bg-white/10 disabled:opacity-45"
+          >
+            Cancel
           </button>
         </div>
       </div>

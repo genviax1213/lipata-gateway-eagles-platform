@@ -17,7 +17,8 @@ export default function Members() {
   const [members, setMembers] = useState<Member[]>([]);
   const [applications, setApplications] = useState<MemberApplication[]>([]);
   const [search, setSearch] = useState("");
-  const [status, setStatus] = useState("");
+  const [emailVerifiedFilter, setEmailVerifiedFilter] = useState("");
+  const [passwordSetFilter, setPasswordSetFilter] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [lastPage, setLastPage] = useState(1);
 
@@ -28,17 +29,22 @@ export default function Members() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
-  const fetchMembers = useCallback(async (page = 1, filters?: { search: string; status: string }) => {
+  const fetchMembers = useCallback(async (page = 1, filters?: { search: string; email_verified: string; password_set: string }) => {
     setError("");
-    const activeFilters = filters ?? { search, status };
+    const activeFilters = filters ?? { search, email_verified: emailVerifiedFilter, password_set: passwordSetFilter };
     const res = await api.get("/members", {
-      params: { page, search: activeFilters.search, status: activeFilters.status },
+      params: {
+        page,
+        search: activeFilters.search,
+        email_verified: activeFilters.email_verified,
+        password_set: activeFilters.password_set,
+      },
     });
 
     setMembers(res.data.data);
     setCurrentPage(res.data.current_page);
     setLastPage(res.data.last_page);
-  }, [search, status]);
+  }, [emailVerifiedFilter, passwordSetFilter, search]);
 
   const fetchApplications = useCallback(async () => {
     if (!canApproveApplications) return;
@@ -50,7 +56,7 @@ export default function Members() {
     if (!canViewMembers) return;
 
     const timer = setTimeout(() => {
-      void fetchMembers(1, { search: "", status: "" }).catch(() => {
+      void fetchMembers(1, { search: "", email_verified: "", password_set: "" }).catch(() => {
         setError("Unable to load members.");
       });
 
@@ -95,7 +101,7 @@ export default function Members() {
       await api.post(`/member-applications/${applicationId}/approve`);
       setNotice("Application approved and member created.");
       await fetchApplications();
-      await fetchMembers(1, { search, status });
+      await fetchMembers(1, { search, email_verified: emailVerifiedFilter, password_set: passwordSetFilter });
     } catch (err: unknown) {
       if (axios.isAxiosError(err)) {
         setError(((err.response?.data as { message?: string } | undefined)?.message) ?? "Failed to approve application.");
@@ -193,24 +199,33 @@ export default function Members() {
         </div>
       )}
 
-      <div className="mb-6 grid gap-4 rounded-xl border border-white/20 bg-white/10 p-4 md:grid-cols-[1fr_220px_auto]">
+      <div className="mb-6 grid gap-4 rounded-xl border border-white/20 bg-white/10 p-4 md:grid-cols-[1fr_220px_220px_auto]">
         <input
           aria-label="Search members"
-          placeholder="Search..."
+          placeholder="Search by member no., name, or email..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite placeholder:text-mist/70 focus:border-gold focus:outline-none"
         />
         <select
-          aria-label="Filter members by status"
-          value={status}
-          onChange={(e) => setStatus(e.target.value)}
+          aria-label="Filter members by email verification"
+          value={emailVerifiedFilter}
+          onChange={(e) => setEmailVerifiedFilter(e.target.value)}
           className="rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite focus:border-gold focus:outline-none"
         >
           <option value="" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>All</option>
-          <option value="active" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Active</option>
-          <option value="inactive" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Inactive</option>
-          <option value="applicant" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Applicant</option>
+          <option value="true" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Email Verified</option>
+          <option value="false" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Email Not Verified</option>
+        </select>
+        <select
+          aria-label="Filter members by password state"
+          value={passwordSetFilter}
+          onChange={(e) => setPasswordSetFilter(e.target.value)}
+          className="rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite focus:border-gold focus:outline-none"
+        >
+          <option value="" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>All</option>
+          <option value="true" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Password Set</option>
+          <option value="false" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Password Not Set</option>
         </select>
         <button onClick={() => void fetchMembers(1)} className="btn-primary">Search</button>
       </div>
@@ -221,9 +236,11 @@ export default function Members() {
             <tr>
               <th className="px-4 py-3 text-left">#</th>
               <th className="px-4 py-3 text-left">Name</th>
+              <th className="px-4 py-3 text-left">Email</th>
               <th className="px-4 py-3 text-left">Batch</th>
               <th className="px-4 py-3 text-left">Contact</th>
-              <th className="px-4 py-3 text-left">Status</th>
+              <th className="px-4 py-3 text-left">Email Verified</th>
+              <th className="px-4 py-3 text-left">Password Set</th>
               <th className="px-4 py-3 text-left">Actions</th>
             </tr>
           </thead>
@@ -232,11 +249,17 @@ export default function Members() {
               <tr key={m.id} className="border-b border-white/15">
                 <td className="px-4 py-3">{m.member_number}</td>
                 <td className="px-4 py-3">{m.first_name} {m.middle_name ? `${m.middle_name} ` : ""}{m.last_name}</td>
+                <td className="px-4 py-3">{m.email ?? "—"}</td>
                 <td className="px-4 py-3">{m.batch ?? "—"}</td>
                 <td className="px-4 py-3">{m.contact_number ?? "—"}</td>
                 <td className="px-4 py-3">
-                  <span className="rounded-full border border-white/20 bg-white/10 px-2.5 py-1 text-xs capitalize text-gold-soft">
-                    {m.membership_status}
+                  <span className={`rounded-full border px-2.5 py-1 text-xs ${m.email_verified ? "border-emerald-300/50 bg-emerald-400/10 text-emerald-200" : "border-red-300/40 bg-red-400/10 text-red-200"}`}>
+                    {m.email_verified ? "Verified" : "Not Verified"}
+                  </span>
+                </td>
+                <td className="px-4 py-3">
+                  <span className={`rounded-full border px-2.5 py-1 text-xs ${m.password_set ? "border-emerald-300/50 bg-emerald-400/10 text-emerald-200" : "border-red-300/40 bg-red-400/10 text-red-200"}`}>
+                    {m.password_set ? "Set" : "Not Set"}
                   </span>
                 </td>
                 <td className="px-4 py-3 space-x-3">
@@ -258,7 +281,7 @@ export default function Members() {
             ))}
             {members.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-mist/80">No members found for the current filters.</td>
+                <td colSpan={8} className="px-4 py-8 text-center text-mist/80">No members found for the current filters.</td>
               </tr>
             )}
           </tbody>

@@ -24,6 +24,10 @@ const initialForm: ApplicationForm = {
   membership_status: "applicant",
 };
 
+function normalizeEmail(value: string): string {
+  return value.trim().toLowerCase();
+}
+
 export default function MemberApplication() {
   const [form, setForm] = useState<ApplicationForm>(initialForm);
   const [verificationEmail, setVerificationEmail] = useState("");
@@ -54,7 +58,7 @@ export default function MemberApplication() {
     const firstName = form.first_name.trim();
     const middleName = form.middle_name.trim();
     const lastName = form.last_name.trim();
-    const email = form.email.trim();
+    const email = normalizeEmail(form.email);
 
     if (!email || !firstName || !middleName || !lastName || !form.membership_status || !form.password || !form.password_confirmation) {
       return microcopy.errors.required;
@@ -95,7 +99,7 @@ export default function MemberApplication() {
     try {
       const payload = {
         ...form,
-        email: form.email.trim(),
+        email: normalizeEmail(form.email),
         first_name: form.first_name.trim(),
         middle_name: form.middle_name.trim(),
         last_name: form.last_name.trim(),
@@ -124,7 +128,7 @@ export default function MemberApplication() {
 
     try {
       await api.post("/member-applications/verify", {
-        email: verificationEmail.trim(),
+        email: normalizeEmail(verificationEmail),
         verification_token: verificationToken.trim(),
       });
       setNotice(microcopy.success.applicationVerified);

@@ -1,6 +1,7 @@
 export interface Member {
   id: number;
   member_number: string;
+  email: string | null;
   first_name: string;
   middle_name: string | null;
   last_name: string;
@@ -11,10 +12,13 @@ export interface Member {
   batch: string | null;
   induction_date: string | null;
   membership_status: "active" | "inactive" | "applicant";
+  email_verified: boolean;
+  password_set: boolean;
 }
 
 export interface MemberForm {
   member_number: string;
+  email: string;
   first_name: string;
   middle_name: string;
   last_name: string;
@@ -24,7 +28,9 @@ export interface MemberForm {
   date_of_birth: string;
   batch: string;
   induction_date: string;
-  membership_status: Member["membership_status"];
+  membership_status?: Member["membership_status"];
+  email_verified: boolean;
+  password_set: boolean;
 }
 
 export interface MemberApplication {

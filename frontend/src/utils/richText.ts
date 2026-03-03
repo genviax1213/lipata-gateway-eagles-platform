@@ -49,6 +49,20 @@ function looksLikeHtml(value: string): boolean {
   return /<\s*\/?\s*[a-z][^>]*>/i.test(value);
 }
 
+function looksLikeFileName(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return false;
+  return /^[\w\-./ ]+\.(jpg|jpeg|png|webp|gif|svg|avif)$/.test(normalized);
+}
+
+function isEditorPlaceholderLabel(value: string): boolean {
+  return value.trim().toLowerCase() === "type image label here...";
+}
+
+function isGenericImageLabel(value: string): boolean {
+  return value.trim().toLowerCase() === "image";
+}
+
 function plainTextToHtml(value: string): string {
   const normalized = value.replace(/\r\n/g, "\n").trim();
   if (!normalized) return "<p></p>";
@@ -73,12 +87,93 @@ export function normalizeRichHtml(value: string): string {
 
 export function sanitizeRichHtml(value: string): string {
   const html = normalizeRichHtml(value);
-  return DOMPurify.sanitize(html, {
+  const sanitized = DOMPurify.sanitize(html, {
     ALLOWED_TAGS: [...ALLOWED_TAGS],
     ALLOWED_ATTR: [...ALLOWED_ATTR],
     FORBID_TAGS: ["script", "style", "iframe", "object", "embed", "form"],
     ALLOW_DATA_ATTR: false,
   });
+
+  if (typeof document === "undefined") {
+    return sanitized;
+  }
+
+  const container = document.createElement("div");
+  container.innerHTML = sanitized;
+
+  const hasLabelBeforeNextImage = (image: Element): boolean => {
+    let sibling = image.nextElementSibling;
+    while (sibling) {
+      if (sibling.tagName.toLowerCase() === "img") {
+        return false;
+      }
+      if (sibling.classList.contains("image-label")) {
+        return true;
+      }
+      sibling = sibling.nextElementSibling;
+    }
+    return false;
+  };
+
+  container.querySelectorAll("img").forEach((image) => {
+    if (hasLabelBeforeNextImage(image)) {
+      return;
+    }
+
+    const alt = (image.getAttribute("alt") || "").trim();
+    const title = (image.getAttribute("title") || "").trim();
+    const labelCandidate = alt || title;
+    const labelText = labelCandidate && !looksLikeFileName(labelCandidate) ? labelCandidate : "Image";
+
+    const label = document.createElement("p");
+    label.className = "image-label";
+    label.textContent = labelText;
+    image.insertAdjacentElement("afterend", label);
+  });
+
+  container.querySelectorAll("p.image-label").forEach((label) => {
+    const text = (label.textContent || "").trim();
+    if (isEditorPlaceholderLabel(text)) {
+      label.remove();
+      return;
+    }
+    if (!text || looksLikeFileName(text)) {
+      label.textContent = "Image";
+    }
+  });
+
+  // If a meaningful label exists for an image, remove redundant generic "Image" labels in that image block.
+  container.querySelectorAll("img").forEach((image) => {
+    const labels: HTMLParagraphElement[] = [];
+    let sibling = image.nextElementSibling;
+    while (sibling) {
+      if (sibling.tagName.toLowerCase() === "img") {
+        break;
+      }
+      if (sibling.tagName.toLowerCase() === "p" && sibling.classList.contains("image-label")) {
+        labels.push(sibling as HTMLParagraphElement);
+      }
+      sibling = sibling.nextElementSibling;
+    }
+
+    if (labels.length < 2) return;
+
+    const hasMeaningful = labels.some((label) => {
+      const text = (label.textContent || "").trim();
+      return text !== "" && !isGenericImageLabel(text) && !isEditorPlaceholderLabel(text) && !looksLikeFileName(text);
+    });
+
+    if (!hasMeaningful) return;
+
+    labels.forEach((label) => {
+      const text = (label.textContent || "").trim();
+      if (isGenericImageLabel(text)) {
+        label.remove();
+      }
+    });
+  });
+
+  return container.innerHTML;
 }
 
 export function htmlToPlainText(value: string): string {

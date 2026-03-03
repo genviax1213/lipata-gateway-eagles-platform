@@ -17,6 +17,9 @@ let csrfCookieLoaded = false;
 const api = axios.create({
   baseURL: apiBaseUrl,
   withCredentials: true,
+  withXSRFToken: true,
+  xsrfCookieName: "XSRF-TOKEN",
+  xsrfHeaderName: "X-XSRF-TOKEN",
 });
 
 export async function ensureCsrfCookie(force = false): Promise<void> {
@@ -27,16 +30,27 @@ export async function ensureCsrfCookie(force = false): Promise<void> {
   ];
 
   let lastError: unknown = null;
-  for (const endpoint of candidates) {
+  for (let i = 0; i < candidates.length; i++) {
+    const endpoint = candidates[i];
     try {
-      await axios.get(endpoint, { withCredentials: true });
+      await axios.get(endpoint, {
+        withCredentials: true,
+        withXSRFToken: true,
+        xsrfCookieName: "XSRF-TOKEN",
+        xsrfHeaderName: "X-XSRF-TOKEN",
+      });
       csrfCookieLoaded = true;
+      if (i > 0) {
+        console.debug(`CSRF cookie obtained from fallback endpoint: ${endpoint}`);
+      }
       return;
     } catch (error) {
+      console.debug(`CSRF cookie endpoint failed (${i + 1}/${candidates.length}): ${endpoint}`);
       lastError = error;
     }
   }
 
+  console.error("All CSRF cookie endpoints failed. Using token mode may require explicit configuration.");
   throw lastError;
 }
 
