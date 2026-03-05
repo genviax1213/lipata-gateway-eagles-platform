@@ -143,6 +143,30 @@ export default function Logs() {
     }
   };
 
+  const downloadSelectedArchive = async () => {
+    if (!selectedArchive) return;
+    setError("");
+    setNotice("");
+    try {
+      const response = await api.get(`/admin/logs/archives/${encodeURIComponent(selectedArchive)}/download`, {
+        responseType: "blob",
+      });
+
+      const blob = new Blob([response.data], { type: "application/gzip" });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = selectedArchive;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      setNotice("Archive download started.");
+    } catch (err) {
+      setError(parseError(err, "Unable to download selected archive."));
+    }
+  };
+
   const archiveOptions = useMemo(
     () => archives.map((item) => <option key={item.name} value={item.name}>{item.name}</option>),
     [archives],
@@ -268,6 +292,15 @@ export default function Logs() {
             {archives.length === 0 ? <option value="" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>No archives</option> : archiveOptions}
           </select>
           <button type="button" onClick={() => void loadArchives()} className="btn-secondary">Refresh Archives</button>
+          {selectedArchive ? (
+            <button
+              type="button"
+              onClick={() => void downloadSelectedArchive()}
+              className="rounded-md border border-gold/40 px-3 py-2 text-sm text-gold-soft transition hover:bg-gold/10"
+            >
+              Download Selected Archive
+            </button>
+          ) : null}
           {canManageLogs && selectedArchive ? (
             <button
               type="button"

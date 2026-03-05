@@ -52,6 +52,10 @@ class LogManagementTest extends TestCase
             ->assertOk()
             ->assertJsonPath('meta.total', 2);
 
+        $this->get('/api/v1/admin/logs/archives/' . urlencode((string) $archiveName) . '/download')
+            ->assertOk()
+            ->assertHeader('content-type', 'application/gzip');
+
         $this->deleteJson('/api/v1/admin/logs/archives/' . urlencode((string) $archiveName))
             ->assertOk()
             ->assertJsonPath('message', 'Archive deleted.');

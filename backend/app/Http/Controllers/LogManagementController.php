@@ -217,6 +217,22 @@ class LogManagementController extends Controller
         ]);
     }
 
+    public function downloadArchive(string $archive)
+    {
+        $path = $this->resolveArchivePath($archive);
+        if ($path === null) {
+            return response()->json(['message' => 'Invalid archive filename.'], 422);
+        }
+
+        if (!File::exists($path)) {
+            return response()->json(['message' => 'Archive not found.'], 404);
+        }
+
+        return response()->download($path, basename($path), [
+            'Content-Type' => 'application/gzip',
+        ]);
+    }
+
     private function listArchives(): array
     {
         if (!File::exists($this->archiveDir())) {

@@ -43,6 +43,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/admin/logs/compress', [LogManagementController::class, 'compressCurrent'])->middleware('portal.permission:members.delete');
         Route::get('/admin/logs/archives', [LogManagementController::class, 'archives'])->middleware('portal.permission:members.view');
         Route::get('/admin/logs/archives/{archive}/content', [LogManagementController::class, 'archiveContent'])->middleware('portal.permission:members.view');
+        Route::get('/admin/logs/archives/{archive}/download', [LogManagementController::class, 'downloadArchive'])->middleware('portal.permission:members.view');
         Route::delete('/admin/logs/archives/{archive}', [LogManagementController::class, 'deleteArchive'])->middleware('portal.permission:members.delete');
         Route::get('/dashboard/me', [DashboardController::class, 'me']);
 
