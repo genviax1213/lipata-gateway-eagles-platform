@@ -8,13 +8,18 @@ import { applyPortalTheme, readStoredPortalTheme, resolvePortalTheme } from "../
 function getPortalTitle(user: Record<string, unknown> | null): string {
   const roleName = (user?.role as { name?: unknown } | undefined)?.name;
   const forumRole = user?.forum_role;
+  const financeRole = user?.finance_role;
 
   if (typeof roleName === "string") {
-    if (roleName === "membership_chairman") return "Chairman Portal";
+    if (roleName === "membership_chairman") return "Membership Committee Chairman Portal";
     if (roleName === "admin") return "Admin Portal";
     if (roleName === "officer") return "Officer Portal";
+    if (roleName === "treasurer") return "Treasurer Portal";
+    if (roleName === "auditor") return "Auditor Portal";
     if (roleName === "applicant") return "Applicant Portal";
     if (roleName === "member") {
+      if (financeRole === "treasurer") return "Treasurer Portal";
+      if (financeRole === "auditor") return "Auditor Portal";
       if (forumRole === "forum_moderator") return "Moderator Portal";
       return "Member Portal";
     }
