@@ -20,6 +20,7 @@ const NewsArticle = lazy(() => import("../pages/NewsArticle"));
 const UserRoles = lazy(() => import("../pages/UserRoles"));
 const Forum = lazy(() => import("../pages/Forum"));
 const SecuritySettings = lazy(() => import("../pages/SecuritySettings"));
+const Logs = lazy(() => import("../pages/Logs"));
 const Layout = lazy(() => import("../components/layout/Layout"));
 const AdminLayout = lazy(() => import("../components/layout/AdminLayout"));
 
@@ -146,6 +147,17 @@ export default function AppRoutes() {
               <ProtectedRoute>
                 <AdminLayout>
                   <SecuritySettings />
+                </AdminLayout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/portal/logs"
+            element={
+              <ProtectedRoute>
+                <AdminLayout>
+                  <Logs />
                 </AdminLayout>
               </ProtectedRoute>
             }

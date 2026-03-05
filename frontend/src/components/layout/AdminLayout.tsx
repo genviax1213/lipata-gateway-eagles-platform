@@ -54,6 +54,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       { to: "/portal/forum", label: "Forum", icon: "forum", show: canViewForum },
       { to: "/portal/posts", label: "CMS Posts", icon: "cms", show: canManageCmsPosts },
       { to: "/portal/user-roles", label: "User Roles", icon: "roles", show: showRoleDelegation },
+      { to: "/portal/logs", label: "Logs", icon: "logs", show: canViewMembers },
       { to: "/portal/security", label: "Security Settings", icon: "security", show: true },
     ],
     [canManageCmsPosts, canViewFinance, canViewForum, canViewMembers, showRoleDelegation],
@@ -75,6 +76,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         return <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current stroke-2"><path d="M12 2l7 4v6c0 5-3.5 9-7 10-3.5-1-7-5-7-10V6z" /><path d="M9.5 12l2 2 3-3" /></svg>;
       case "security":
         return <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current stroke-2"><path d="M12 3l7 4v5c0 4.5-2.8 8.2-7 9-4.2-.8-7-4.5-7-9V7z" /><path d="M9 12a3 3 0 0 1 6 0v2H9z" /><path d="M10 12v-1a2 2 0 1 1 4 0v1" /></svg>;
+      case "logs":
+        return <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current stroke-2"><path d="M5 4h14v16H5z" /><path d="M8 8h8M8 12h8M8 16h5" /></svg>;
       case "logout":
         return <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current stroke-2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="M16 17l5-5-5-5" /><path d="M21 12H9" /></svg>;
       default:

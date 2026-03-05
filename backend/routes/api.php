@@ -10,6 +10,7 @@ use App\Http\Controllers\MemberApplicationController;
 use App\Http\Controllers\FinanceController;
 use App\Http\Controllers\ForumController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\LogManagementController;
 
 Route::prefix('v1')->group(function () {
     Route::get('/content/{section}', [PostController::class, 'publicBySection']);
@@ -37,6 +38,12 @@ Route::prefix('v1')->group(function () {
         Route::post('/auth/change-password', [AuthController::class, 'changePassword']);
         Route::get('/auth/sessions', [AuthController::class, 'sessions']);
         Route::delete('/auth/sessions/{tokenId}', [AuthController::class, 'revokeSession']);
+        Route::get('/admin/logs', [LogManagementController::class, 'index'])->middleware('portal.permission:members.view');
+        Route::delete('/admin/logs/current', [LogManagementController::class, 'clearCurrent'])->middleware('portal.permission:members.delete');
+        Route::post('/admin/logs/compress', [LogManagementController::class, 'compressCurrent'])->middleware('portal.permission:members.delete');
+        Route::get('/admin/logs/archives', [LogManagementController::class, 'archives'])->middleware('portal.permission:members.view');
+        Route::get('/admin/logs/archives/{archive}/content', [LogManagementController::class, 'archiveContent'])->middleware('portal.permission:members.view');
+        Route::delete('/admin/logs/archives/{archive}', [LogManagementController::class, 'deleteArchive'])->middleware('portal.permission:members.delete');
         Route::get('/dashboard/me', [DashboardController::class, 'me']);
 
         Route::get('/cms/posts', [PostController::class, 'index'])->middleware('portal.permission:posts.create');

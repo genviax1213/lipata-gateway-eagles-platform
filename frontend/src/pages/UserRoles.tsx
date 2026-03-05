@@ -22,7 +22,6 @@ interface MemberRow {
   user_id: number | null;
   user?: {
     id: number;
-    finance_role?: "auditor" | "treasurer" | null;
     forum_role?: "forum_moderator" | null;
     role?: { id: number; name: string } | null;
   } | null;
@@ -30,6 +29,10 @@ interface MemberRow {
 
 interface PaginatedMembers {
   data: MemberRow[];
+  current_page: number;
+  last_page: number;
+  total: number;
+  per_page: number;
 }
 
 function labelCase(value: string): string {
@@ -50,8 +53,10 @@ export default function UserRoles() {
   const [search, setSearch] = useState("");
   const [selectedMemberId, setSelectedMemberId] = useState<number | null>(null);
   const [selectedRoleId, setSelectedRoleId] = useState<number | "">("");
-  const [selectedFinanceRole, setSelectedFinanceRole] = useState<"" | "auditor" | "treasurer">("");
   const [selectedForumRole, setSelectedForumRole] = useState<"" | "forum_moderator">("");
+  const [page, setPage] = useState(1);
+  const [lastPage, setLastPage] = useState(1);
+  const [totalMembers, setTotalMembers] = useState(0);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -62,15 +67,7 @@ export default function UserRoles() {
     [members, selectedMemberId],
   );
 
-  const assignablePrimaryRoles = useMemo(
-    () => roles.filter((role) => role.name !== "auditor" && role.name !== "treasurer"),
-    [roles],
-  );
-
-  const selectedRoleName = useMemo(
-    () => assignablePrimaryRoles.find((item) => item.id === selectedRoleId)?.name ?? "",
-    [assignablePrimaryRoles, selectedRoleId],
-  );
+  const assignablePrimaryRoles = roles;
 
   const fetchData = useCallback(async () => {
     if (!canDelegateRoles) {
@@ -84,33 +81,40 @@ export default function UserRoles() {
     try {
       const [rolesRes, membersRes] = await Promise.all([
         api.get<Role[]>("/admin/roles"),
-        api.get<PaginatedMembers>("/admin/members", { params: { search } }),
+        api.get<PaginatedMembers>("/admin/members", { params: { search, page } }),
       ]);
 
       setRoles(rolesRes.data);
       setMembers(membersRes.data.data);
+      setLastPage(membersRes.data.last_page ?? 1);
+      setTotalMembers(membersRes.data.total ?? membersRes.data.data.length);
     } catch {
       setError("Unable to load roles and members.");
     } finally {
       setLoading(false);
     }
-  }, [canDelegateRoles, search]);
+  }, [canDelegateRoles, page, search]);
 
   useEffect(() => {
     void fetchData();
   }, [fetchData]);
 
   useEffect(() => {
+    if (!selectedMemberId) return;
+    if (!members.some((item) => item.id === selectedMemberId)) {
+      setSelectedMemberId(null);
+    }
+  }, [members, selectedMemberId]);
+
+  useEffect(() => {
     if (!selectedMember) {
       setSelectedRoleId("");
-      setSelectedFinanceRole("");
       setSelectedForumRole("");
       return;
     }
 
     const currentRoleId = selectedMember.user?.role?.id ?? "";
     setSelectedRoleId(currentRoleId);
-    setSelectedFinanceRole(selectedMember.user?.finance_role ?? "");
     setSelectedForumRole(selectedMember.user?.forum_role ?? "");
   }, [selectedMember]);
 
@@ -124,7 +128,6 @@ export default function UserRoles() {
     try {
       await api.put(`/admin/members/${selectedMember.id}/role`, {
         role_id: selectedRoleId,
-        finance_role: selectedFinanceRole || null,
         forum_role: selectedForumRole || null,
       });
       setNotice(`Assigned role to ${fullName(selectedMember)}.`);
@@ -144,7 +147,6 @@ export default function UserRoles() {
   const resetRoleSelection = () => {
     setSelectedMemberId(null);
     setSelectedRoleId("");
-    setSelectedFinanceRole("");
     setSelectedForumRole("");
     setError("");
     setNotice("");
@@ -166,7 +168,7 @@ export default function UserRoles() {
       <div className="mb-6">
         <h1 className="mb-2 font-heading text-4xl text-offwhite">Member Role Provisioning</h1>
         <p className="text-sm text-mist/85">
-          Primary role is for portal access. Any member account can be assigned one secondary finance role (Auditor/Treasurer) and one forum role (Forum Moderator).
+          Primary role is for portal access. Any member account can be assigned one forum role (Forum Moderator).
         </p>
       </div>
 
@@ -187,10 +189,20 @@ export default function UserRoles() {
           aria-label="Search members by name, member number, or email"
           placeholder="Search members (wildcard by name/member no./email)"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setPage(1);
+          }}
           className="min-w-[18rem] rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
         />
-        <button type="button" onClick={() => void fetchData()} className="btn-secondary">
+        <button
+          type="button"
+          onClick={() => {
+            setPage(1);
+            void fetchData();
+          }}
+          className="btn-secondary"
+        >
           Search
         </button>
       </div>
@@ -238,28 +250,10 @@ export default function UserRoles() {
           </select>
 
           <select
-            aria-label="Select finance role"
-            value={selectedFinanceRole}
-            onChange={(e) => setSelectedFinanceRole(e.target.value as "" | "auditor" | "treasurer")}
-            disabled={!selectedRoleName}
-            className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite disabled:opacity-45"
-          >
-            <option value="" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>
-              No Finance Role
-            </option>
-            <option value="treasurer" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>
-              Treasurer
-            </option>
-            <option value="auditor" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>
-              Auditor
-            </option>
-          </select>
-
-          <select
             aria-label="Select forum role"
             value={selectedForumRole}
             onChange={(e) => setSelectedForumRole(e.target.value as "" | "forum_moderator")}
-            disabled={!selectedRoleName}
+            disabled={!selectedRoleId}
             className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite disabled:opacity-45"
           >
             <option value="" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>
@@ -298,7 +292,6 @@ export default function UserRoles() {
               <th className="px-4 py-3 text-left">Name</th>
               <th className="px-4 py-3 text-left">Email</th>
               <th className="px-4 py-3 text-left">Primary Role</th>
-              <th className="px-4 py-3 text-left">Finance Role</th>
               <th className="px-4 py-3 text-left">Forum Role</th>
             </tr>
           </thead>
@@ -318,14 +311,13 @@ export default function UserRoles() {
                 <td className="px-4 py-3">{fullName(item)}</td>
                 <td className="px-4 py-3">{item.email ?? "No email"}</td>
                 <td className="px-4 py-3">{item.user?.role?.name ? labelCase(item.user.role.name) : "No access"}</td>
-                <td className="px-4 py-3">{item.user?.finance_role ? labelCase(item.user.finance_role) : "-"}</td>
                 <td className="px-4 py-3">{item.user?.forum_role ? labelCase(item.user.forum_role.replace("_", " ")) : "-"}</td>
               </tr>
             ))}
 
             {loading && (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-mist/80">
+                <td colSpan={6} className="px-4 py-8 text-center text-mist/80">
                   Loading members and roles...
                 </td>
               </tr>
@@ -333,13 +325,35 @@ export default function UserRoles() {
 
             {!loading && members.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-mist/80">
+                <td colSpan={6} className="px-4 py-8 text-center text-mist/80">
                   No members found.
                 </td>
               </tr>
             )}
           </tbody>
         </table>
+      </div>
+
+      <div className="mt-3 flex items-center justify-between text-xs text-mist/80">
+        <p>Total members: {totalMembers} | Page {page} of {lastPage}</p>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            disabled={page <= 1 || loading}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            className="rounded-md border border-white/30 px-2 py-1 disabled:opacity-50"
+          >
+            Prev
+          </button>
+          <button
+            type="button"
+            disabled={page >= lastPage || loading}
+            onClick={() => setPage((p) => Math.min(lastPage, p + 1))}
+            className="rounded-md border border-white/30 px-2 py-1 disabled:opacity-50"
+          >
+            Next
+          </button>
+        </div>
       </div>
     </section>
   );
