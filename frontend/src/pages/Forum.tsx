@@ -38,6 +38,7 @@ interface ThreadListPayload {
 }
 
 export default function Forum() {
+  const FORUM_REFRESH_MS = 3000;
   const { user } = useAuth();
   const roleName = (user?.role as { name?: unknown } | undefined)?.name;
   const isApplicant = roleName === "applicant";
@@ -93,7 +94,13 @@ export default function Forum() {
     }
 
     try {
-      const res = await api.get<ThreadListPayload>("/forum/threads", { params: { search } });
+      const res = await api.get<ThreadListPayload>("/forum/threads", {
+        params: { search, _t: Date.now() },
+        headers: {
+          "Cache-Control": "no-cache",
+          Pragma: "no-cache",
+        },
+      });
       const items = res.data.data ?? [];
       setThreads(items);
       if (!selectedThreadId && items.length > 0) {
@@ -119,7 +126,13 @@ export default function Forum() {
     }
 
     try {
-      const res = await api.get<{ thread: ForumThread }>(`/forum/threads/${threadId}`);
+      const res = await api.get<{ thread: ForumThread }>(`/forum/threads/${threadId}`, {
+        params: { _t: Date.now() },
+        headers: {
+          "Cache-Control": "no-cache",
+          Pragma: "no-cache",
+        },
+      });
       setSelectedThread(res.data.thread);
     } catch (err) {
       if (!silent) {
@@ -497,4 +510,3 @@ export default function Forum() {
     </section>
   );
 }
-  const FORUM_REFRESH_MS = 3000;

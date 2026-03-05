@@ -199,7 +199,15 @@ export default function Logs() {
   };
 
   const archiveOptions = useMemo(
-    () => archives.map((item) => <option key={item.name} value={item.name}>{item.name}</option>),
+    () => archives.map((item) => (
+      <option
+        key={item.name}
+        value={item.name}
+        style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}
+      >
+        {item.name}
+      </option>
+    )),
     [archives],
   );
 
