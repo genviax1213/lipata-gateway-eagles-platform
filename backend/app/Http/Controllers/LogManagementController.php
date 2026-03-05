@@ -27,6 +27,23 @@ class LogManagementController extends Controller
         return $this->logsDir() . DIRECTORY_SEPARATOR . 'laravel.log';
     }
 
+    private function currentLogFiles(): array
+    {
+        $files = [];
+        $default = $this->currentLogPath();
+        if (File::exists($default)) {
+            $files[] = $default;
+        }
+
+        foreach (File::glob($this->logsDir() . DIRECTORY_SEPARATOR . 'laravel-*.log') as $candidate) {
+            if (is_string($candidate) && File::exists($candidate)) {
+                $files[] = $candidate;
+            }
+        }
+
+        return array_values(array_unique($files));
+    }
+
     public function index(Request $request)
     {
         $this->purgeExpiredArchives();
@@ -45,7 +62,7 @@ class LogManagementController extends Controller
         $event = trim((string) ($validated['event'] ?? ''));
         $query = Str::lower(trim((string) ($validated['q'] ?? '')));
 
-        $entries = $this->readEntriesFromFile($this->currentLogPath())
+        $entries = $this->readEntriesFromCurrentFiles()
             ->filter(function (array $entry) use ($level, $event, $query) {
                 if ($level !== '' && Str::upper((string) ($entry['level'] ?? '')) !== $level) {
                     return false;
@@ -91,31 +108,44 @@ class LogManagementController extends Controller
 
     public function clearCurrent()
     {
-        $currentPath = $this->currentLogPath();
-        if (!File::exists($currentPath)) {
+        $currentFiles = $this->currentLogFiles();
+        if ($currentFiles === []) {
             return response()->json([
                 'message' => 'Current log file not found.',
             ], 404);
         }
 
-        File::put($currentPath, '');
+        foreach ($currentFiles as $path) {
+            file_put_contents($path, '', LOCK_EX);
+        }
 
         return response()->json([
-            'message' => 'Current log file cleared.',
+            'message' => 'Current log files cleared.',
+            'files_cleared' => count($currentFiles),
         ]);
     }
 
     public function downloadCurrent()
     {
-        $currentPath = $this->currentLogPath();
-        if (!File::exists($currentPath)) {
+        $currentFiles = $this->currentLogFiles();
+        if ($currentFiles === []) {
             return response()->json([
                 'message' => 'Current log file not found.',
             ], 404);
         }
 
-        return response()->download($currentPath, 'laravel.log', [
-            'Content-Type' => 'text/plain',
+        $lines = [];
+        foreach ($currentFiles as $path) {
+            $lines[] = sprintf("===== %s =====", basename($path));
+            $lines[] = File::get($path);
+            $lines[] = '';
+        }
+
+        $payload = implode("\n", $lines);
+
+        return response($payload, 200, [
+            'Content-Type' => 'text/plain; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="laravel.log"',
         ]);
     }
 
@@ -123,8 +153,23 @@ class LogManagementController extends Controller
     {
         $this->purgeExpiredArchives();
 
-        $currentPath = $this->currentLogPath();
-        if (!File::exists($currentPath) || File::size($currentPath) === 0) {
+        $currentFiles = $this->currentLogFiles();
+        if ($currentFiles === []) {
+            return response()->json([
+                'message' => 'Current log file is empty. Nothing to compress.',
+            ], 422);
+        }
+
+        $combined = '';
+        foreach ($currentFiles as $path) {
+            $content = File::get($path);
+            if ($content === '') {
+                continue;
+            }
+            $combined .= sprintf("===== %s =====\n%s\n", basename($path), $content);
+        }
+
+        if ($combined === '') {
             return response()->json([
                 'message' => 'Current log file is empty. Nothing to compress.',
             ], 422);
@@ -138,8 +183,7 @@ class LogManagementController extends Controller
         $archiveName = "laravel_{$timestamp}.log.gz";
         $archivePath = $this->archiveDir() . DIRECTORY_SEPARATOR . $archiveName;
 
-        $content = File::get($currentPath);
-        $compressed = gzencode($content, 9);
+        $compressed = gzencode($combined, 9);
         if ($compressed === false) {
             return response()->json([
                 'message' => 'Unable to compress current logs.',
@@ -147,7 +191,9 @@ class LogManagementController extends Controller
         }
 
         File::put($archivePath, $compressed);
-        File::put($currentPath, '');
+        foreach ($currentFiles as $path) {
+            file_put_contents($path, '', LOCK_EX);
+        }
 
         return response()->json([
             'message' => 'Current logs compressed and archived.',
@@ -306,6 +352,18 @@ class LogManagementController extends Controller
         }
 
         return $this->parseEntries(File::get($path));
+    }
+
+    private function readEntriesFromCurrentFiles(): Collection
+    {
+        $entries = collect();
+        foreach ($this->currentLogFiles() as $path) {
+            $entries = $entries->merge($this->readEntriesFromFile($path)->all());
+        }
+
+        return $entries->sortByDesc(function (array $entry) {
+            return strtotime((string) ($entry['timestamp'] ?? '')) ?: 0;
+        })->values();
     }
 
     private function parseEntries(string $content): Collection
