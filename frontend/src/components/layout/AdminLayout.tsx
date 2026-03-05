@@ -6,7 +6,6 @@ import { hasPermission, isAdminUser } from "../../utils/auth";
 
 function getPortalTitle(user: Record<string, unknown> | null): string {
   const roleName = (user?.role as { name?: unknown } | undefined)?.name;
-  const financeRole = user?.finance_role;
   const forumRole = user?.forum_role;
 
   if (typeof roleName === "string") {
@@ -15,8 +14,6 @@ function getPortalTitle(user: Record<string, unknown> | null): string {
     if (roleName === "officer") return "Officer Portal";
     if (roleName === "applicant") return "Applicant Portal";
     if (roleName === "member") {
-      if (financeRole === "treasurer") return "Treasurer Portal";
-      if (financeRole === "auditor") return "Auditor Portal";
       if (forumRole === "forum_moderator") return "Moderator Portal";
       return "Member Portal";
     }
@@ -42,11 +39,10 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const roleName = (user?.role as { name?: unknown } | undefined)?.name;
   const isApplicant = roleName === "applicant";
   const showRoleDelegation = isAdminUser(user) || hasPermission(user, "roles.delegate");
-  const canViewMembers = hasPermission(user, "members.view");
+  const canViewMembers = isAdminUser(user) || roleName === "membership_chairman";
   const canManageCmsPosts = hasPermission(user, "posts.create");
   const canViewFinance = hasPermission(user, "finance.view");
   const canViewForum = !isApplicant;
-  const canUseTreasurerDashboard = hasPermission(user, "applications.fee.set") || hasPermission(user, "applications.fee.pay");
   const portalTitle = getPortalTitle(user);
   const portalShortTitle = toShortTitle(portalTitle);
 
@@ -56,12 +52,11 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       { to: "/portal/members", label: "Members", icon: "members", show: canViewMembers },
       { to: "/portal/contributions", label: canViewFinance ? "Finance" : "My Contributions", icon: "finance", show: true },
       { to: "/portal/forum", label: "Forum", icon: "forum", show: canViewForum },
-      { to: "/portal/treasurer", label: "Treasurer", icon: "treasurer", show: canUseTreasurerDashboard },
-      { to: "/portal/analytics", label: "Analytics", icon: "analytics", show: true },
       { to: "/portal/posts", label: "CMS Posts", icon: "cms", show: canManageCmsPosts },
       { to: "/portal/user-roles", label: "User Roles", icon: "roles", show: showRoleDelegation },
+      { to: "/portal/security", label: "Security Settings", icon: "security", show: true },
     ],
-    [canManageCmsPosts, canUseTreasurerDashboard, canViewFinance, canViewForum, canViewMembers, showRoleDelegation],
+    [canManageCmsPosts, canViewFinance, canViewForum, canViewMembers, showRoleDelegation],
   );
 
   const renderIcon = (icon: string) => {
@@ -74,14 +69,12 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         return <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current stroke-2"><path d="M12 1v22M17 5.5A4 4 0 0 0 13 2h-2a4 4 0 0 0 0 8h2a4 4 0 0 1 0 8h-2a4 4 0 0 1-4-3.5" /></svg>;
       case "forum":
         return <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current stroke-2"><path d="M21 15a4 4 0 0 1-4 4H8l-5 4V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z" /></svg>;
-      case "treasurer":
-        return <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current stroke-2"><path d="M3 7l9-4 9 4-9 4-9-4z" /><path d="M3 17l9 4 9-4M3 12l9 4 9-4" /></svg>;
-      case "analytics":
-        return <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current stroke-2"><path d="M3 3v18h18" /><path d="M7 14l4-4 3 3 5-6" /></svg>;
       case "cms":
         return <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current stroke-2"><path d="M14 2H6a2 2 0 0 0-2 2v16l4-3h10a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /></svg>;
       case "roles":
         return <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current stroke-2"><path d="M12 2l7 4v6c0 5-3.5 9-7 10-3.5-1-7-5-7-10V6z" /><path d="M9.5 12l2 2 3-3" /></svg>;
+      case "security":
+        return <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current stroke-2"><path d="M12 3l7 4v5c0 4.5-2.8 8.2-7 9-4.2-.8-7-4.5-7-9V7z" /><path d="M9 12a3 3 0 0 1 6 0v2H9z" /><path d="M10 12v-1a2 2 0 1 1 4 0v1" /></svg>;
       case "logout":
         return <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current stroke-2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="M16 17l5-5-5-5" /><path d="M21 12H9" /></svg>;
       default:

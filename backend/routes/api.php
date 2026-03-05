@@ -28,15 +28,14 @@ Route::prefix('v1')->group(function () {
         ->middleware('throttle:auth-reset-password');
 
     // Protected routes
-    Route::middleware('auth:sanctum')->group(function () {
+    Route::middleware(['auth:sanctum', 'active.session'])->group(function () {
 
         Route::get('/user', function (Request $request) {
             return $request->user()->load('role.permissions:id,name');
         });
         Route::post('/logout', [AuthController::class, 'logout']);
+        Route::post('/auth/change-password', [AuthController::class, 'changePassword']);
         Route::get('/dashboard/me', [DashboardController::class, 'me']);
-        Route::get('/dashboard/treasurer', [DashboardController::class, 'treasurer'])
-            ->middleware('portal.permission:finance.input');
 
         Route::get('/cms/posts', [PostController::class, 'index'])->middleware('portal.permission:posts.create');
         Route::get('/cms/posts/available-images', [PostController::class, 'availableImages'])->middleware('portal.permission:posts.create');

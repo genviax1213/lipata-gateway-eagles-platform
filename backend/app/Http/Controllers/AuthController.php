@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
 {
@@ -38,6 +39,12 @@ class AuthController extends Controller
         /** @var User $user */
         $user = Auth::user()->load('role.permissions:id,name');
 
+        // Enforce single active login across devices/browsers.
+        $user->tokens()->delete();
+        if ($request->hasSession()) {
+            $request->session()->regenerate();
+        }
+
         $application = MemberApplication::query()
             ->whereRaw('LOWER(TRIM(email)) = ?', [strtolower(trim((string) $user->email))])
             ->latest('id')
@@ -57,9 +64,20 @@ class AuthController extends Controller
         }
 
         $token = null;
+        $activeTokenId = null;
         if (strtolower((string) $request->header('X-Auth-Mode', '')) === 'token') {
-            $token = $user->createToken('auth_token')->plainTextToken;
+            $createdToken = $user->createToken('auth_token');
+            $token = $createdToken->plainTextToken;
+            $activeTokenId = $createdToken->accessToken->id;
         }
+
+        $activeSessionId = $request->hasSession() ? $request->session()->getId() : null;
+        $user->forceFill([
+            'active_session_id' => $activeSessionId,
+            'active_token_id' => $activeTokenId,
+            'last_activity_at' => now(),
+        ])->saveQuietly();
+
         Log::info('auth.login_success', [
             'user_id' => $user->id,
             'ip' => $request->ip(),
@@ -137,6 +155,12 @@ class AuthController extends Controller
             } else {
                 $user->tokens()->delete();
             }
+
+            $user->forceFill([
+                'active_session_id' => null,
+                'active_token_id' => null,
+                'last_activity_at' => null,
+            ])->saveQuietly();
         }
         Log::info('auth.logout', [
             'user_id' => $user?->id,
@@ -151,5 +175,64 @@ class AuthController extends Controller
         return response()->json([
             'message' => 'Logged out successfully.',
         ]);
+    }
+
+    public function changePassword(Request $request)
+    {
+        /** @var User $user */
+        $user = $request->user();
+
+        $validated = $request->validate([
+            'current_password' => 'required|string',
+            'new_password' => 'required|string|min:8|different:current_password|confirmed',
+        ]);
+
+        if (!Hash::check($validated['current_password'], (string) $user->password)) {
+            throw ValidationException::withMessages([
+                'current_password' => ['The current password is incorrect.'],
+            ]);
+        }
+
+        $user->forceFill([
+            'password' => Hash::make($validated['new_password']),
+            'remember_token' => Str::random(60),
+        ])->save();
+
+        $user->tokens()->delete();
+
+        $token = null;
+        $activeTokenId = null;
+        if (strtolower((string) $request->header('X-Auth-Mode', '')) === 'token') {
+            $createdToken = $user->createToken('auth_token');
+            $token = $createdToken->plainTextToken;
+            $activeTokenId = $createdToken->accessToken->id;
+        }
+
+        if ($request->hasSession()) {
+            $request->session()->regenerate();
+        }
+
+        $activeSessionId = $request->hasSession() ? $request->session()->getId() : null;
+        $user->forceFill([
+            'active_session_id' => $activeSessionId,
+            'active_token_id' => $activeTokenId,
+            'last_activity_at' => now(),
+        ])->saveQuietly();
+
+        Log::info('auth.password_changed', [
+            'user_id' => $user->id,
+            'ip' => $request->ip(),
+            'auth_mode' => $token ? 'token' : 'session',
+        ]);
+
+        $payload = [
+            'message' => 'Password updated successfully.',
+        ];
+
+        if ($token) {
+            $payload['token'] = $token;
+        }
+
+        return response()->json($payload);
     }
 }

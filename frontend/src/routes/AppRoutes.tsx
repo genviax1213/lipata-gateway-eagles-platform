@@ -15,12 +15,11 @@ const MemberApplication = lazy(() => import("../pages/MemberApplication"));
 const PortalDashboard = lazy(() => import("../pages/PortalDashboard"));
 const Members = lazy(() => import("../pages/Members"));
 const Contributions = lazy(() => import("../pages/Contributions"));
-const Analytics = lazy(() => import("../pages/Analytics"));
 const CmsPosts = lazy(() => import("../pages/CmsPosts"));
 const NewsArticle = lazy(() => import("../pages/NewsArticle"));
 const UserRoles = lazy(() => import("../pages/UserRoles"));
 const Forum = lazy(() => import("../pages/Forum"));
-const TreasurerDashboard = lazy(() => import("../pages/TreasurerDashboard"));
+const SecuritySettings = lazy(() => import("../pages/SecuritySettings"));
 const Layout = lazy(() => import("../components/layout/Layout"));
 const AdminLayout = lazy(() => import("../components/layout/AdminLayout"));
 
@@ -109,17 +108,6 @@ export default function AppRoutes() {
           />
 
           <Route
-            path="/portal/analytics"
-            element={
-              <ProtectedRoute>
-                <AdminLayout>
-                  <Analytics />
-                </AdminLayout>
-              </ProtectedRoute>
-            }
-          />
-
-          <Route
             path="/portal/posts"
             element={
               <ProtectedRoute>
@@ -153,15 +141,16 @@ export default function AppRoutes() {
           />
 
           <Route
-            path="/portal/treasurer"
+            path="/portal/security"
             element={
               <ProtectedRoute>
                 <AdminLayout>
-                  <TreasurerDashboard />
+                  <SecuritySettings />
                 </AdminLayout>
               </ProtectedRoute>
             }
           />
+
           <Route path="*" element={<Navigate to="/" replace />} />
 
           </Routes>
