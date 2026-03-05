@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import api from "../services/api";
 import { useAuth } from "../contexts/useAuth";
@@ -59,6 +59,11 @@ export default function Forum() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [focusedPostId, setFocusedPostId] = useState<number | null>(null);
+  const latestPostRef = useRef<HTMLElement | null>(null);
+  const previousThreadRef = useRef<number | null>(null);
+  const previousLastPostRef = useRef<number | null>(null);
+  const focusResetTimerRef = useRef<number | null>(null);
   const threadWordCount = useMemo(
     () => (htmlToPlainText(threadBody).trim().length ? htmlToPlainText(threadBody).trim().split(/\s+/).length : 0),
     [threadBody],
@@ -319,6 +324,46 @@ export default function Forum() {
     if (currentUserId === null) return false;
     return selectedThread.author?.id === currentUserId;
   }, [canModerate, currentUserId, selectedThread]);
+  const lastVisiblePostId = useMemo(() => {
+    const posts = selectedThread?.posts ?? [];
+    if (posts.length === 0) return null;
+    return posts[posts.length - 1]?.id ?? null;
+  }, [selectedThread?.posts]);
+
+  useEffect(() => {
+    const currentThreadId = selectedThread?.id ?? null;
+    const previousThreadId = previousThreadRef.current;
+    const previousLastPostId = previousLastPostRef.current;
+    const hasNewReplyInSameThread = (
+      currentThreadId !== null
+      && previousThreadId === currentThreadId
+      && lastVisiblePostId !== null
+      && previousLastPostId !== null
+      && lastVisiblePostId !== previousLastPostId
+    );
+
+    if (hasNewReplyInSameThread && latestPostRef.current) {
+      latestPostRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+      latestPostRef.current.focus({ preventScroll: true });
+      setFocusedPostId(lastVisiblePostId);
+
+      if (focusResetTimerRef.current !== null) {
+        window.clearTimeout(focusResetTimerRef.current);
+      }
+      focusResetTimerRef.current = window.setTimeout(() => {
+        setFocusedPostId(null);
+      }, 2500);
+    }
+
+    previousThreadRef.current = currentThreadId;
+    previousLastPostRef.current = lastVisiblePostId;
+  }, [lastVisiblePostId, selectedThread?.id]);
+
+  useEffect(() => () => {
+    if (focusResetTimerRef.current !== null) {
+      window.clearTimeout(focusResetTimerRef.current);
+    }
+  }, []);
 
   if (!canViewForum) {
     return (
@@ -451,7 +496,16 @@ export default function Forum() {
 
           <div className="max-h-[34rem] space-y-3 overflow-y-auto pr-1">
             {(selectedThread?.posts ?? []).map((post) => (
-              <article key={post.id} className={`rounded-lg border px-3 py-3 ${post.is_hidden ? "border-red-400/40 bg-red-400/10" : "border-white/20 bg-white/5"}`}>
+              <article
+                key={post.id}
+                ref={post.id === lastVisiblePostId ? (node) => { latestPostRef.current = node; } : undefined}
+                tabIndex={post.id === lastVisiblePostId ? -1 : undefined}
+                className={`rounded-lg border px-3 py-3 ${
+                  post.is_hidden ? "border-red-400/40 bg-red-400/10" : "border-white/20 bg-white/5"
+                } ${
+                  focusedPostId === post.id ? "ring-2 ring-gold/60" : ""
+                }`}
+              >
                 <div
                   className="rich-content mb-2 text-sm text-offwhite"
                   dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(post.body) }}
