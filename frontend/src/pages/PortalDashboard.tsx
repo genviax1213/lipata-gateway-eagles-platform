@@ -5,6 +5,14 @@ import { useAuth } from "../contexts/useAuth";
 import { hasPermission, isAdminUser } from "../utils/auth";
 import { roleGlossary } from "../content/portalCopy";
 import TaskHierarchyCard from "../components/TaskHierarchyCard";
+import {
+  PORTAL_BUILTIN_THEMES,
+  applyPortalTheme,
+  createCustomPortalTheme,
+  readStoredPortalTheme,
+  resolvePortalTheme,
+  saveStoredPortalTheme,
+} from "../utils/portalTheme";
 
 type DashboardView = "applicant" | "member" | "general";
 
@@ -101,6 +109,30 @@ function labelRole(value: string): string {
     .join(" ");
 }
 
+function toCustomForm(input: {
+  navy: string;
+  ink: string;
+  mist: string;
+  offwhite: string;
+  gold: string;
+  goldSoft: string;
+  bgStart: string;
+  bgMid: string;
+  bgEnd: string;
+}): CustomThemeForm {
+  return {
+    navy: input.navy,
+    ink: input.ink,
+    mist: input.mist,
+    offwhite: input.offwhite,
+    gold: input.gold,
+    goldSoft: input.goldSoft,
+    bgStart: input.bgStart,
+    bgMid: input.bgMid,
+    bgEnd: input.bgEnd,
+  };
+}
+
 const YEAR_OPTIONS = Array.from({ length: 20 }, (_, idx) => String(2021 + idx));
 const MONTH_OPTIONS = [
   { value: "01", label: "January" },
@@ -116,6 +148,18 @@ const MONTH_OPTIONS = [
   { value: "11", label: "November" },
   { value: "12", label: "December" },
 ];
+
+interface CustomThemeForm {
+  navy: string;
+  ink: string;
+  mist: string;
+  offwhite: string;
+  gold: string;
+  goldSoft: string;
+  bgStart: string;
+  bgMid: string;
+  bgEnd: string;
+}
 
 export default function PortalDashboard() {
   const { user } = useAuth();
@@ -149,6 +193,13 @@ export default function PortalDashboard() {
   const [notice, setNotice] = useState("");
   const [contributionInfo, setContributionInfo] = useState("");
   const [linkingMemberProfile, setLinkingMemberProfile] = useState(false);
+  const [selectedThemeId, setSelectedThemeId] = useState<string>(() => readStoredPortalTheme().selectedThemeId);
+  const [customThemeForm, setCustomThemeForm] = useState<CustomThemeForm>(() => {
+    const stored = readStoredPortalTheme();
+    const active = resolvePortalTheme(stored);
+    return toCustomForm(active);
+  });
+  const [themeNotice, setThemeNotice] = useState("");
 
   const parseError = (err: unknown, fallback: string): string => {
     if (!axios.isAxiosError(err)) return fallback;
@@ -234,6 +285,38 @@ export default function PortalDashboard() {
     })();
   }, [selectedApplicationId]);
 
+  const applyPresetTheme = (themeId: string) => {
+    const preset = PORTAL_BUILTIN_THEMES.find((item) => item.id === themeId);
+    if (!preset) return;
+
+    const stored = readStoredPortalTheme();
+    saveStoredPortalTheme({
+      selectedThemeId: preset.id,
+      customTheme: stored.customTheme,
+    });
+    applyPortalTheme(preset);
+    setSelectedThemeId(preset.id);
+    setCustomThemeForm(toCustomForm(preset));
+    setThemeNotice(`Theme applied: ${preset.name}.`);
+  };
+
+  const saveCustomTheme = () => {
+    const custom = createCustomPortalTheme(customThemeForm);
+    saveStoredPortalTheme({
+      selectedThemeId: "custom",
+      customTheme: custom,
+    });
+    applyPortalTheme(custom);
+    setSelectedThemeId("custom");
+    setThemeNotice("Custom theme saved and applied.");
+  };
+
+  const resetCustomThemeForm = () => {
+    const activeTheme = resolvePortalTheme(readStoredPortalTheme());
+    setCustomThemeForm(toCustomForm(activeTheme));
+    setThemeNotice("Custom theme form reset from active palette.");
+  };
+
   const selectedApplication = useMemo(
     () => applications.find((row) => row.id === selectedApplicationId) ?? null,
     [applications, selectedApplicationId],
@@ -273,11 +356,6 @@ export default function PortalDashboard() {
     const primaryRoleName = (user?.role as { name?: unknown } | undefined)?.name;
     if (typeof primaryRoleName === "string" && primaryRoleName) {
       labels.push(labelRole(primaryRoleName));
-    }
-
-    const financeRoleName = user?.finance_role;
-    if (typeof financeRoleName === "string" && financeRoleName) {
-      labels.push(labelRole(financeRoleName));
     }
 
     const forumRoleName = user?.forum_role;
@@ -506,17 +584,90 @@ export default function PortalDashboard() {
       </div>
 
       {isAdmin && (
-        <div className="mb-4 rounded-xl border border-white/20 bg-white/10 p-4">
-          <h2 className="mb-2 font-heading text-xl text-offwhite">Role Glossary</h2>
-          <div className="grid gap-2 md:grid-cols-2">
-            {roleGlossary.map((item) => (
-              <div key={item.role} className="rounded border border-white/20 bg-white/5 px-3 py-2">
-                <p className="text-xs font-semibold uppercase tracking-wide text-gold-soft">{item.role}</p>
-                <p className="text-xs text-mist/85">{item.meaning}</p>
-              </div>
-            ))}
+        <>
+          <div className="mb-4 rounded-xl border border-white/20 bg-white/10 p-4">
+            <h2 className="mb-2 font-heading text-xl text-offwhite">Theme Settings</h2>
+            <p className="mb-3 text-sm text-mist/85">Choose one of 10 normal/dark colorful themes, or save your own custom palette.</p>
+            {themeNotice ? (
+              <p className="mb-3 rounded-md border border-gold/30 bg-gold/10 px-3 py-2 text-xs text-gold-soft">{themeNotice}</p>
+            ) : null}
+
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <label htmlFor="admin-theme-preset" className="text-xs font-semibold text-mist/85">Preset Theme</label>
+              <select
+                id="admin-theme-preset"
+                value={selectedThemeId === "custom" ? "" : selectedThemeId}
+                onChange={(e) => {
+                  if (e.target.value) {
+                    applyPresetTheme(e.target.value);
+                  }
+                }}
+                className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-sm text-offwhite"
+              >
+                <option value="" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Select preset theme</option>
+                {PORTAL_BUILTIN_THEMES.map((theme) => (
+                  <option
+                    key={theme.id}
+                    value={theme.id}
+                    style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}
+                  >
+                    {theme.name} ({theme.mode})
+                  </option>
+                ))}
+              </select>
+              {selectedThemeId === "custom" ? (
+                <span className="rounded border border-gold/40 bg-gold/10 px-2 py-1 text-xs text-gold-soft">Using Custom Theme</span>
+              ) : null}
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-3">
+              {([
+                ["navy", "Navy"],
+                ["ink", "Ink"],
+                ["mist", "Mist"],
+                ["offwhite", "Off White"],
+                ["gold", "Gold"],
+                ["goldSoft", "Gold Soft"],
+                ["bgStart", "BG Start"],
+                ["bgMid", "BG Middle"],
+                ["bgEnd", "BG End"],
+              ] as Array<[keyof CustomThemeForm, string]>).map(([key, label]) => (
+                <label key={key} className="rounded-md border border-white/20 bg-white/5 px-3 py-2 text-xs text-mist/85">
+                  <span className="mb-2 block font-semibold">{label}</span>
+                  <input
+                    type="color"
+                    value={customThemeForm[key]}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      setCustomThemeForm((prev) => ({ ...prev, [key]: next }));
+                    }}
+                    className="h-9 w-full cursor-pointer rounded border border-white/20 bg-transparent"
+                  />
+                  <span className="mt-1 block text-[11px] text-mist/70">{customThemeForm[key]}</span>
+                </label>
+              ))}
+            </div>
+
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button className="btn-secondary" type="button" onClick={() => saveCustomTheme()}>Save & Apply Custom Theme</button>
+              <button className="rounded-md border border-white/30 px-3 py-2 text-sm text-offwhite/90 transition hover:bg-white/10" type="button" onClick={() => resetCustomThemeForm()}>
+                Reset Custom Form
+              </button>
+            </div>
           </div>
-        </div>
+
+          <div className="mb-4 rounded-xl border border-white/20 bg-white/10 p-4">
+            <h2 className="mb-2 font-heading text-xl text-offwhite">Role Glossary</h2>
+            <div className="grid gap-2 md:grid-cols-2">
+              {roleGlossary.map((item) => (
+                <div key={item.role} className="rounded border border-white/20 bg-white/5 px-3 py-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gold-soft">{item.role}</p>
+                  <p className="text-xs text-mist/85">{item.meaning}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
       )}
 
       {error && <p className="mb-4 rounded-md border border-red-300/30 bg-red-400/10 px-4 py-2 text-sm text-red-200" role="alert" aria-live="polite">{error}</p>}
