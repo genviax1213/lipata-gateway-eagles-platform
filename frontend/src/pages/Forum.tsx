@@ -108,8 +108,13 @@ export default function Forum() {
       });
       const items = res.data.data ?? [];
       setThreads(items);
-      if (!selectedThreadId && items.length > 0) {
-        setSelectedThreadId(items[0].id);
+      const selectedStillExists = selectedThreadId
+        ? items.some((thread) => thread.id === selectedThreadId)
+        : false;
+
+      if (!selectedStillExists) {
+        setSelectedThreadId(items.length > 0 ? items[0].id : null);
+        setSelectedThread(null);
       }
     } catch (err) {
       if (!silent) {
@@ -140,6 +145,11 @@ export default function Forum() {
       });
       setSelectedThread(res.data.thread);
     } catch (err) {
+      if (axios.isAxiosError(err) && err.response?.status === 404) {
+        setSelectedThread(null);
+        setSelectedThreadId(null);
+        return;
+      }
       if (!silent) {
         setError(parseError(err, "Unable to load selected thread."));
       }
