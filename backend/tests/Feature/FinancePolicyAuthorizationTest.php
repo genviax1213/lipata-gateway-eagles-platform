@@ -54,7 +54,7 @@ class FinancePolicyAuthorizationTest extends TestCase
         ])->assertStatus(403);
     }
 
-    public function test_treasurer_can_request_contribution_edit(): void
+    public function test_treasurer_cannot_request_contribution_edit(): void
     {
         $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
         $treasurer = User::factory()->create([
@@ -86,7 +86,7 @@ class FinancePolicyAuthorizationTest extends TestCase
         $this->postJson("/api/v1/finance/contributions/{$contribution->id}/edit-requests", [
             'requested_amount' => 1000,
             'reason' => 'Policy coverage request.',
-        ])->assertStatus(201);
+        ])->assertStatus(403);
     }
 
     public function test_treasurer_cannot_approve_edit_request(): void
@@ -134,7 +134,7 @@ class FinancePolicyAuthorizationTest extends TestCase
             ->assertStatus(403);
     }
 
-    public function test_auditor_can_approve_and_reject_edit_requests(): void
+    public function test_auditor_cannot_approve_and_reject_edit_requests(): void
     {
         $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
         $auditor = User::factory()->create([
@@ -184,11 +184,11 @@ class FinancePolicyAuthorizationTest extends TestCase
         Sanctum::actingAs($auditor);
 
         $this->postJson("/api/v1/finance/edit-requests/{$approveRequest->id}/approve")
-            ->assertStatus(200);
+            ->assertStatus(403);
 
         $this->postJson("/api/v1/finance/edit-requests/{$rejectRequest->id}/reject", [
             'review_notes' => 'Insufficient basis for large adjustment.',
-        ])->assertStatus(200);
+        ])->assertStatus(403);
     }
 
     public function test_treasurer_cannot_list_edit_requests(): void
@@ -205,7 +205,7 @@ class FinancePolicyAuthorizationTest extends TestCase
             ->assertStatus(403);
     }
 
-    public function test_auditor_can_list_edit_requests(): void
+    public function test_auditor_cannot_list_edit_requests(): void
     {
         $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
         $auditor = User::factory()->create([
@@ -216,7 +216,7 @@ class FinancePolicyAuthorizationTest extends TestCase
         Sanctum::actingAs($auditor);
 
         $this->getJson('/api/v1/finance/edit-requests')
-            ->assertStatus(200);
+            ->assertStatus(403);
     }
 
     public function test_treasurer_can_view_member_contributions(): void
@@ -374,5 +374,94 @@ class FinancePolicyAuthorizationTest extends TestCase
         $this->assertFalse((bool) $nonCompliantRow['has_monthly_for_month']);
         $this->assertSame([2026], $nonCompliantRow['missing_project_years']);
         $this->assertTrue((bool) $nonCompliantRow['is_non_compliant']);
+    }
+
+    public function test_non_treasurer_compliance_checker_is_scoped_to_own_member_only(): void
+    {
+        $auditorRole = Role::query()->where('name', 'auditor')->firstOrFail();
+        $checker = User::factory()->create([
+            'role_id' => $auditorRole->id,
+            'email' => 'checker.scope@example.com',
+        ]);
+
+        $ownMember = Member::query()->create([
+            'member_number' => 'M-SCOPE-001',
+            'first_name' => 'Own',
+            'middle_name' => null,
+            'last_name' => 'Checker',
+            'email' => 'checker.scope@example.com',
+            'membership_status' => 'active',
+        ]);
+
+        $otherMember = Member::query()->create([
+            'member_number' => 'M-SCOPE-002',
+            'first_name' => 'Other',
+            'middle_name' => null,
+            'last_name' => 'Member',
+            'email' => 'other.scope@example.com',
+            'membership_status' => 'active',
+        ]);
+
+        Contribution::query()->create([
+            'member_id' => $ownMember->id,
+            'category' => 'monthly_contribution',
+            'contribution_date' => '2026-03-01',
+            'amount' => 100,
+            'encoded_by_user_id' => $checker->id,
+            'encoded_at' => now(),
+        ]);
+
+        Contribution::query()->create([
+            'member_id' => $otherMember->id,
+            'category' => 'monthly_contribution',
+            'contribution_date' => '2026-03-01',
+            'amount' => 100,
+            'encoded_by_user_id' => $checker->id,
+            'encoded_at' => now(),
+        ]);
+
+        Sanctum::actingAs($checker);
+
+        $response = $this->getJson('/api/v1/finance/compliance?month=2026-03&years[]=2026&non_compliant_only=false')
+            ->assertOk();
+
+        $rows = collect($response->json('data'));
+        $this->assertCount(1, $rows);
+        $this->assertSame($ownMember->id, (int) $rows->first()['member']['id']);
+    }
+
+    public function test_treasurer_compliance_checker_can_view_all_members(): void
+    {
+        $treasurerRole = Role::query()->where('name', 'treasurer')->firstOrFail();
+        $treasurerChecker = User::factory()->create([
+            'role_id' => $treasurerRole->id,
+            'email' => 'treasurer.scope@example.com',
+        ]);
+
+        Member::query()->create([
+            'member_number' => 'M-SCOPE-101',
+            'first_name' => 'Member',
+            'middle_name' => null,
+            'last_name' => 'One',
+            'email' => 'member.one.scope@example.com',
+            'membership_status' => 'active',
+        ]);
+
+        Member::query()->create([
+            'member_number' => 'M-SCOPE-102',
+            'first_name' => 'Member',
+            'middle_name' => null,
+            'last_name' => 'Two',
+            'email' => 'member.two.scope@example.com',
+            'membership_status' => 'active',
+        ]);
+
+        Sanctum::actingAs($treasurerChecker);
+
+        $response = $this->getJson('/api/v1/finance/compliance?month=2026-03&non_compliant_only=false')
+            ->assertOk();
+
+        $rows = collect($response->json('data'));
+        $this->assertCount(2, $rows);
     }
 }

@@ -84,11 +84,13 @@ export default function Forum() {
     return fallback;
   };
 
-  const fetchThreads = useCallback(async () => {
+  const fetchThreads = useCallback(async (silent = false) => {
     if (!canViewForum) return;
 
-    setLoading(true);
-    setError("");
+    if (!silent) {
+      setLoading(true);
+      setError("");
+    }
 
     try {
       const res = await api.get<ThreadListPayload>("/forum/threads", { params: { search } });
@@ -98,25 +100,35 @@ export default function Forum() {
         setSelectedThreadId(items[0].id);
       }
     } catch (err) {
-      setError(parseError(err, "Unable to load forum threads."));
+      if (!silent) {
+        setError(parseError(err, "Unable to load forum threads."));
+      }
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   }, [canViewForum, search, selectedThreadId]);
 
-  const fetchThread = useCallback(async (threadId: number) => {
+  const fetchThread = useCallback(async (threadId: number, silent = false) => {
     if (!canViewForum) return;
 
-    setLoading(true);
-    setError("");
+    if (!silent) {
+      setLoading(true);
+      setError("");
+    }
 
     try {
       const res = await api.get<{ thread: ForumThread }>(`/forum/threads/${threadId}`);
       setSelectedThread(res.data.thread);
     } catch (err) {
-      setError(parseError(err, "Unable to load selected thread."));
+      if (!silent) {
+        setError(parseError(err, "Unable to load selected thread."));
+      }
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   }, [canViewForum]);
 
@@ -132,6 +144,21 @@ export default function Forum() {
 
     void fetchThread(selectedThreadId);
   }, [fetchThread, selectedThreadId]);
+
+  useEffect(() => {
+    if (!canViewForum) return;
+
+    const timer = window.setInterval(() => {
+      void fetchThreads(true);
+      if (selectedThreadId) {
+        void fetchThread(selectedThreadId, true);
+      }
+    }, FORUM_REFRESH_MS);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [canViewForum, fetchThread, fetchThreads, selectedThreadId]);
 
   const createThread = async () => {
     if (!canCreateThread) return;
@@ -470,3 +497,4 @@ export default function Forum() {
     </section>
   );
 }
+  const FORUM_REFRESH_MS = 3000;

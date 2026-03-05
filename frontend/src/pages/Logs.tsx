@@ -66,7 +66,7 @@ export default function Logs() {
     setError("");
     try {
       const res = await api.get<{ data: LogEntry[]; meta: PaginationMeta }>("/admin/logs", {
-        params: { page, per_page: 20, level: level || undefined, event: eventFilter || undefined, q: query || undefined },
+        params: { page, per_page: 20, level: level || undefined, event: eventFilter || undefined, q: query || undefined, _t: Date.now() },
       });
       setEntries(res.data.data);
       setMeta(res.data.meta);
@@ -125,11 +125,19 @@ export default function Logs() {
     void loadArchiveContent();
   }, [canViewLogs, loadArchiveContent, selectedArchive]);
 
-  const runAction = async (request: () => Promise<unknown>, successMessage: string) => {
+  const runAction = async (
+    request: () => Promise<unknown>,
+    successMessage: string,
+    options?: { clearCurrentView?: boolean },
+  ) => {
     setError("");
     setNotice("");
     try {
       await request();
+      if (options?.clearCurrentView) {
+        setEntries([]);
+        setMeta((prev) => ({ ...prev, page: 1, last_page: 1, total: 0 }));
+      }
       setNotice(successMessage);
       setPage(1);
       setArchivePage(1);
@@ -274,7 +282,7 @@ export default function Logs() {
             <button
               type="button"
               className="rounded-md border border-red-400/40 px-3 py-2 text-sm text-red-200 transition hover:bg-red-500/10"
-              onClick={() => void runAction(() => api.delete("/admin/logs/current"), "Current logs cleared.")}
+              onClick={() => void runAction(() => api.delete("/admin/logs/current"), "Current logs cleared.", { clearCurrentView: true })}
             >
               Clear Current Logs
             </button>

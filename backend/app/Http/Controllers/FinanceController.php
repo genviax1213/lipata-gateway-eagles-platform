@@ -7,6 +7,7 @@ use App\Models\ContributionEditRequest;
 use App\Models\Member;
 use App\Models\Post;
 use App\Models\User;
+use App\Support\RoleHierarchy;
 use App\Support\TextCase;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -55,6 +56,16 @@ class FinanceController extends Controller
     private function categoryLabels(): array
     {
         return self::CATEGORY_LABELS;
+    }
+
+    private function canViewComplianceForAllMembers(User $user): bool
+    {
+        $user->loadMissing('role:id,name');
+        $roleName = (string) ($user->role->name ?? '');
+
+        return $roleName === RoleHierarchy::ADMIN
+            || $roleName === RoleHierarchy::FINANCE_TREASURER
+            || $user->finance_role === RoleHierarchy::FINANCE_TREASURER;
     }
 
     private function formatMemberName(Member $member): string
@@ -239,6 +250,8 @@ class FinanceController extends Controller
     public function complianceReport(Request $request)
     {
         $this->authorize('viewFinanceDirectory', Member::class);
+        /** @var User $actor */
+        $actor = $request->user();
 
         $validated = $request->validate([
             'month' => 'required|date_format:Y-m',
@@ -265,6 +278,15 @@ class FinanceController extends Controller
             ->orderBy('last_name')
             ->orderBy('first_name')
             ->get();
+
+        if (!$this->canViewComplianceForAllMembers($actor)) {
+            $actorMember = $this->resolveActorMember($actor);
+            if (!$actorMember) {
+                $members = collect();
+            } else {
+                $members = $members->where('id', $actorMember->id)->values();
+            }
+        }
 
         $monthlyCompliantMemberIds = Contribution::query()
             ->where('category', 'monthly_contribution')
