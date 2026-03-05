@@ -35,6 +35,8 @@ Route::prefix('v1')->group(function () {
         });
         Route::post('/logout', [AuthController::class, 'logout']);
         Route::post('/auth/change-password', [AuthController::class, 'changePassword']);
+        Route::get('/auth/sessions', [AuthController::class, 'sessions']);
+        Route::delete('/auth/sessions/{tokenId}', [AuthController::class, 'revokeSession']);
         Route::get('/dashboard/me', [DashboardController::class, 'me']);
 
         Route::get('/cms/posts', [PostController::class, 'index'])->middleware('portal.permission:posts.create');

@@ -5,6 +5,9 @@ import api, { ensureCsrfCookie, shouldUseLegacyTokenMode } from "../services/api
 import AuthLoadingScreen from "../components/AuthLoadingScreen";
 import { AuthContext } from "./auth-context";
 
+const AUTH_USER_CACHE_KEY = "auth_user_cache";
+const SESSION_HEARTBEAT_MS = 45_000;
+
 function normalizeEmail(value: string): string {
   return value.trim().toLowerCase();
 }
@@ -15,10 +18,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const syncUserSession = async (clearOnAuthFailure = true) => {
     const token = localStorage.getItem("auth_token");
+    if (shouldUseLegacyTokenMode() && !token) {
+      localStorage.removeItem(AUTH_USER_CACHE_KEY);
+      setUser(null);
+      return;
+    }
 
     try {
       const res = await api.get("/user");
       setUser(res.data);
+      localStorage.setItem(AUTH_USER_CACHE_KEY, JSON.stringify(res.data));
     } catch (error) {
       const status = axios.isAxiosError(error) ? error.response?.status : null;
       const isAuthFailure = status === 401 || status === 419;
@@ -27,6 +36,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (token) {
           localStorage.removeItem("auth_token");
         }
+        localStorage.removeItem(AUTH_USER_CACHE_KEY);
         setUser(null);
       }
     }
@@ -34,11 +44,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Restore session on refresh
   useEffect(() => {
+    const token = localStorage.getItem("auth_token");
+    const cachedUserRaw = localStorage.getItem(AUTH_USER_CACHE_KEY);
+    if (token && cachedUserRaw) {
+      try {
+        const cachedUser = JSON.parse(cachedUserRaw) as Record<string, unknown>;
+        setUser(cachedUser);
+      } catch {
+        localStorage.removeItem(AUTH_USER_CACHE_KEY);
+      }
+    }
+
+    if (shouldUseLegacyTokenMode() && !token) {
+      setLoading(false);
+      return;
+    }
+
     void (async () => {
       await syncUserSession();
       setLoading(false);
     })();
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const timer = window.setInterval(() => {
+      void syncUserSession();
+    }, SESSION_HEARTBEAT_MS);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [user]);
 
   useEffect(() => {
     const onStorage = (event: StorageEvent) => {
@@ -69,6 +107,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } else {
       localStorage.removeItem("auth_token");
     }
+    localStorage.setItem(AUTH_USER_CACHE_KEY, JSON.stringify(res.data.user));
     setUser(res.data.user);
   };
 
@@ -80,6 +119,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Keep client-side cleanup deterministic even if API logout fails.
     } finally {
       localStorage.removeItem("auth_token");
+      localStorage.removeItem(AUTH_USER_CACHE_KEY);
       setUser(null);
     }
   };

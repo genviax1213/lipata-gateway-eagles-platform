@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Laravel\Sanctum\TransientToken;
 
 class AuthController extends Controller
 {
@@ -234,5 +235,66 @@ class AuthController extends Controller
         }
 
         return response()->json($payload);
+    }
+
+    public function sessions(Request $request)
+    {
+        /** @var User $user */
+        $user = $request->user();
+        $currentToken = $user->currentAccessToken();
+        $currentTokenId = ($currentToken && !$currentToken instanceof TransientToken) ? (int) $currentToken->id : null;
+
+        $tokens = $user->tokens()
+            ->orderByRaw('last_used_at IS NULL, last_used_at DESC')
+            ->orderByDesc('created_at')
+            ->get(['id', 'name', 'created_at', 'last_used_at'])
+            ->map(function ($token) use ($currentTokenId) {
+                return [
+                    'id' => (int) $token->id,
+                    'name' => (string) ($token->name ?? 'session'),
+                    'created_at' => optional($token->created_at)->toISOString(),
+                    'last_used_at' => optional($token->last_used_at)->toISOString(),
+                    'is_current' => $currentTokenId !== null && (int) $token->id === $currentTokenId,
+                ];
+            })
+            ->values();
+
+        return response()->json([
+            'active_token_id' => $user->active_token_id ? (int) $user->active_token_id : null,
+            'active_session_id' => $user->active_session_id,
+            'last_activity_at' => optional($user->last_activity_at)->toISOString(),
+            'tokens' => $tokens,
+        ]);
+    }
+
+    public function revokeSession(Request $request, int $tokenId)
+    {
+        /** @var User $user */
+        $user = $request->user();
+        $currentToken = $user->currentAccessToken();
+        $currentTokenId = ($currentToken && !$currentToken instanceof TransientToken) ? (int) $currentToken->id : null;
+
+        if ($currentTokenId !== null && $tokenId === $currentTokenId) {
+            return response()->json([
+                'message' => 'Cannot revoke current active session from this action.',
+            ], 422);
+        }
+
+        $deleted = $user->tokens()->whereKey($tokenId)->delete();
+        if ($deleted < 1) {
+            return response()->json([
+                'message' => 'Session token not found.',
+            ], 404);
+        }
+
+        Log::info('auth.session_revoked', [
+            'user_id' => $user->id,
+            'revoked_token_id' => $tokenId,
+            'ip' => $request->ip(),
+        ]);
+
+        return response()->json([
+            'message' => 'Session revoked successfully.',
+        ]);
     }
 }

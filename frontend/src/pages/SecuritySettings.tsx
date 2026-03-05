@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import api from "../services/api";
 
@@ -16,6 +16,54 @@ export default function SecuritySettings() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [sessionsError, setSessionsError] = useState("");
+  const [revokingTokenId, setRevokingTokenId] = useState<number | null>(null);
+  const [sessions, setSessions] = useState<{
+    active_token_id: number | null;
+    active_session_id: string | null;
+    last_activity_at: string | null;
+    tokens: Array<{
+      id: number;
+      name: string;
+      created_at: string | null;
+      last_used_at: string | null;
+      is_current: boolean;
+    }>;
+  }>({
+    active_token_id: null,
+    active_session_id: null,
+    last_activity_at: null,
+    tokens: [],
+  });
+
+  const loadSessions = useCallback(async () => {
+    setSessionsLoading(true);
+    setSessionsError("");
+    try {
+      const res = await api.get<{
+        active_token_id: number | null;
+        active_session_id: string | null;
+        last_activity_at: string | null;
+        tokens: Array<{
+          id: number;
+          name: string;
+          created_at: string | null;
+          last_used_at: string | null;
+          is_current: boolean;
+        }>;
+      }>("/auth/sessions");
+      setSessions(res.data);
+    } catch (err) {
+      setSessionsError(parseError(err, "Unable to load active sessions."));
+    } finally {
+      setSessionsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadSessions();
+  }, [loadSessions]);
 
   const onSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -38,10 +86,24 @@ export default function SecuritySettings() {
       setCurrentPassword("");
       setNewPassword("");
       setNewPasswordConfirmation("");
+      void loadSessions();
     } catch (err) {
       setError(parseError(err, "Unable to update password. Please try again."));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const revokeSession = async (tokenId: number) => {
+    setRevokingTokenId(tokenId);
+    setSessionsError("");
+    try {
+      await api.delete(`/auth/sessions/${tokenId}`);
+      await loadSessions();
+    } catch (err) {
+      setSessionsError(parseError(err, "Unable to revoke selected session."));
+    } finally {
+      setRevokingTokenId(null);
     }
   };
 
@@ -119,6 +181,58 @@ export default function SecuritySettings() {
           <li>Only one active session is allowed per account across devices/browsers.</li>
           <li>When a new login succeeds, previous sessions are ended with a notice.</li>
         </ul>
+      </div>
+
+      <div className="glass-card max-w-2xl p-6">
+        <div className="flex items-center justify-between gap-4">
+          <h2 className="text-base font-semibold text-offwhite">Active Devices / Sessions</h2>
+          <button
+            type="button"
+            onClick={() => void loadSessions()}
+            className="rounded-md border border-white/20 px-3 py-1.5 text-xs text-offwhite/90 transition hover:bg-white/10"
+            disabled={sessionsLoading}
+          >
+            {sessionsLoading ? "Refreshing..." : "Refresh"}
+          </button>
+        </div>
+
+        {sessionsError ? (
+          <p className="mt-3 rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-100">{sessionsError}</p>
+        ) : null}
+
+        <div className="mt-4 space-y-3">
+          {sessions.tokens.length === 0 ? (
+            <p className="text-sm text-mist/80">No token sessions found for this account.</p>
+          ) : (
+            sessions.tokens.map((token) => (
+              <div key={token.id} className="rounded-md border border-white/15 bg-[#0b1222]/50 px-3 py-3">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-semibold text-offwhite">
+                      {token.name}
+                      {token.is_current ? (
+                        <span className="ml-2 rounded bg-emerald-500/20 px-2 py-0.5 text-xs text-emerald-200">Current</span>
+                      ) : null}
+                    </p>
+                    <p className="mt-1 text-xs text-mist/75">Created: {token.created_at ? new Date(token.created_at).toLocaleString() : "-"}</p>
+                    <p className="text-xs text-mist/75">Last used: {token.last_used_at ? new Date(token.last_used_at).toLocaleString() : "Never"}</p>
+                    <p className="text-xs text-mist/75">Token ID: {token.id}</p>
+                  </div>
+                  {!token.is_current ? (
+                    <button
+                      type="button"
+                      onClick={() => void revokeSession(token.id)}
+                      disabled={revokingTokenId === token.id}
+                      className="rounded-md border border-red-400/50 px-3 py-1.5 text-xs text-red-200 transition hover:bg-red-500/10 disabled:opacity-70"
+                    >
+                      {revokingTokenId === token.id ? "Revoking..." : "Revoke"}
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
       </div>
     </section>
   );

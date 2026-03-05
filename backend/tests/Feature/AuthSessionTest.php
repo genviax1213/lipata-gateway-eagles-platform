@@ -148,4 +148,31 @@ class AuthSessionTest extends TestCase
         $this->assertSame(1, $fresh->tokens()->count());
         $this->assertSame((int) $fresh->active_token_id, (int) $fresh->tokens()->first()->id);
     }
+
+    public function test_user_can_list_and_revoke_other_sessions(): void
+    {
+        $user = User::factory()->create();
+        $current = $user->createToken('current');
+        $other = $user->createToken('other');
+
+        $user->forceFill([
+            'active_token_id' => $current->accessToken->id,
+            'last_activity_at' => now(),
+        ])->save();
+
+        $list = $this->withHeaders([
+            'Authorization' => 'Bearer ' . $current->plainTextToken,
+        ])->getJson('/api/v1/auth/sessions')->assertOk();
+
+        $tokens = collect($list->json('tokens'));
+        $this->assertCount(2, $tokens);
+        $this->assertTrue($tokens->pluck('id')->contains((int) $current->accessToken->id));
+        $this->assertTrue($tokens->pluck('id')->contains((int) $other->accessToken->id));
+
+        $this->withHeaders([
+            'Authorization' => 'Bearer ' . $current->plainTextToken,
+        ])->deleteJson('/api/v1/auth/sessions/' . $other->accessToken->id)->assertOk();
+
+        $this->assertFalse($user->fresh()->tokens()->whereKey($other->accessToken->id)->exists());
+    }
 }
