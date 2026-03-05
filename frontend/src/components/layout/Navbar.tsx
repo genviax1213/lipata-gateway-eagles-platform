@@ -16,7 +16,7 @@ export default function Navbar() {
   return (
     <nav className="sticky top-0 z-40 border-b border-white/15 bg-ink/70 backdrop-blur-md">
       <div className="section-wrap relative py-3">
-        <div className="flex items-center justify-between md:hidden">
+        <div className="md:hidden">
           <Link
             to="/"
             className="flex min-w-0 items-center gap-2 font-heading text-sm tracking-wide text-offwhite sm:text-base"
@@ -26,24 +26,29 @@ export default function Navbar() {
               alt="TFOE Logo"
               className="h-8 w-8 rounded-full border border-white/20 object-cover"
             />
-            <span className="truncate">
-              The Fraternal Order of Eagles - Philippine Eagles, Inc.
+            <span className="min-w-0">
+              <span className="block truncate">Lipata Gateway Eagles Club</span>
+              <span className="block truncate font-sans text-[10px] tracking-[0.14em] text-mist/85">
+                TFOE-PE, Inc. CN201721277
+              </span>
             </span>
           </Link>
 
-          <button
-            type="button"
-            className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-gold/40 text-gold"
-            aria-expanded={mobileOpen}
-            aria-label="Toggle navigation menu"
-            onClick={() => setMobileOpen((prev) => !prev)}
-          >
-            <span className="relative block h-4 w-5">
-              <span className="absolute left-0 top-0 block h-0.5 w-5 rounded bg-current" />
-              <span className="absolute left-0 top-[7px] block h-0.5 w-5 rounded bg-current" />
-              <span className="absolute left-0 top-[14px] block h-0.5 w-5 rounded bg-current" />
-            </span>
-          </button>
+          <div className="mt-2 flex justify-end">
+            <button
+              type="button"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-gold/40 text-gold"
+              aria-expanded={mobileOpen}
+              aria-label="Toggle navigation menu"
+              onClick={() => setMobileOpen((prev) => !prev)}
+            >
+              <span className="relative block h-4 w-5">
+                <span className="absolute left-0 top-0 block h-0.5 w-5 rounded bg-current" />
+                <span className="absolute left-0 top-[7px] block h-0.5 w-5 rounded bg-current" />
+                <span className="absolute left-0 top-[14px] block h-0.5 w-5 rounded bg-current" />
+              </span>
+            </button>
+          </div>
         </div>
 
         <div className="hidden items-center justify-center md:flex">
@@ -57,7 +62,10 @@ export default function Navbar() {
               className="h-9 w-9 rounded-full border border-white/20 object-cover lg:h-10 lg:w-10"
             />
             <span className="text-center">
-              The Fraternal Order of Eagles - Philippine Eagles, Inc.
+              <span className="block">Lipata Gateway Eagles Club</span>
+              <span className="block font-sans text-xs tracking-[0.12em] text-mist/85 lg:text-sm">
+                TFOE-PE, Inc. CN201721277
+              </span>
             </span>
           </Link>
         </div>
