@@ -167,6 +167,29 @@ export default function Logs() {
     }
   };
 
+  const downloadCurrentLog = async () => {
+    setError("");
+    setNotice("");
+    try {
+      const response = await api.get("/admin/logs/current/download", {
+        responseType: "blob",
+      });
+
+      const blob = new Blob([response.data], { type: "text/plain" });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "laravel.log";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      setNotice("Current log download started.");
+    } catch (err) {
+      setError(parseError(err, "Unable to download current log."));
+    }
+  };
+
   const archiveOptions = useMemo(
     () => archives.map((item) => <option key={item.name} value={item.name}>{item.name}</option>),
     [archives],
@@ -234,6 +257,13 @@ export default function Logs() {
 
         {canManageLogs ? (
           <div className="mb-4 flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="rounded-md border border-gold/40 px-3 py-2 text-sm text-gold-soft transition hover:bg-gold/10"
+              onClick={() => void downloadCurrentLog()}
+            >
+              Download Current Log
+            </button>
             <button
               type="button"
               className="rounded-md border border-gold/40 px-3 py-2 text-sm text-gold-soft transition hover:bg-gold/10"

@@ -37,6 +37,10 @@ class LogManagementTest extends TestCase
             ->assertOk()
             ->assertJsonPath('meta.total', 2);
 
+        $this->get('/api/v1/admin/logs/current/download')
+            ->assertOk()
+            ->assertHeader('content-type', 'text/plain; charset=UTF-8');
+
         $this->postJson('/api/v1/admin/logs/compress')
             ->assertOk()
             ->assertJsonPath('message', 'Current logs compressed and archived.');

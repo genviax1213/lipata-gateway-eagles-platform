@@ -105,6 +105,20 @@ class LogManagementController extends Controller
         ]);
     }
 
+    public function downloadCurrent()
+    {
+        $currentPath = $this->currentLogPath();
+        if (!File::exists($currentPath)) {
+            return response()->json([
+                'message' => 'Current log file not found.',
+            ], 404);
+        }
+
+        return response()->download($currentPath, 'laravel.log', [
+            'Content-Type' => 'text/plain',
+        ]);
+    }
+
     public function compressCurrent()
     {
         $this->purgeExpiredArchives();

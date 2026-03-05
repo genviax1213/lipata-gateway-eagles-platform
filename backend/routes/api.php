@@ -39,6 +39,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/auth/sessions', [AuthController::class, 'sessions']);
         Route::delete('/auth/sessions/{tokenId}', [AuthController::class, 'revokeSession']);
         Route::get('/admin/logs', [LogManagementController::class, 'index'])->middleware('portal.permission:members.view');
+        Route::get('/admin/logs/current/download', [LogManagementController::class, 'downloadCurrent'])->middleware('portal.permission:members.view');
         Route::delete('/admin/logs/current', [LogManagementController::class, 'clearCurrent'])->middleware('portal.permission:members.delete');
         Route::post('/admin/logs/compress', [LogManagementController::class, 'compressCurrent'])->middleware('portal.permission:members.delete');
         Route::get('/admin/logs/archives', [LogManagementController::class, 'archives'])->middleware('portal.permission:members.view');
