@@ -8,6 +8,11 @@
   --color-offwhite: #f6f1e6;
   --color-gold: #e0b44a;
   --color-gold-soft: #f3db98;
+  --portal-bg-start: #071428;
+  --portal-bg-mid: #102a4f;
+  --portal-bg-end: #1a3b64;
+  --portal-bg-radial-primary: rgba(224, 180, 74, 0.34);
+  --portal-bg-radial-secondary: rgba(92, 137, 201, 0.3);
   --font-heading: "Cormorant Garamond", serif;
   --font-sans: "Manrope", sans-serif;
 }
@@ -24,9 +29,9 @@ body {
   font-family: var(--font-sans);
   caret-color: transparent;
   background:
-    radial-gradient(circle at 14% -12%, rgba(224, 180, 74, 0.34) 0, rgba(224, 180, 74, 0) 34%),
-    radial-gradient(circle at 96% 8%, rgba(92, 137, 201, 0.3) 0, rgba(92, 137, 201, 0) 30%),
-    linear-gradient(150deg, #071428 0%, #102a4f 48%, #1a3b64 100%);
+    radial-gradient(circle at 14% -12%, var(--portal-bg-radial-primary) 0, rgba(224, 180, 74, 0) 34%),
+    radial-gradient(circle at 96% 8%, var(--portal-bg-radial-secondary) 0, rgba(92, 137, 201, 0) 30%),
+    linear-gradient(150deg, var(--portal-bg-start) 0%, var(--portal-bg-mid) 48%, var(--portal-bg-end) 100%);
 }
 
 input,
@@ -88,8 +93,8 @@ input::-ms-clear {
   align-items: center;
   justify-content: center;
   border-radius: 0.375rem;
-  background: #e0b44a;
-  color: #0a1730;
+  background: var(--color-gold);
+  color: var(--color-ink);
   padding: 0.75rem 1.5rem;
   font-weight: 600;
   box-shadow: 0 10px 22px rgba(2, 6, 23, 0.26);
@@ -101,8 +106,8 @@ input::-ms-clear {
   align-items: center;
   justify-content: center;
   border-radius: 0.375rem;
-  border: 1px solid rgba(224, 180, 74, 0.62);
-  color: #f3db98;
+  border: 1px solid color-mix(in srgb, var(--color-gold) 62%, transparent);
+  color: var(--color-gold-soft);
   padding: 0.75rem 1.5rem;
   font-weight: 600;
   transition: background-color 180ms ease, transform 180ms ease;
@@ -110,14 +115,14 @@ input::-ms-clear {
 
 .btn-primary:hover {
   transform: translateY(-2px);
-  background: #f3db98;
-  box-shadow: 0 14px 28px rgba(224, 180, 74, 0.32);
+  background: var(--color-gold-soft);
+  box-shadow: 0 14px 28px color-mix(in srgb, var(--color-gold) 32%, transparent);
 }
 
 .btn-secondary:hover {
   transform: translateY(-2px);
-  background: rgba(224, 180, 74, 0.2);
-  border-color: rgba(224, 180, 74, 0.85);
+  background: color-mix(in srgb, var(--color-gold) 20%, transparent);
+  border-color: color-mix(in srgb, var(--color-gold) 85%, transparent);
 }
 
 .surface-card {

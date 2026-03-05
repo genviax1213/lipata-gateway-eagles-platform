@@ -1,8 +1,9 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../../contexts/useAuth";
 import { hasPermission, isAdminUser } from "../../utils/auth";
+import { applyPortalTheme, readStoredPortalTheme, resolvePortalTheme } from "../../utils/portalTheme";
 
 function getPortalTitle(user: Record<string, unknown> | null): string {
   const roleName = (user?.role as { name?: unknown } | undefined)?.name;
@@ -45,6 +46,24 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const canViewForum = !isApplicant;
   const portalTitle = getPortalTitle(user);
   const portalShortTitle = toShortTitle(portalTitle);
+
+  useEffect(() => {
+    const applySavedTheme = () => {
+      const stored = readStoredPortalTheme();
+      applyPortalTheme(resolvePortalTheme(stored));
+    };
+
+    applySavedTheme();
+
+    const onStorage = (event: StorageEvent) => {
+      if (event.key && event.key !== "lgec.portal.theme.v1") return;
+      applySavedTheme();
+    };
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener("storage", onStorage);
+    };
+  }, []);
 
   const navItems = useMemo(
     () => [

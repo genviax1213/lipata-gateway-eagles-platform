@@ -38,7 +38,7 @@ interface ThreadListPayload {
 }
 
 export default function Forum() {
-  const FORUM_REFRESH_MS = 3000;
+  const FORUM_REFRESH_MS = 1000;
   const { user } = useAuth();
   const roleName = (user?.role as { name?: unknown } | undefined)?.name;
   const isApplicant = roleName === "applicant";
@@ -148,6 +148,7 @@ export default function Forum() {
       if (axios.isAxiosError(err) && err.response?.status === 404) {
         setSelectedThread(null);
         setSelectedThreadId(null);
+        void fetchThreads(true);
         return;
       }
       if (!silent) {
@@ -158,7 +159,7 @@ export default function Forum() {
         setLoading(false);
       }
     }
-  }, [canViewForum]);
+  }, [canViewForum, fetchThreads]);
 
   useEffect(() => {
     void fetchThreads();
