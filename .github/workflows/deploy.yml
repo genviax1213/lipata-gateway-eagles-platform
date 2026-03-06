@@ -154,7 +154,7 @@ jobs:
           <IfModule !mod_authz_core.c>
               Deny from all
           </IfModule>
-HTACCESS
+          HTACCESS
 
           # Remove known sensitive leftovers from older/manual deploys.
           rm -f "\$BACKEND_DIR/stackcp.ppk" "\$BACKEND_DIR/stackcp.pub"
