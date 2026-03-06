@@ -81,18 +81,18 @@ jobs:
     needs: build_frontend
     environment: production
     env:
-      SSH_HOST: ${{ secrets.SSH_HOST != '' && secrets.SSH_HOST || 'serverbyt.net' }}
+      SSH_HOST: ${{ secrets.SSH_HOST }}
       SSH_USER: ${{ secrets.SSH_USER }}
       SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-      PUBLIC_BASE_URL: ${{ vars.PUBLIC_BASE_URL != '' && vars.PUBLIC_BASE_URL || 'https://lgec.org' }}
+      PUBLIC_BASE_URL: ${{ vars.PUBLIC_BASE_URL }}
       FRONTEND_REMOTE_DIR: ${{ secrets.FRONTEND_REMOTE_DIR }}
       REMOTE_APP_DIR: ${{ secrets.REMOTE_APP_DIR }}
       REMOTE_BACKEND_DIR: ${{ secrets.REMOTE_BACKEND_DIR }}
-      DEPLOY_BRANCH: ${{ vars.DEPLOY_BRANCH != '' && vars.DEPLOY_BRANCH || 'main' }}
-      RUN_SEED: ${{ vars.RUN_SEED != '' && vars.RUN_SEED || 'false' }}
+      DEPLOY_BRANCH: ${{ vars.DEPLOY_BRANCH }}
+      RUN_SEED: ${{ vars.RUN_SEED }}
       RESTART_COMMAND: ${{ vars.RESTART_COMMAND }}
-      PHP_BIN: ${{ vars.PHP_BIN != '' && vars.PHP_BIN || 'php' }}
-      COMPOSER_BIN: ${{ vars.COMPOSER_BIN != '' && vars.COMPOSER_BIN || 'composer' }}
+      PHP_BIN: ${{ vars.PHP_BIN }}
+      COMPOSER_BIN: ${{ vars.COMPOSER_BIN }}
     steps:
       - name: Download Frontend Artifact
         uses: actions/download-artifact@v4
@@ -103,6 +103,7 @@ jobs:
       - name: Validate Required Secrets
         run: |
           set -e
+          SSH_HOST="${SSH_HOST:-serverbyt.net}"
           [ -n "$SSH_USER" ] || (echo "Missing secret: SSH_USER" && exit 1)
           [ -n "$SSH_PRIVATE_KEY" ] || (echo "Missing secret: SSH_PRIVATE_KEY" && exit 1)
           [ -n "$FRONTEND_REMOTE_DIR" ] || (echo "Missing secret: FRONTEND_REMOTE_DIR" && exit 1)
@@ -111,6 +112,7 @@ jobs:
       - name: Prepare SSH
         run: |
           set -e
+          SSH_HOST="${SSH_HOST:-serverbyt.net}"
           mkdir -p ~/.ssh
           printf "%s" "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
@@ -119,6 +121,7 @@ jobs:
       - name: Sync Frontend
         run: |
           set -e
+          SSH_HOST="${SSH_HOST:-serverbyt.net}"
           rsync -az --delete \
             --exclude ".well-known" \
             -e "ssh -i ~/.ssh/id_ed25519" \
@@ -128,6 +131,11 @@ jobs:
       - name: Deploy Laravel Backend
         run: |
           set -e
+          SSH_HOST="${SSH_HOST:-serverbyt.net}"
+          DEPLOY_BRANCH="${DEPLOY_BRANCH:-main}"
+          RUN_SEED="${RUN_SEED:-false}"
+          PHP_BIN="${PHP_BIN:-php}"
+          COMPOSER_BIN="${COMPOSER_BIN:-composer}"
           ssh -i ~/.ssh/id_ed25519 "${SSH_USER}@${SSH_HOST}" << EOF
           set -e
           APP_DIR="${REMOTE_APP_DIR}"
@@ -190,6 +198,7 @@ HTACCESS
       - name: Security Exposure Smoke Checks
         run: |
           set -e
+          PUBLIC_BASE_URL="${PUBLIC_BASE_URL:-https://lgec.org}"
           for path in \
             /backend/composer.lock \
             /backend/phpunit.xml \
