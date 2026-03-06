@@ -52,7 +52,7 @@ export default function News() {
     <section className="section-wrap py-16 md:py-20">
       <h1 className="mb-3 font-heading text-4xl text-offwhite md:text-5xl">News & Updates</h1>
       <p className="mb-8 max-w-3xl text-mist/85">
-        Latest announcements and stories published from the CMS News section.
+        Latest announcements and stories.
       </p>
 
       {loading && (

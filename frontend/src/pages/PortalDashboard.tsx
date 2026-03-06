@@ -161,6 +161,19 @@ interface CustomThemeForm {
   bgEnd: string;
 }
 
+type PortalTab =
+  | "overview"
+  | "themes"
+  | "glossary"
+  | "applicant-status"
+  | "applicant-notices"
+  | "applicant-docs"
+  | "applicant-fees"
+  | "my-contributions"
+  | "committee";
+
+const PAGE_SIZE = 10;
+
 export default function PortalDashboard() {
   const { user } = useAuth();
   const canViewApplicantDashboard = hasPermission(user, "applications.dashboard.view");
@@ -173,10 +186,12 @@ export default function PortalDashboard() {
   const canChairmanLogContributionPayment = hasPermission(user, "applications.fee.pay");
   const isAdmin = isAdminUser(user);
 
+  const [activeTab, setActiveTab] = useState<PortalTab>("overview");
   const [dashboard, setDashboard] = useState<DashboardPayload | null>(null);
   const [applicantDetails, setApplicantDetails] = useState<ApplicantDetails | null>(null);
   const [memberData, setMemberData] = useState<MemberContributionPayload | null>(null);
   const [applications, setApplications] = useState<ApplicationRow[]>([]);
+  const [applicationsLoaded, setApplicationsLoaded] = useState(false);
   const [selectedApplicationId, setSelectedApplicationId] = useState<number | null>(null);
   const [selectedApplicationDetails, setSelectedApplicationDetails] = useState<ApplicantDetails | null>(null);
   const [noticeText, setNoticeText] = useState("");
@@ -200,6 +215,13 @@ export default function PortalDashboard() {
     return toCustomForm(active);
   });
   const [themeNotice, setThemeNotice] = useState("");
+  const [contributionResultsVisible, setContributionResultsVisible] = useState(false);
+  const [contributionsPage, setContributionsPage] = useState(1);
+  const [applicationsPage, setApplicationsPage] = useState(1);
+  const [noticesPage, setNoticesPage] = useState(1);
+  const [documentsPage, setDocumentsPage] = useState(1);
+  const [feesPage, setFeesPage] = useState(1);
+  const [committeeDocumentsPage, setCommitteeDocumentsPage] = useState(1);
 
   const parseError = (err: unknown, fallback: string): string => {
     if (!axios.isAxiosError(err)) return fallback;
@@ -253,8 +275,7 @@ export default function PortalDashboard() {
       }
 
       if (canChairmanReview || canChairmanSetContributionTarget || canChairmanLogContributionPayment) {
-        const rows = await api.get<{ data: ApplicationRow[] }>("/member-applications", { params: { status: "all" } });
-        setApplications(rows.data.data ?? []);
+        setApplications([]);
       } else {
         setApplications([]);
       }
@@ -270,7 +291,7 @@ export default function PortalDashboard() {
   }, [loadDashboard]);
 
   useEffect(() => {
-    if (!selectedApplicationId) {
+    if (!applicationsLoaded || !selectedApplicationId) {
       setSelectedApplicationDetails(null);
       return;
     }
@@ -283,7 +304,7 @@ export default function PortalDashboard() {
         setSelectedApplicationDetails(null);
       }
     })();
-  }, [selectedApplicationId]);
+  }, [applicationsLoaded, selectedApplicationId]);
 
   const applyPresetTheme = (themeId: string) => {
     const preset = PORTAL_BUILTIN_THEMES.find((item) => item.id === themeId);
@@ -342,6 +363,29 @@ export default function PortalDashboard() {
     () => filteredRows.reduce((acc, row) => acc + Number(row.amount), 0),
     [filteredRows],
   );
+  const pagedContributionRows = useMemo(() => {
+    const start = (contributionsPage - 1) * PAGE_SIZE;
+    return filteredRows.slice(start, start + PAGE_SIZE);
+  }, [contributionsPage, filteredRows]);
+  const contributionsLastPage = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
+  const pagedApplicantNotices = useMemo(() => {
+    const notices = applicantDetails?.notices ?? [];
+    const start = (noticesPage - 1) * PAGE_SIZE;
+    return notices.slice(start, start + PAGE_SIZE);
+  }, [applicantDetails?.notices, noticesPage]);
+  const noticesLastPage = Math.max(1, Math.ceil((applicantDetails?.notices?.length ?? 0) / PAGE_SIZE));
+  const pagedApplicantDocuments = useMemo(() => {
+    const documents = applicantDetails?.documents ?? [];
+    const start = (documentsPage - 1) * PAGE_SIZE;
+    return documents.slice(start, start + PAGE_SIZE);
+  }, [applicantDetails?.documents, documentsPage]);
+  const documentsLastPage = Math.max(1, Math.ceil((applicantDetails?.documents?.length ?? 0) / PAGE_SIZE));
+  const pagedFeeRequirements = useMemo(() => {
+    const requirements = applicantDetails?.fees.requirements ?? [];
+    const start = (feesPage - 1) * PAGE_SIZE;
+    return requirements.slice(start, start + PAGE_SIZE);
+  }, [applicantDetails?.fees.requirements, feesPage]);
+  const feesLastPage = Math.max(1, Math.ceil((applicantDetails?.fees.requirements?.length ?? 0) / PAGE_SIZE));
 
   const userFullName = useMemo(
     () => (typeof user?.name === "string" ? user.name : "Unknown User"),
@@ -409,6 +453,31 @@ export default function PortalDashboard() {
     }
     return "Review your latest contribution records and check back for new notices.";
   }, [canChairmanLogContributionPayment, canChairmanReview, canChairmanSetContributionTarget, dashboard?.view]);
+
+  const pagedApplications = useMemo(() => {
+    const start = (applicationsPage - 1) * PAGE_SIZE;
+    return applications.slice(start, start + PAGE_SIZE);
+  }, [applications, applicationsPage]);
+  const applicationsLastPage = Math.max(1, Math.ceil(applications.length / PAGE_SIZE));
+  const pagedCommitteeDocuments = useMemo(() => {
+    const documents = selectedApplicationDetails?.documents ?? [];
+    const start = (committeeDocumentsPage - 1) * PAGE_SIZE;
+    return documents.slice(start, start + PAGE_SIZE);
+  }, [committeeDocumentsPage, selectedApplicationDetails?.documents]);
+  const committeeDocumentsLastPage = Math.max(1, Math.ceil((selectedApplicationDetails?.documents?.length ?? 0) / PAGE_SIZE));
+
+  const loadCommitteeApplications = async () => {
+    setError("");
+    setNotice("");
+    try {
+      const rows = await api.get<{ data: ApplicationRow[] }>("/member-applications", { params: { status: "all" } });
+      setApplications(rows.data.data ?? []);
+      setApplicationsLoaded(true);
+      setApplicationsPage(1);
+    } catch (err) {
+      setError(parseError(err, "Failed to load application committee list."));
+    }
+  };
 
   const uploadDocument = async () => {
     if (!applicantDetails || !documentFile || !canUploadApplicantDocs) return;
@@ -571,192 +640,234 @@ export default function PortalDashboard() {
         Dashboard content adapts to your assigned role.
       </p>
 
-      <div className="mb-4 rounded-xl border border-white/20 bg-white/10 p-4">
-        <h2 className="mb-2 font-heading text-xl text-offwhite">User Session</h2>
-        <p className="text-sm text-mist/85">Name: <span className="text-offwhite">{userFullName}</span></p>
-        <p className="text-sm text-mist/85">Email: <span className="text-offwhite">{userEmail}</span></p>
-        <p className="text-sm text-mist/85">Roles: <span className="text-gold-soft">{roleLabels.join(", ")}</span></p>
+      <div className="mb-6 flex flex-wrap gap-2">
+        <button type="button" onClick={() => setActiveTab("overview")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "overview" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Overview</button>
+        {dashboard?.view === "applicant" && applicantDetails && <button type="button" onClick={() => setActiveTab("applicant-status")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "applicant-status" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Applicant Status</button>}
+        {dashboard?.view === "applicant" && applicantDetails && <button type="button" onClick={() => setActiveTab("applicant-notices")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "applicant-notices" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Notices</button>}
+        {dashboard?.view === "applicant" && applicantDetails && <button type="button" onClick={() => setActiveTab("applicant-docs")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "applicant-docs" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Documents</button>}
+        {dashboard?.view === "applicant" && applicantDetails && <button type="button" onClick={() => setActiveTab("applicant-fees")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "applicant-fees" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Applicant Fees</button>}
+        {dashboard?.view !== "applicant" && <button type="button" onClick={() => setActiveTab("my-contributions")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "my-contributions" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>My Contributions</button>}
+        {isAdmin && <button type="button" onClick={() => setActiveTab("themes")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "themes" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Themes</button>}
+        {isAdmin && <button type="button" onClick={() => setActiveTab("glossary")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "glossary" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Glossary</button>}
+        {(canChairmanReview || canChairmanSetContributionTarget || canChairmanLogContributionPayment || canChairmanSetNotice || canChairmanSetStage || canChairmanReviewDocs) && <button type="button" onClick={() => setActiveTab("committee")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "committee" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Committee</button>}
       </div>
-
-      <div className="mb-4 rounded-xl border border-white/20 bg-white/10 p-4">
-        <h2 className="mb-2 font-heading text-xl text-offwhite">Task Snapshot</h2>
-        <TaskHierarchyCard status={statusSummary} actions={availableActionsSummary} nextStep={nextStepSummary} />
-      </div>
-
-      {isAdmin && (
-        <>
-          <div className="mb-4 rounded-xl border border-white/20 bg-white/10 p-4">
-            <h2 className="mb-2 font-heading text-xl text-offwhite">Theme Settings</h2>
-            <p className="mb-3 text-sm text-mist/85">Choose one of 10 normal/dark colorful themes, or save your own custom palette.</p>
-            {themeNotice ? (
-              <p className="mb-3 rounded-md border border-gold/30 bg-gold/10 px-3 py-2 text-xs text-gold-soft">{themeNotice}</p>
-            ) : null}
-
-            <div className="mb-3 flex flex-wrap items-center gap-2">
-              <label htmlFor="admin-theme-preset" className="text-xs font-semibold text-mist/85">Preset Theme</label>
-              <select
-                id="admin-theme-preset"
-                value={selectedThemeId === "custom" ? "" : selectedThemeId}
-                onChange={(e) => {
-                  if (e.target.value) {
-                    applyPresetTheme(e.target.value);
-                  }
-                }}
-                className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-sm text-offwhite"
-              >
-                <option value="" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Select preset theme</option>
-                {PORTAL_BUILTIN_THEMES.map((theme) => (
-                  <option
-                    key={theme.id}
-                    value={theme.id}
-                    style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}
-                  >
-                    {theme.name} ({theme.mode})
-                  </option>
-                ))}
-              </select>
-              {selectedThemeId === "custom" ? (
-                <span className="rounded border border-gold/40 bg-gold/10 px-2 py-1 text-xs text-gold-soft">Using Custom Theme</span>
-              ) : null}
-            </div>
-
-            <div className="grid gap-3 md:grid-cols-3">
-              {([
-                ["navy", "Navy"],
-                ["ink", "Ink"],
-                ["mist", "Mist"],
-                ["offwhite", "Off White"],
-                ["gold", "Gold"],
-                ["goldSoft", "Gold Soft"],
-                ["bgStart", "BG Start"],
-                ["bgMid", "BG Middle"],
-                ["bgEnd", "BG End"],
-              ] as Array<[keyof CustomThemeForm, string]>).map(([key, label]) => (
-                <label key={key} className="rounded-md border border-white/20 bg-white/5 px-3 py-2 text-xs text-mist/85">
-                  <span className="mb-2 block font-semibold">{label}</span>
-                  <input
-                    type="color"
-                    value={customThemeForm[key]}
-                    onChange={(e) => {
-                      const next = e.target.value;
-                      setCustomThemeForm((prev) => ({ ...prev, [key]: next }));
-                    }}
-                    className="h-9 w-full cursor-pointer rounded border border-white/20 bg-transparent"
-                  />
-                  <span className="mt-1 block text-[11px] text-mist/70">{customThemeForm[key]}</span>
-                </label>
-              ))}
-            </div>
-
-            <div className="mt-3 flex flex-wrap gap-2">
-              <button className="btn-secondary" type="button" onClick={() => saveCustomTheme()}>Save & Apply Custom Theme</button>
-              <button className="rounded-md border border-white/30 px-3 py-2 text-sm text-offwhite/90 transition hover:bg-white/10" type="button" onClick={() => resetCustomThemeForm()}>
-                Reset Custom Form
-              </button>
-            </div>
-          </div>
-
-          <div className="mb-4 rounded-xl border border-white/20 bg-white/10 p-4">
-            <h2 className="mb-2 font-heading text-xl text-offwhite">Role Glossary</h2>
-            <div className="grid gap-2 md:grid-cols-2">
-              {roleGlossary.map((item) => (
-                <div key={item.role} className="rounded border border-white/20 bg-white/5 px-3 py-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-gold-soft">{item.role}</p>
-                  <p className="text-xs text-mist/85">{item.meaning}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </>
-      )}
 
       {error && <p className="mb-4 rounded-md border border-red-300/30 bg-red-400/10 px-4 py-2 text-sm text-red-200" role="alert" aria-live="polite">{error}</p>}
       {notice && <p className="mb-4 rounded-md border border-gold/30 bg-gold/10 px-4 py-2 text-sm text-gold-soft" role="status" aria-live="polite">{notice}</p>}
 
       {loading && <p className="mb-4 text-sm text-mist/80">Loading dashboard...</p>}
 
-      {dashboard?.view === "applicant" && applicantDetails && (
-        <div className="space-y-5">
+      {activeTab === "overview" && (
+        <>
           <div className="rounded-xl border border-white/20 bg-white/10 p-4">
-            <h2 className="mb-2 font-heading text-2xl text-offwhite">Applicant Status</h2>
-            <p className="text-sm text-mist/85">Decision: <span className="text-gold-soft">{applicantDetails.decision_status}</span></p>
-            <p className="text-sm text-mist/85">Workflow: <span className="text-offwhite">{applicantDetails.current_stage_label}</span></p>
-            <p className="text-sm text-mist/85">Verification State: <span className="text-offwhite">{applicantDetails.status}</span></p>
+            <h2 className="mb-2 font-heading text-xl text-offwhite">User Session</h2>
+            <p className="text-sm text-mist/85">Name: <span className="text-offwhite">{userFullName}</span></p>
+            <p className="text-sm text-mist/85">Email: <span className="text-offwhite">{userEmail}</span></p>
+            <p className="text-sm text-mist/85">Roles: <span className="text-gold-soft">{roleLabels.join(", ")}</span></p>
           </div>
 
-          <div className="rounded-xl border border-white/20 bg-white/10 p-4">
-            <h2 className="mb-2 font-heading text-2xl text-offwhite">Five I&apos;s Stage</h2>
-            <p className="text-sm text-mist/85">
-              Interview → Introduction → Indoctrination (Initiation) → Incubation → Induction
-            </p>
-            <p className="mt-2 text-sm text-gold-soft">Current: {applicantDetails.current_stage_label}</p>
+          <div className="mt-4 rounded-xl border border-white/20 bg-white/10 p-4">
+            <h2 className="mb-2 font-heading text-xl text-offwhite">Task Snapshot</h2>
+            <TaskHierarchyCard status={statusSummary} actions={availableActionsSummary} nextStep={nextStepSummary} />
           </div>
+        </>
+      )}
 
-          <div className="rounded-xl border border-white/20 bg-white/10 p-4">
-            <h2 className="mb-2 font-heading text-2xl text-offwhite">Chairman Notices (History)</h2>
-            {applicantDetails.notices.map((item) => (
-              <div key={item.id} className="mb-2 rounded-md border border-white/20 bg-white/5 p-3 text-sm text-mist/85">
-                <p>{item.notice_text}</p>
-                <p className="mt-1 text-xs text-mist/70">{new Date(item.created_at).toLocaleString()} by {item.created_by?.name ?? "System"}</p>
-              </div>
-            ))}
-            {applicantDetails.notices.length === 0 && <p className="text-sm text-mist/70">No notices yet.</p>}
-          </div>
+      {activeTab === "themes" && isAdmin && (
+        <div className="rounded-xl border border-white/20 bg-white/10 p-4">
+          <h2 className="mb-2 font-heading text-xl text-offwhite">Theme Settings</h2>
+          <p className="mb-3 text-sm text-mist/85">Choose one of 10 normal/dark colorful themes, or save your own custom palette.</p>
+          {themeNotice ? (
+            <p className="mb-3 rounded-md border border-gold/30 bg-gold/10 px-3 py-2 text-xs text-gold-soft">{themeNotice}</p>
+          ) : null}
 
-          <div className="rounded-xl border border-white/20 bg-white/10 p-4">
-            <h2 className="mb-2 font-heading text-2xl text-offwhite">Required Documents</h2>
-            {canUploadApplicantDocs && (
-              <div className="mb-3 flex flex-wrap items-center gap-3">
-                <label htmlFor="applicant-document-upload" className="text-xs font-semibold text-mist/85">Upload Document</label>
-                <input
-                  id="applicant-document-upload"
-                  type="file"
-                  accept=".jpg,.jpeg,.png,.webp,.pdf"
-                  capture="environment"
-                  onChange={(e) => setDocumentFile(e.target.files?.[0] ?? null)}
-                />
-                <button className="btn-secondary" onClick={() => void uploadDocument()} disabled={!documentFile}>Upload</button>
-                <p className="text-xs text-mist/70">On Android, this can open camera/scanner or file picker depending on your browser.</p>
-              </div>
-            )}
-            <div className="space-y-2">
-              {applicantDetails.documents.map((doc) => (
-                <div key={doc.id} className="rounded-md border border-white/20 bg-white/5 px-3 py-2 text-sm text-mist/85">
-                  <p>
-                    {doc.original_name} - <span className="text-gold-soft">{doc.status}</span> {doc.review_note ? `(${doc.review_note})` : ""}
-                  </p>
-                  <button
-                    className="mt-2 rounded border border-white/30 px-2 py-1 text-xs text-offwhite"
-                    onClick={() => void viewDocument(doc.id, doc.original_name)}
-                  >
-                    View
-                  </button>
-                </div>
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <label htmlFor="admin-theme-preset" className="text-xs font-semibold text-mist/85">Preset Theme</label>
+            <select
+              id="admin-theme-preset"
+              value={selectedThemeId === "custom" ? "" : selectedThemeId}
+              onChange={(e) => {
+                if (e.target.value) {
+                  applyPresetTheme(e.target.value);
+                }
+              }}
+              className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-sm text-offwhite"
+            >
+              <option value="" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Select preset theme</option>
+              {PORTAL_BUILTIN_THEMES.map((theme) => (
+                <option
+                  key={theme.id}
+                  value={theme.id}
+                  style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}
+                >
+                  {theme.name} ({theme.mode})
+                </option>
               ))}
-              {applicantDetails.documents.length === 0 && <p className="text-sm text-mist/70">No documents uploaded yet.</p>}
-            </div>
+            </select>
+            {selectedThemeId === "custom" ? (
+              <span className="rounded border border-gold/40 bg-gold/10 px-2 py-1 text-xs text-gold-soft">Using Custom Theme</span>
+            ) : null}
           </div>
 
-          <div className="rounded-xl border border-white/20 bg-white/10 p-4">
-            <h2 className="mb-2 font-heading text-2xl text-offwhite">Applicant Journey Contributions</h2>
-            <p className="text-sm text-mist/85">Target Total: <span className="text-offwhite">{money(applicantDetails.fees.required_total)}</span></p>
-            <p className="text-sm text-mist/85">Partial/Full Paid Total: <span className="text-offwhite">{money(applicantDetails.fees.paid_total)}</span></p>
-            <p className="text-sm text-mist/85">Variance: <span className="text-gold-soft">{money(applicantDetails.fees.variance_total ?? applicantDetails.fees.balance)}</span></p>
-            {applicantDetails.fees.requirements.map((req) => (
-              <div key={req.category} className="mt-2 rounded-md border border-white/20 bg-white/5 p-3">
-                <p className="text-sm text-offwhite">{req.category_label}</p>
-                <p className="text-xs text-mist/70">Target: {money(req.target_payment)} | Paid: {money(req.partial_payment_total)} | Variance: {money(req.variance)}</p>
-                <p className="text-xs text-mist/70">{req.note ?? "-"}</p>
-                {req.payments.map((p) => (
-                  <p key={p.id} className="text-xs text-mist/80">{p.payment_date} - {money(p.amount)} by {p.encoded_by?.name ?? "Membership Chairman"}</p>
-                ))}
+          <div className="grid gap-3 md:grid-cols-3">
+            {([
+              ["navy", "Navy"],
+              ["ink", "Ink"],
+              ["mist", "Mist"],
+              ["offwhite", "Off White"],
+              ["gold", "Gold"],
+              ["goldSoft", "Gold Soft"],
+              ["bgStart", "BG Start"],
+              ["bgMid", "BG Middle"],
+              ["bgEnd", "BG End"],
+            ] as Array<[keyof CustomThemeForm, string]>).map(([key, label]) => (
+              <label key={key} className="rounded-md border border-white/20 bg-white/5 px-3 py-2 text-xs text-mist/85">
+                <span className="mb-2 block font-semibold">{label}</span>
+                <input
+                  type="color"
+                  value={customThemeForm[key]}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setCustomThemeForm((prev) => ({ ...prev, [key]: next }));
+                  }}
+                  className="h-9 w-full cursor-pointer rounded border border-white/20 bg-transparent"
+                />
+                <span className="mt-1 block text-[11px] text-mist/70">{customThemeForm[key]}</span>
+              </label>
+            ))}
+          </div>
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button className="btn-secondary" type="button" onClick={() => saveCustomTheme()}>Save & Apply Custom Theme</button>
+            <button className="rounded-md border border-white/30 px-3 py-2 text-sm text-offwhite/90 transition hover:bg-white/10" type="button" onClick={() => resetCustomThemeForm()}>
+              Reset Custom Form
+            </button>
+          </div>
+        </div>
+      )}
+
+      {activeTab === "glossary" && isAdmin && (
+        <div className="rounded-xl border border-white/20 bg-white/10 p-4">
+          <h2 className="mb-2 font-heading text-xl text-offwhite">Role Glossary</h2>
+          <div className="grid gap-2 md:grid-cols-2">
+            {roleGlossary.map((item) => (
+              <div key={item.role} className="rounded border border-white/20 bg-white/5 px-3 py-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gold-soft">{item.role}</p>
+                <p className="text-xs text-mist/85">{item.meaning}</p>
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {dashboard?.view !== "applicant" && (
+      {activeTab === "applicant-status" && dashboard?.view === "applicant" && applicantDetails && (
+        <div className="rounded-xl border border-white/20 bg-white/10 p-4">
+          <h2 className="mb-2 font-heading text-2xl text-offwhite">Applicant Status</h2>
+          <p className="text-sm text-mist/85">Decision: <span className="text-gold-soft">{applicantDetails.decision_status}</span></p>
+          <p className="text-sm text-mist/85">Workflow: <span className="text-offwhite">{applicantDetails.current_stage_label}</span></p>
+          <p className="text-sm text-mist/85">Verification State: <span className="text-offwhite">{applicantDetails.status}</span></p>
+          <div className="mt-4 rounded-xl border border-white/20 bg-white/5 p-4">
+            <h2 className="mb-2 font-heading text-xl text-offwhite">Five I&apos;s Stage</h2>
+            <p className="text-sm text-mist/85">
+              Interview → Introduction → Indoctrination (Initiation) → Incubation → Induction
+            </p>
+            <p className="mt-2 text-sm text-gold-soft">Current: {applicantDetails.current_stage_label}</p>
+          </div>
+        </div>
+      )}
+
+      {activeTab === "applicant-notices" && dashboard?.view === "applicant" && applicantDetails && (
+        <div className="rounded-xl border border-white/20 bg-white/10 p-4">
+          <div className="rounded-xl border border-white/20 bg-white/10 p-4">
+            <h2 className="mb-2 font-heading text-2xl text-offwhite">Chairman Notices (History)</h2>
+            {pagedApplicantNotices.map((item) => (
+              <div key={item.id} className="mb-2 rounded-md border border-white/20 bg-white/5 p-3 text-sm text-mist/85">
+                <p>{item.notice_text}</p>
+                <p className="mt-1 text-xs text-mist/70">{new Date(item.created_at).toLocaleString()} by {item.created_by?.name ?? "System"}</p>
+              </div>
+            ))}
+            {applicantDetails.notices.length === 0 && <p className="text-sm text-mist/70">No notices yet.</p>}
+            <div className="mt-4 flex items-center justify-between text-xs text-mist/80">
+              <span>Page {noticesPage} of {noticesLastPage} | Total {applicantDetails.notices.length}</span>
+              <div className="flex gap-2">
+                <button type="button" className="btn-secondary" disabled={noticesPage <= 1} onClick={() => setNoticesPage((current) => Math.max(1, current - 1))}>Prev</button>
+                <button type="button" className="btn-secondary" disabled={noticesPage >= noticesLastPage} onClick={() => setNoticesPage((current) => Math.min(noticesLastPage, current + 1))}>Next</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === "applicant-docs" && dashboard?.view === "applicant" && applicantDetails && (
+        <div className="rounded-xl border border-white/20 bg-white/10 p-4">
+          <h2 className="mb-2 font-heading text-2xl text-offwhite">Required Documents</h2>
+          {canUploadApplicantDocs && (
+            <div className="mb-3 flex flex-wrap items-center gap-3">
+              <label htmlFor="applicant-document-upload" className="text-xs font-semibold text-mist/85">Upload Document</label>
+              <input
+                id="applicant-document-upload"
+                type="file"
+                accept=".jpg,.jpeg,.png,.webp,.pdf"
+                capture="environment"
+                onChange={(e) => setDocumentFile(e.target.files?.[0] ?? null)}
+              />
+              <button className="btn-secondary" onClick={() => void uploadDocument()} disabled={!documentFile}>Upload</button>
+              <p className="text-xs text-mist/70">On Android, this can open camera/scanner or file picker depending on your browser.</p>
+            </div>
+          )}
+          <div className="space-y-2">
+            {pagedApplicantDocuments.map((doc) => (
+              <div key={doc.id} className="rounded-md border border-white/20 bg-white/5 px-3 py-2 text-sm text-mist/85">
+                <p>
+                  {doc.original_name} - <span className="text-gold-soft">{doc.status}</span> {doc.review_note ? `(${doc.review_note})` : ""}
+                </p>
+                <button
+                  className="mt-2 rounded border border-white/30 px-2 py-1 text-xs text-offwhite"
+                  onClick={() => void viewDocument(doc.id, doc.original_name)}
+                >
+                  View
+                </button>
+              </div>
+            ))}
+            {applicantDetails.documents.length === 0 && <p className="text-sm text-mist/70">No documents uploaded yet.</p>}
+          </div>
+          <div className="mt-4 flex items-center justify-between text-xs text-mist/80">
+            <span>Page {documentsPage} of {documentsLastPage} | Total {applicantDetails.documents.length}</span>
+            <div className="flex gap-2">
+              <button type="button" className="btn-secondary" disabled={documentsPage <= 1} onClick={() => setDocumentsPage((current) => Math.max(1, current - 1))}>Prev</button>
+              <button type="button" className="btn-secondary" disabled={documentsPage >= documentsLastPage} onClick={() => setDocumentsPage((current) => Math.min(documentsLastPage, current + 1))}>Next</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === "applicant-fees" && dashboard?.view === "applicant" && applicantDetails && (
+        <div className="rounded-xl border border-white/20 bg-white/10 p-4">
+          <h2 className="mb-2 font-heading text-2xl text-offwhite">Applicant Journey Contributions</h2>
+          <p className="text-sm text-mist/85">Target Total: <span className="text-offwhite">{money(applicantDetails.fees.required_total)}</span></p>
+          <p className="text-sm text-mist/85">Partial/Full Paid Total: <span className="text-offwhite">{money(applicantDetails.fees.paid_total)}</span></p>
+          <p className="text-sm text-mist/85">Variance: <span className="text-gold-soft">{money(applicantDetails.fees.variance_total ?? applicantDetails.fees.balance)}</span></p>
+          {pagedFeeRequirements.map((req) => (
+            <div key={req.category} className="mt-2 rounded-md border border-white/20 bg-white/5 p-3">
+              <p className="text-sm text-offwhite">{req.category_label}</p>
+              <p className="text-xs text-mist/70">Target: {money(req.target_payment)} | Paid: {money(req.partial_payment_total)} | Variance: {money(req.variance)}</p>
+              <p className="text-xs text-mist/70">{req.note ?? "-"}</p>
+              {req.payments.map((p) => (
+                <p key={p.id} className="text-xs text-mist/80">{p.payment_date} - {money(p.amount)} by {p.encoded_by?.name ?? "Membership Chairman"}</p>
+              ))}
+            </div>
+          ))}
+          <div className="mt-4 flex items-center justify-between text-xs text-mist/80">
+            <span>Page {feesPage} of {feesLastPage} | Total {applicantDetails.fees.requirements.length}</span>
+            <div className="flex gap-2">
+              <button type="button" className="btn-secondary" disabled={feesPage <= 1} onClick={() => setFeesPage((current) => Math.max(1, current - 1))}>Prev</button>
+              <button type="button" className="btn-secondary" disabled={feesPage >= feesLastPage} onClick={() => setFeesPage((current) => Math.min(feesLastPage, current + 1))}>Next</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === "my-contributions" && dashboard?.view !== "applicant" && (
         <div className="space-y-5">
           <div className="rounded-xl border border-white/20 bg-white/10 p-4">
             <h2 className="mb-2 font-heading text-2xl text-offwhite">My Contributions</h2>
@@ -804,58 +915,101 @@ export default function PortalDashboard() {
                   </option>
                 ))}
               </select>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => {
+                  setContributionsPage(1);
+                  setContributionResultsVisible(true);
+                }}
+              >
+                Search
+              </button>
             </div>
             <p className="mb-2 text-sm text-mist/85">Filtered Total: <span className="text-gold-soft">{money(totalFiltered)}</span></p>
-            <div className="overflow-x-auto rounded-lg border border-white/20">
-              <table className="min-w-full text-sm text-offwhite">
-                <thead className="bg-navy/70 text-gold-soft">
-                  <tr>
-                    <th className="px-3 py-2 text-left">Date</th>
-                    <th className="px-3 py-2 text-left">Amount</th>
-                    <th className="px-3 py-2 text-left">Recipient</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredRows.map((row) => (
-                    <tr key={row.id} className="border-b border-white/15">
-                      <td className="px-3 py-2">{row.contribution_date}</td>
-                      <td className="px-3 py-2">{money(row.amount)}</td>
-                      <td className="px-3 py-2">{selectedTab === "monthly_contribution" ? "-" : (row.recipient_indicator ?? "-")}</td>
-                    </tr>
-                  ))}
-                  {filteredRows.length === 0 && <tr><td colSpan={3} className="px-3 py-3 text-center text-mist/70">No records found.</td></tr>}
-                </tbody>
-              </table>
-            </div>
+            {!contributionResultsVisible ? (
+              <div className="rounded-md border border-white/20 bg-white/5 px-4 py-8 text-center text-sm text-mist/80">
+                Click Search to load contribution results.
+              </div>
+            ) : (
+              <>
+                <div className="overflow-x-auto rounded-lg border border-white/20">
+                  <table className="min-w-full text-sm text-offwhite">
+                    <thead className="bg-navy/70 text-gold-soft">
+                      <tr>
+                        <th className="px-3 py-2 text-left">Date</th>
+                        <th className="px-3 py-2 text-left">Amount</th>
+                        <th className="px-3 py-2 text-left">Recipient</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pagedContributionRows.map((row) => (
+                        <tr key={row.id} className="border-b border-white/15">
+                          <td className="px-3 py-2">{row.contribution_date}</td>
+                          <td className="px-3 py-2">{money(row.amount)}</td>
+                          <td className="px-3 py-2">{selectedTab === "monthly_contribution" ? "-" : (row.recipient_indicator ?? "-")}</td>
+                        </tr>
+                      ))}
+                      {filteredRows.length === 0 && <tr><td colSpan={3} className="px-3 py-3 text-center text-mist/70">No records found.</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="mt-4 flex items-center justify-between text-xs text-mist/80">
+                  <span>Page {contributionsPage} of {contributionsLastPage} | Total {filteredRows.length}</span>
+                  <div className="flex gap-2">
+                    <button type="button" className="btn-secondary" disabled={contributionsPage <= 1} onClick={() => setContributionsPage((current) => Math.max(1, current - 1))}>Prev</button>
+                    <button type="button" className="btn-secondary" disabled={contributionsPage >= contributionsLastPage} onClick={() => setContributionsPage((current) => Math.min(contributionsLastPage, current + 1))}>Next</button>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
 
-      {(canChairmanReview || canChairmanSetContributionTarget || canChairmanLogContributionPayment || canChairmanSetNotice || canChairmanSetStage || canChairmanReviewDocs) && (
+      {activeTab === "committee" && (canChairmanReview || canChairmanSetContributionTarget || canChairmanLogContributionPayment || canChairmanSetNotice || canChairmanSetStage || canChairmanReviewDocs) && (
         <div className="mt-6 rounded-xl border border-white/20 bg-white/10 p-4">
           <h2 className="mb-3 font-heading text-2xl text-offwhite">Application Committee Panel</h2>
-          <div className="mb-3 overflow-x-auto rounded-lg border border-white/20">
-            <table className="min-w-full text-sm text-offwhite">
-              <thead className="bg-navy/70 text-gold-soft">
-                <tr>
-                  <th className="px-3 py-2 text-left">Select</th>
-                  <th className="px-3 py-2 text-left">Applicant</th>
-                  <th className="px-3 py-2 text-left">Status</th>
-                  <th className="px-3 py-2 text-left">Decision</th>
-                </tr>
-              </thead>
-              <tbody>
-                {applications.map((app) => (
-                  <tr key={app.id} className={`border-b border-white/15 ${selectedApplicationId === app.id ? "bg-gold/10" : ""}`}>
-                    <td className="px-3 py-2"><button className="rounded border border-white/30 px-2 py-1 text-xs" onClick={() => setSelectedApplicationId(app.id)}>Select</button></td>
-                    <td className="px-3 py-2">{appName(app)}</td>
-                    <td className="px-3 py-2">{app.status}</td>
-                    <td className="px-3 py-2">{app.decision_status}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="mb-3">
+            <button type="button" className="btn-secondary" onClick={() => void loadCommitteeApplications()}>Search</button>
           </div>
+          {!applicationsLoaded ? (
+            <div className="rounded-md border border-white/20 bg-white/5 px-4 py-8 text-center text-sm text-mist/80">
+              Click Search to load committee applications.
+            </div>
+          ) : (
+            <>
+              <div className="mb-3 overflow-x-auto rounded-lg border border-white/20">
+                <table className="min-w-full text-sm text-offwhite">
+                  <thead className="bg-navy/70 text-gold-soft">
+                    <tr>
+                      <th className="px-3 py-2 text-left">Select</th>
+                      <th className="px-3 py-2 text-left">Applicant</th>
+                      <th className="px-3 py-2 text-left">Status</th>
+                      <th className="px-3 py-2 text-left">Decision</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pagedApplications.map((app) => (
+                      <tr key={app.id} className={`border-b border-white/15 ${selectedApplicationId === app.id ? "bg-gold/10" : ""}`}>
+                        <td className="px-3 py-2"><button className="rounded border border-white/30 px-2 py-1 text-xs" onClick={() => setSelectedApplicationId(app.id)}>Select</button></td>
+                        <td className="px-3 py-2">{appName(app)}</td>
+                        <td className="px-3 py-2">{app.status}</td>
+                        <td className="px-3 py-2">{app.decision_status}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="mb-4 flex items-center justify-between text-xs text-mist/80">
+                <span>Page {applicationsPage} of {applicationsLastPage} | Total {applications.length}</span>
+                <div className="flex gap-2">
+                  <button type="button" className="btn-secondary" disabled={applicationsPage <= 1} onClick={() => setApplicationsPage((current) => Math.max(1, current - 1))}>Prev</button>
+                  <button type="button" className="btn-secondary" disabled={applicationsPage >= applicationsLastPage} onClick={() => setApplicationsPage((current) => Math.min(applicationsLastPage, current + 1))}>Next</button>
+                </div>
+              </div>
+            </>
+          )}
 
           {selectedApplication && (
             <div className="space-y-3">
@@ -925,7 +1079,7 @@ export default function PortalDashboard() {
               {canChairmanReviewDocs && selectedApplicationDetails && (
                 <div className="rounded-lg border border-white/20 bg-white/5 p-3">
                   <p className="mb-2 text-sm text-offwhite">Applicant Documents</p>
-                  {selectedApplicationDetails.documents.map((doc) => (
+                  {pagedCommitteeDocuments.map((doc) => (
                     <div key={doc.id} className="mb-2 rounded border border-white/20 px-2 py-2 text-xs text-mist/85">
                       <p>{doc.original_name} - <span className="text-gold-soft">{doc.status}</span></p>
                       <div className="mt-1 flex gap-2">
@@ -936,6 +1090,13 @@ export default function PortalDashboard() {
                     </div>
                   ))}
                   {selectedApplicationDetails.documents.length === 0 && <p className="text-xs text-mist/70">No uploaded documents yet.</p>}
+                  <div className="mt-4 flex items-center justify-between text-xs text-mist/80">
+                    <span>Page {committeeDocumentsPage} of {committeeDocumentsLastPage} | Total {selectedApplicationDetails.documents.length}</span>
+                    <div className="flex gap-2">
+                      <button type="button" className="btn-secondary" disabled={committeeDocumentsPage <= 1} onClick={() => setCommitteeDocumentsPage((current) => Math.max(1, current - 1))}>Prev</button>
+                      <button type="button" className="btn-secondary" disabled={committeeDocumentsPage >= committeeDocumentsLastPage} onClick={() => setCommitteeDocumentsPage((current) => Math.min(committeeDocumentsLastPage, current + 1))}>Next</button>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>

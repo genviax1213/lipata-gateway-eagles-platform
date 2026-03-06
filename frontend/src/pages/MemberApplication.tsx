@@ -14,6 +14,8 @@ interface ApplicationForm {
   membership_status: "active" | "inactive" | "applicant";
 }
 
+type MemberApplicationTab = "apply" | "verify";
+
 const initialForm: ApplicationForm = {
   first_name: "",
   middle_name: "",
@@ -29,6 +31,7 @@ function normalizeEmail(value: string): string {
 }
 
 export default function MemberApplication() {
+  const [activeTab, setActiveTab] = useState<MemberApplicationTab>("apply");
   const [form, setForm] = useState<ApplicationForm>(initialForm);
   const [verificationEmail, setVerificationEmail] = useState("");
   const [verificationToken, setVerificationToken] = useState("");
@@ -165,6 +168,24 @@ export default function MemberApplication() {
           </p>
         )}
 
+        <div className="mb-6 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setActiveTab("apply")}
+            className={`rounded-md border px-4 py-2 text-sm ${activeTab === "apply" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}
+          >
+            Apply
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("verify")}
+            className={`rounded-md border px-4 py-2 text-sm ${activeTab === "verify" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}
+          >
+            Verify Email
+          </button>
+        </div>
+
+        {activeTab === "apply" && (
         <div className="mb-8 grid gap-3 md:grid-cols-2">
           <label htmlFor="application-email" className="text-xs font-semibold text-mist/85 md:col-span-2">Email Address</label>
           <input
@@ -242,7 +263,9 @@ export default function MemberApplication() {
             </button>
           </div>
         </div>
+        )}
 
+        {activeTab === "verify" && (
         <div className="rounded-lg border border-white/20 bg-white/5 p-4">
           <h2 className="mb-2 font-heading text-2xl text-offwhite">Verify Email</h2>
           <p className="mb-3 text-xs text-mist/80">
@@ -274,6 +297,7 @@ export default function MemberApplication() {
             </div>
           </div>
         </div>
+        )}
       </div>
     </section>
   );

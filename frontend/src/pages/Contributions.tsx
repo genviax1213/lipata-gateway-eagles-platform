@@ -77,6 +77,10 @@ interface CompliancePayload {
   data: ComplianceRow[];
 }
 
+type ContributionsTab = "mine" | "member-search" | "selected-member" | "compliance" | "edit-requests";
+
+const PAGE_SIZE = 10;
+
 const CATEGORY_OPTIONS = [
   { value: "monthly_contribution", label: "Monthly Contribution" },
   { value: "alalayang_agila_contribution", label: "Alalayang Agila Contribution" },
@@ -169,10 +173,14 @@ export default function Contributions() {
   const canRequestEdit = hasPermission(user, "finance.request_edit");
   const canApproveEdits = hasPermission(user, "finance.approve_edits");
 
+  const [activeTab, setActiveTab] = useState<ContributionsTab>("mine");
   const [myData, setMyData] = useState<ContributionPayload | null>(null);
   const [myDataNotice, setMyDataNotice] = useState("");
   const [search, setSearch] = useState("");
   const [members, setMembers] = useState<MemberOption[]>([]);
+  const [membersLoaded, setMembersLoaded] = useState(false);
+  const [complianceLoaded, setComplianceLoaded] = useState(false);
+  const [editRequestsLoaded, setEditRequestsLoaded] = useState(false);
   const [selectedMemberId, setSelectedMemberId] = useState<number | null>(null);
   const [contributionRows, setContributionRows] = useState<ContributionRow[]>([]);
   const [totalAmount, setTotalAmount] = useState(0);
@@ -202,6 +210,11 @@ export default function Contributions() {
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState("");
   const [selectedYearFilter, setSelectedYearFilter] = useState("");
   const [selectedMonthFilter, setSelectedMonthFilter] = useState("");
+  const [myPage, setMyPage] = useState(1);
+  const [selectedPage, setSelectedPage] = useState(1);
+  const [membersPage, setMembersPage] = useState(1);
+  const [compliancePage, setCompliancePage] = useState(1);
+  const [editRequestsPage, setEditRequestsPage] = useState(1);
 
   const selectedMember = useMemo(
     () => members.find((m) => m.id === selectedMemberId) ?? null,
@@ -253,6 +266,7 @@ export default function Contributions() {
     try {
       const res = await api.get<MemberOption[]>("/finance/members", { params: { search } });
       setMembers(res.data);
+      setMembersLoaded(true);
     } catch (err) {
       setScopedError(parseError(err, "Unable to search members."), "member-search");
     } finally {
@@ -286,6 +300,7 @@ export default function Contributions() {
         params: { status: "pending" },
       });
       setEditRequests(res.data.data ?? []);
+      setEditRequestsLoaded(true);
     } catch (err) {
       setScopedError(parseError(err, "Unable to load edit requests."), "edit-requests");
     }
@@ -308,6 +323,7 @@ export default function Contributions() {
       setComplianceRows(res.data.data ?? []);
       setComplianceYearOptions(res.data.available_project_years ?? []);
       setComplianceEffectiveYears(res.data.filters?.effective_years ?? []);
+      setComplianceLoaded(true);
     } catch (err) {
       setScopedError(parseError(err, "Unable to load compliance report."), "member-search");
     }
@@ -316,13 +332,6 @@ export default function Contributions() {
   useEffect(() => {
     void fetchMyContributions();
   }, [fetchMyContributions]);
-
-  useEffect(() => {
-    if (!canViewFinance) return;
-    void fetchMembers();
-    void fetchEditRequests();
-    void fetchCompliance();
-  }, [canViewFinance, fetchCompliance, fetchEditRequests, fetchMembers]);
 
   useEffect(() => {
     if (!selectedMemberId || !canViewFinance) {
@@ -375,7 +384,7 @@ export default function Contributions() {
         requested_amount: Number(requestAmount),
         reason: requestReason,
       });
-      setNotice("Edit request submitted for auditor approval.");
+      setNotice("Edit request submitted for approval.");
       setSelectedContributionId(null);
       setRequestAmount("");
       setRequestReason("");
@@ -408,7 +417,7 @@ export default function Contributions() {
 
     try {
       await api.post(`/finance/edit-requests/${requestId}/reject`, {
-        review_notes: "Rejected by auditor.",
+        review_notes: "Rejected by reviewer.",
       });
       setNotice("Edit request rejected.");
       await fetchEditRequests();
@@ -439,6 +448,11 @@ export default function Contributions() {
     () => filteredMyRows.reduce((sum, row) => sum + Number(row.amount), 0),
     [filteredMyRows],
   );
+  const pagedMyRows = useMemo(() => {
+    const start = (myPage - 1) * PAGE_SIZE;
+    return filteredMyRows.slice(start, start + PAGE_SIZE);
+  }, [filteredMyRows, myPage]);
+  const myLastPage = Math.max(1, Math.ceil(filteredMyRows.length / PAGE_SIZE));
   const filteredSelectedRows = useMemo(
     () =>
       contributionRows.filter((row) => {
@@ -453,6 +467,11 @@ export default function Contributions() {
     () => filteredSelectedRows.reduce((sum, row) => sum + Number(row.amount), 0),
     [filteredSelectedRows],
   );
+  const pagedSelectedRows = useMemo(() => {
+    const start = (selectedPage - 1) * PAGE_SIZE;
+    return filteredSelectedRows.slice(start, start + PAGE_SIZE);
+  }, [filteredSelectedRows, selectedPage]);
+  const selectedLastPage = Math.max(1, Math.ceil(filteredSelectedRows.length / PAGE_SIZE));
   const myCategoryGraph = useMemo(() => {
     const totals = filteredMyRows.reduce<Record<string, number>>((acc, row) => {
       acc[row.category] = (acc[row.category] ?? 0) + Number(row.amount);
@@ -496,6 +515,21 @@ export default function Contributions() {
     const fallback = Array.from({ length: 8 }, (_, index) => currentYear - index);
     return [...new Set([...complianceYearOptions, ...fallback, ...complianceYears])].sort((a, b) => b - a);
   }, [complianceMonth, complianceYearOptions, complianceYears]);
+  const pagedMembers = useMemo(() => {
+    const start = (membersPage - 1) * PAGE_SIZE;
+    return members.slice(start, start + PAGE_SIZE);
+  }, [members, membersPage]);
+  const membersLastPage = Math.max(1, Math.ceil(members.length / PAGE_SIZE));
+  const pagedComplianceRows = useMemo(() => {
+    const start = (compliancePage - 1) * PAGE_SIZE;
+    return complianceRows.slice(start, start + PAGE_SIZE);
+  }, [compliancePage, complianceRows]);
+  const complianceLastPage = Math.max(1, Math.ceil(complianceRows.length / PAGE_SIZE));
+  const pagedEditRequests = useMemo(() => {
+    const start = (editRequestsPage - 1) * PAGE_SIZE;
+    return editRequests.slice(start, start + PAGE_SIZE);
+  }, [editRequests, editRequestsPage]);
+  const editRequestsLastPage = Math.max(1, Math.ceil(editRequests.length / PAGE_SIZE));
 
   const resetContributionForm = () => {
     setAmountInput("");
@@ -521,12 +555,21 @@ export default function Contributions() {
     <section>
       <h1 className="mb-2 font-heading text-4xl text-offwhite">Contributions</h1>
       <p className="mb-6 text-sm text-mist/85">
-        Members can view personal contribution history by month, year, and category. Treasurer and auditor can manage finance workflows.
+        Members can view personal contribution history by month, year, and category. Authorized finance users can manage finance workflows.
       </p>
 
       {error && errorContext === "global" && <p className="mb-4 rounded-md border border-red-300/30 bg-red-400/10 px-4 py-2 text-sm text-red-200">{error}</p>}
       {notice && <p className="mb-4 rounded-md border border-gold/30 bg-gold/10 px-4 py-2 text-sm text-gold-soft">{notice}</p>}
 
+      <div className="mb-6 flex flex-wrap gap-2">
+        <button type="button" onClick={() => setActiveTab("mine")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "mine" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>My Contributions</button>
+        {canViewFinance && <button type="button" onClick={() => setActiveTab("member-search")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "member-search" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Member Search</button>}
+        {canViewFinance && <button type="button" onClick={() => setActiveTab("selected-member")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "selected-member" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Selected Member</button>}
+        {canViewFinance && <button type="button" onClick={() => setActiveTab("compliance")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "compliance" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Compliance</button>}
+        {canApproveEdits && <button type="button" onClick={() => setActiveTab("edit-requests")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "edit-requests" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Edit Requests</button>}
+      </div>
+
+      {activeTab === "mine" && (
       <div className="mb-6 rounded-xl border border-white/20 bg-white/10 p-4">
         <h2 className="mb-2 font-heading text-2xl text-offwhite">My Contributions</h2>
         {myDataNotice && (
@@ -604,7 +647,7 @@ export default function Contributions() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredMyRows.map((row) => (
+                  {pagedMyRows.map((row) => (
                     <tr key={`mine-${row.id}`} className="border-b border-white/15">
                       <td className="px-4 py-3">{row.contribution_date}</td>
                       <td className="px-4 py-3">{row.category_label}</td>
@@ -619,64 +662,94 @@ export default function Contributions() {
                 </tbody>
               </table>
             </div>
+            <div className="mt-4 flex items-center justify-between text-xs text-mist/80">
+              <span>Page {myPage} of {myLastPage} | Total {filteredMyRows.length}</span>
+              <div className="flex gap-2">
+                <button type="button" className="btn-secondary" disabled={myPage <= 1} onClick={() => setMyPage((current) => Math.max(1, current - 1))}>Prev</button>
+                <button type="button" className="btn-secondary" disabled={myPage >= myLastPage} onClick={() => setMyPage((current) => Math.min(myLastPage, current + 1))}>Next</button>
+              </div>
+            </div>
           </>
         )}
       </div>
+      )}
 
-      {canViewFinance && (
+      {activeTab === "member-search" && canViewFinance && (
         <div className="mb-6 rounded-xl border border-white/20 bg-white/10 p-4">
-          <p className="mb-2 text-xs uppercase tracking-[0.22em] text-gold-soft">Find Member</p>
-          <div className="flex flex-wrap items-center gap-3">
-            <input
-              aria-label="Search member by number or name"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Wildcard search by member no. or name"
-              className="min-w-[18rem] rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite"
-            />
-            <button onClick={() => void fetchMembers()} className="btn-secondary">Search</button>
+          <h2 className="mb-2 font-heading text-2xl text-offwhite">Find Member</h2>
+          <p className="mb-3 text-sm text-mist/85">Search first, then select a member to open the Selected Member tab.</p>
+
+          <div className="mb-4 rounded-md border border-white/20 bg-white/5 p-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <input
+                aria-label="Search member by number or name"
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setMembersPage(1);
+                }}
+                placeholder="Wildcard search by member no. or name"
+                className="min-w-[18rem] rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite"
+              />
+              <button onClick={() => void fetchMembers()} className="btn-secondary">Search</button>
+            </div>
+
+            {!membersLoaded ? (
+              <div className="mt-3 rounded-md border border-white/20 bg-white/5 px-4 py-8 text-center text-sm text-mist/80">
+                Click Search to load members.
+              </div>
+            ) : (
+            <div className="mt-3 overflow-x-auto rounded-lg border border-white/20">
+              <table className="min-w-full text-sm text-offwhite">
+                <thead className="bg-navy/70 text-gold-soft">
+                  <tr>
+                    <th className="px-4 py-3 text-left">Select</th>
+                    <th className="px-4 py-3 text-left">Member No.</th>
+                    <th className="px-4 py-3 text-left">Name</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pagedMembers.map((member) => (
+                    <tr key={member.id} className={`border-b border-white/15 ${selectedMemberId === member.id ? "bg-gold/10" : ""}`}>
+                      <td className="px-4 py-3">
+                        <button className="rounded-md border border-white/30 px-2 py-1 text-xs" onClick={() => { setSelectedMemberId(member.id); setActiveTab("selected-member"); }}>
+                          {selectedMemberId === member.id ? "Selected" : "Select"}
+                        </button>
+                      </td>
+                      <td className="px-4 py-3">{member.member_number}</td>
+                      <td className="px-4 py-3">{nameOf(member)}</td>
+                    </tr>
+                  ))}
+                  {!loading && members.length === 0 && (
+                    <tr><td colSpan={3} className="px-4 py-6 text-center text-mist/80">No members found.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            )}
+            {membersLoaded && (
+              <div className="mt-4 flex items-center justify-between text-xs text-mist/80">
+                <span>Page {membersPage} of {membersLastPage} | Total {members.length}</span>
+                <div className="flex gap-2">
+                  <button type="button" className="btn-secondary" disabled={membersPage <= 1} onClick={() => setMembersPage((current) => Math.max(1, current - 1))}>Prev</button>
+                  <button type="button" className="btn-secondary" disabled={membersPage >= membersLastPage} onClick={() => setMembersPage((current) => Math.min(membersLastPage, current + 1))}>Next</button>
+                </div>
+              </div>
+            )}
           </div>
 
-          <div className="mt-3 overflow-x-auto rounded-lg border border-white/20">
-            <table className="min-w-full text-sm text-offwhite">
-              <thead className="bg-navy/70 text-gold-soft">
-                <tr>
-                  <th className="px-4 py-3 text-left">Select</th>
-                  <th className="px-4 py-3 text-left">Member No.</th>
-                  <th className="px-4 py-3 text-left">Name</th>
-                </tr>
-              </thead>
-              <tbody>
-                {members.map((member) => (
-                  <tr key={member.id} className={`border-b border-white/15 ${selectedMemberId === member.id ? "bg-gold/10" : ""}`}>
-                    <td className="px-4 py-3">
-                      <button className="rounded-md border border-white/30 px-2 py-1 text-xs" onClick={() => setSelectedMemberId(member.id)}>
-                        {selectedMemberId === member.id ? "Selected" : "Select"}
-                      </button>
-                    </td>
-                    <td className="px-4 py-3">{member.member_number}</td>
-                    <td className="px-4 py-3">{nameOf(member)}</td>
-                  </tr>
-                ))}
-                {!loading && members.length === 0 && (
-                  <tr><td colSpan={3} className="px-4 py-6 text-center text-mist/80">No members found.</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
           {error && errorContext === "member-search" && (
-            <p className="mt-3 rounded-md border border-red-300/30 bg-red-400/10 px-4 py-2 text-sm text-red-200">{error}</p>
+            <p className="mb-3 rounded-md border border-red-300/30 bg-red-400/10 px-4 py-2 text-sm text-red-200">{error}</p>
           )}
         </div>
       )}
 
-      {canViewFinance && (
+      {activeTab === "compliance" && canViewFinance && (
         <div className="mb-6 rounded-xl border border-white/20 bg-white/10 p-4">
           <h2 className="mb-2 font-heading text-2xl text-offwhite">Compliance Checker</h2>
           <p className="mb-3 text-sm text-mist/85">
             Monthly contribution is mandatory. Filter non-compliance for a target month and selected project-contribution years.
           </p>
-
           <div className="mb-3 grid gap-3 md:grid-cols-[180px_1fr_auto]">
             <input
               aria-label="Compliance month"
@@ -748,7 +821,11 @@ export default function Contributions() {
               emptyText="No compliance data to graph."
             />
           </div>
-
+          {!complianceLoaded ? (
+            <div className="rounded-md border border-white/20 bg-white/5 px-4 py-8 text-center text-sm text-mist/80">
+              Click Run to load compliance results.
+            </div>
+          ) : (
           <div className="overflow-x-auto rounded-lg border border-white/20">
             <table className="min-w-full text-sm text-offwhite">
               <thead className="bg-navy/70 text-gold-soft">
@@ -761,7 +838,7 @@ export default function Contributions() {
                 </tr>
               </thead>
               <tbody>
-                {complianceRows.map((row) => (
+                {pagedComplianceRows.map((row) => (
                   <tr key={`compliance-${row.member.id}`} className="border-b border-white/15">
                     <td className="px-4 py-3">{nameOf(row.member)}</td>
                     <td className="px-4 py-3">
@@ -792,10 +869,20 @@ export default function Contributions() {
               </tbody>
             </table>
           </div>
+          )}
+          {complianceLoaded && (
+            <div className="mt-4 flex items-center justify-between text-xs text-mist/80">
+              <span>Page {compliancePage} of {complianceLastPage} | Total {complianceRows.length}</span>
+              <div className="flex gap-2">
+                <button type="button" className="btn-secondary" disabled={compliancePage <= 1} onClick={() => setCompliancePage((current) => Math.max(1, current - 1))}>Prev</button>
+                <button type="button" className="btn-secondary" disabled={compliancePage >= complianceLastPage} onClick={() => setCompliancePage((current) => Math.min(complianceLastPage, current + 1))}>Next</button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
-      {canViewFinance && selectedMember && (
+      {activeTab === "selected-member" && canViewFinance && selectedMember && (
         <div className="mb-6 rounded-xl border border-white/20 bg-white/10 p-4">
           <h2 className="mb-2 font-heading text-2xl text-offwhite">Selected: {nameOf(selectedMember)}</h2>
           <p className="mb-4 text-sm text-mist/85">
@@ -929,7 +1016,7 @@ export default function Contributions() {
                 </tr>
               </thead>
               <tbody>
-                {filteredSelectedRows.map((row) => (
+                {pagedSelectedRows.map((row) => (
                   <tr key={row.id} className="border-b border-white/15">
                     <td className="px-4 py-3">{row.contribution_date}</td>
                     <td className="px-4 py-3">{row.category_label}</td>
@@ -954,6 +1041,13 @@ export default function Contributions() {
                 )}
               </tbody>
             </table>
+          </div>
+          <div className="mt-4 flex items-center justify-between text-xs text-mist/80">
+            <span>Page {selectedPage} of {selectedLastPage} | Total {filteredSelectedRows.length}</span>
+            <div className="flex gap-2">
+              <button type="button" className="btn-secondary" disabled={selectedPage <= 1} onClick={() => setSelectedPage((current) => Math.max(1, current - 1))}>Prev</button>
+              <button type="button" className="btn-secondary" disabled={selectedPage >= selectedLastPage} onClick={() => setSelectedPage((current) => Math.min(selectedLastPage, current + 1))}>Next</button>
+            </div>
           </div>
 
           {canRequestEdit && selectedContributionId && (
@@ -994,12 +1088,26 @@ export default function Contributions() {
         </div>
       )}
 
-      {canApproveEdits && (
+      {activeTab === "selected-member" && canViewFinance && !selectedMember && (
+        <div className="mb-6 rounded-xl border border-white/20 bg-white/10 px-4 py-8 text-center text-sm text-mist/80">
+          Select a member from the Member Search tab first.
+        </div>
+      )}
+
+      {activeTab === "edit-requests" && canApproveEdits && (
         <div className="rounded-xl border border-white/20 bg-white/10 p-4">
           <h2 className="mb-3 font-heading text-2xl text-offwhite">Pending Edit Requests (Auditor)</h2>
+          <div className="mb-3">
+            <button type="button" onClick={() => void fetchEditRequests()} className="btn-secondary">Search</button>
+          </div>
           {error && errorContext === "edit-requests" && (
             <p className="mb-3 rounded-md border border-red-300/30 bg-red-400/10 px-4 py-2 text-sm text-red-200">{error}</p>
           )}
+          {!editRequestsLoaded ? (
+            <div className="rounded-md border border-white/20 bg-white/5 px-4 py-8 text-center text-sm text-mist/80">
+              Click Search to load pending edit requests.
+            </div>
+          ) : (
           <div className="overflow-x-auto rounded-lg border border-white/20">
             <table className="min-w-full text-sm text-offwhite">
               <thead className="bg-navy/70 text-gold-soft">
@@ -1013,7 +1121,7 @@ export default function Contributions() {
                 </tr>
               </thead>
               <tbody>
-                {editRequests.map((row) => (
+                {pagedEditRequests.map((row) => (
                   <tr key={row.id} className="border-b border-white/15">
                     <td className="px-4 py-3">{nameOf(row.contribution.member)}</td>
                     <td className="px-4 py-3">{money(row.contribution.amount)}</td>
@@ -1036,6 +1144,16 @@ export default function Contributions() {
               </tbody>
             </table>
           </div>
+          )}
+          {editRequestsLoaded && (
+            <div className="mt-4 flex items-center justify-between text-xs text-mist/80">
+              <span>Page {editRequestsPage} of {editRequestsLastPage} | Total {editRequests.length}</span>
+              <div className="flex gap-2">
+                <button type="button" className="btn-secondary" disabled={editRequestsPage <= 1} onClick={() => setEditRequestsPage((current) => Math.max(1, current - 1))}>Prev</button>
+                <button type="button" className="btn-secondary" disabled={editRequestsPage >= editRequestsLastPage} onClick={() => setEditRequestsPage((current) => Math.min(editRequestsLastPage, current + 1))}>Next</button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </section>

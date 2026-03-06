@@ -37,6 +37,7 @@ class RoleSeeder extends Seeder
             'applications.dashboard.view' => 'View applicant dashboard',
             'applications.fee.set' => 'Set applicant journey contribution target payments',
             'applications.fee.pay' => 'Log applicant journey contribution partial/full payments',
+            'users.password.reset' => 'Reset passwords for other portal users within role policy limits',
         ];
 
         $permissionIds = [];
@@ -48,9 +49,14 @@ class RoleSeeder extends Seeder
             $permissionIds[$name] = $permission->id;
         }
 
+        $superadmin = Role::query()->updateOrCreate(
+            ['name' => 'superadmin'],
+            ['description' => 'System super administrator with top-level role and password management authority']
+        );
+
         $admin = Role::query()->updateOrCreate(
             ['name' => 'admin'],
-            ['description' => 'Administrative access with finance view-only baseline']
+            ['description' => 'Administrative access with role delegation and scoped password management']
         );
 
         $officer = Role::query()->updateOrCreate(
@@ -83,6 +89,25 @@ class RoleSeeder extends Seeder
             ['description' => 'Membership committee chairman with applicant lifecycle authority']
         );
 
+        $superadmin->permissions()->sync([
+            $permissionIds['posts.view'],
+            $permissionIds['posts.create'],
+            $permissionIds['posts.update'],
+            $permissionIds['posts.delete'],
+            $permissionIds['members.view'],
+            $permissionIds['members.create'],
+            $permissionIds['members.update'],
+            $permissionIds['members.delete'],
+            $permissionIds['roles.delegate'],
+            $permissionIds['finance.view'],
+            $permissionIds['forum.view'],
+            $permissionIds['forum.create_thread'],
+            $permissionIds['forum.reply'],
+            $permissionIds['forum.moderate'],
+            $permissionIds['applications.notice.view'],
+            $permissionIds['applications.dashboard.view'],
+            $permissionIds['users.password.reset'],
+        ]);
         $admin->permissions()->sync([
             $permissionIds['posts.view'],
             $permissionIds['posts.create'],
@@ -100,6 +125,7 @@ class RoleSeeder extends Seeder
             $permissionIds['forum.moderate'],
             $permissionIds['applications.notice.view'],
             $permissionIds['applications.dashboard.view'],
+            $permissionIds['users.password.reset'],
         ]);
         $officer->permissions()->sync([
             $permissionIds['posts.view'],

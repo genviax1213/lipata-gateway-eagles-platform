@@ -239,11 +239,12 @@ class RolePermissionAuthorizationTest extends TestCase
         $response->assertStatus(403);
     }
 
-    public function test_admin_can_promote_user_to_admin_within_limit(): void
+    public function test_superadmin_can_promote_user_to_admin_within_limit(): void
     {
+        $superadminRole = Role::query()->where('name', 'superadmin')->firstOrFail();
         $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
 
-        $createdAdmin = User::factory()->create(['role_id' => $adminRole->id]);
+        $createdAdmin = User::factory()->create(['role_id' => $superadminRole->id]);
         $target = User::factory()->create();
 
         Sanctum::actingAs($createdAdmin);
@@ -258,13 +259,14 @@ class RolePermissionAuthorizationTest extends TestCase
             ->assertJsonPath('role.name', 'admin');
     }
 
-    public function test_admin_cannot_exceed_max_admin_count_when_assigning_member_role(): void
+    public function test_superadmin_cannot_exceed_max_admin_count_when_assigning_member_role(): void
     {
+        $superadminRole = Role::query()->where('name', 'superadmin')->firstOrFail();
         $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
         $memberRole = Role::query()->where('name', 'member')->firstOrFail();
 
         $adminActor = User::factory()->create([
-            'role_id' => $adminRole->id,
+            'role_id' => $superadminRole->id,
         ]);
         User::factory()->create(['role_id' => $adminRole->id]);
         User::factory()->create(['role_id' => $adminRole->id]);
@@ -437,7 +439,7 @@ class RolePermissionAuthorizationTest extends TestCase
         $response->assertStatus(200);
     }
 
-    public function test_member_primary_role_can_receive_secondary_finance_role(): void
+    public function test_member_primary_role_cannot_receive_secondary_finance_role(): void
     {
         $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
         $memberRole = Role::query()->where('name', 'member')->firstOrFail();
@@ -463,7 +465,7 @@ class RolePermissionAuthorizationTest extends TestCase
         ]);
 
         $response->assertStatus(200);
-        $this->assertSame('auditor', (string) $response->json('user.finance_role'));
+        $this->assertSame('', (string) $response->json('user.finance_role'));
     }
 
     public function test_admin_can_update_member_extended_profile_fields(): void

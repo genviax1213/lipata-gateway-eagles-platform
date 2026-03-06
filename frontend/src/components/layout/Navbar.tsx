@@ -27,10 +27,10 @@ export default function Navbar() {
               className="h-8 w-8 rounded-full border border-white/20 object-cover"
             />
             <span className="min-w-0">
-              <span className="block text-center text-[14px] leading-tight min-[375px]:text-[16px] min-[393px]:text-[17px] min-[414px]:text-[18px] min-[600px]:text-[20px]">
+              <span className="block text-center text-[14px] leading-tight min-[375px]:text-[16px] min-[390px]:text-[17px] min-[414px]:text-[18px] min-[600px]:text-[20px]">
                 Lipata Gateway Eagles Club
               </span>
-              <span className="block text-center font-sans text-[9px] tracking-[0.14em] text-mist/85 min-[375px]:text-[10px] min-[393px]:text-[10.5px] min-[414px]:text-[11px] min-[600px]:text-[12px]">
+              <span className="block text-center font-sans text-[9px] tracking-[0.14em] text-mist/85 min-[375px]:text-[10px] min-[390px]:text-[10.5px] min-[414px]:text-[11px] min-[600px]:text-[12px]">
                 TFOE-PE, Inc. CN201721277
               </span>
             </span>

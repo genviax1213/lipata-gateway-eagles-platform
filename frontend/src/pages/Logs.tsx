@@ -26,6 +26,8 @@ type ArchiveItem = {
   modified_at: string;
 };
 
+type LogsTab = "current" | "archives";
+
 function parseError(error: unknown, fallback: string): string {
   if (!axios.isAxiosError(error)) return fallback;
   const payload = error.response?.data as { message?: string } | undefined;
@@ -43,12 +45,15 @@ export default function Logs() {
   const canViewLogs = isAdminUser(user) || hasPermission(user, "members.view");
   const canManageLogs = isAdminUser(user) || hasPermission(user, "members.delete");
 
+  const [activeTab, setActiveTab] = useState<LogsTab>("current");
   const [entries, setEntries] = useState<LogEntry[]>([]);
   const [meta, setMeta] = useState<PaginationMeta>({ page: 1, per_page: 20, total: 0, last_page: 1 });
   const [archives, setArchives] = useState<ArchiveItem[]>([]);
   const [archiveEntries, setArchiveEntries] = useState<LogEntry[]>([]);
   const [archiveMeta, setArchiveMeta] = useState<PaginationMeta>({ page: 1, per_page: 20, total: 0, last_page: 1 });
   const [selectedArchive, setSelectedArchive] = useState<string>("");
+  const [currentLogsLoaded, setCurrentLogsLoaded] = useState(false);
+  const [archivesLoaded, setArchivesLoaded] = useState(false);
 
   const [level, setLevel] = useState("");
   const [eventFilter, setEventFilter] = useState("");
@@ -61,15 +66,16 @@ export default function Logs() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
-  const loadLogs = useCallback(async () => {
+  const loadLogs = useCallback(async (nextPage = page) => {
     setLoading(true);
     setError("");
     try {
       const res = await api.get<{ data: LogEntry[]; meta: PaginationMeta }>("/admin/logs", {
-        params: { page, per_page: 20, level: level || undefined, event: eventFilter || undefined, q: query || undefined, _t: Date.now() },
+        params: { page: nextPage, per_page: 20, level: level || undefined, event: eventFilter || undefined, q: query || undefined, _t: Date.now() },
       });
       setEntries(res.data.data);
       setMeta(res.data.meta);
+      setCurrentLogsLoaded(true);
     } catch (err) {
       setError(parseError(err, "Unable to load logs."));
     } finally {
@@ -87,6 +93,7 @@ export default function Logs() {
       } else if (!selectedArchive || !res.data.data.some((item) => item.name === selectedArchive)) {
         setSelectedArchive(res.data.data[0].name);
       }
+      setArchivesLoaded(true);
     } catch (err) {
       setError(parseError(err, "Unable to load archive list."));
     }
@@ -103,6 +110,7 @@ export default function Logs() {
       );
       setArchiveEntries(res.data.data);
       setArchiveMeta(res.data.meta);
+      setArchivesLoaded(true);
     } catch (err) {
       setError(parseError(err, "Unable to load compressed log content."));
     } finally {
@@ -111,19 +119,9 @@ export default function Logs() {
   }, [archivePage, selectedArchive]);
 
   useEffect(() => {
-    if (!canViewLogs) return;
-    void loadLogs();
-  }, [canViewLogs, loadLogs]);
-
-  useEffect(() => {
-    if (!canViewLogs) return;
-    void loadArchives();
-  }, [canViewLogs, loadArchives]);
-
-  useEffect(() => {
-    if (!canViewLogs || !selectedArchive) return;
+    if (!canViewLogs || !selectedArchive || !archivesLoaded) return;
     void loadArchiveContent();
-  }, [canViewLogs, loadArchiveContent, selectedArchive]);
+  }, [archivesLoaded, canViewLogs, loadArchiveContent, selectedArchive]);
 
   const runAction = async (
     request: () => Promise<unknown>,
@@ -137,13 +135,18 @@ export default function Logs() {
       if (options?.clearCurrentView) {
         setEntries([]);
         setMeta((prev) => ({ ...prev, page: 1, last_page: 1, total: 0 }));
+        setCurrentLogsLoaded(false);
       }
       setNotice(successMessage);
       setPage(1);
       setArchivePage(1);
-      await loadLogs();
-      await loadArchives();
-      if (selectedArchive) {
+      if (currentLogsLoaded) {
+        await loadLogs(1);
+      }
+      if (archivesLoaded) {
+        await loadArchives();
+      }
+      if (selectedArchive && archivesLoaded) {
         await loadArchiveContent();
       }
     } catch (err) {
@@ -234,159 +237,225 @@ export default function Logs() {
       {error ? <p className="rounded-md border border-red-400/40 bg-red-400/10 px-4 py-2 text-sm text-red-200">{error}</p> : null}
       {notice ? <p className="rounded-md border border-gold/40 bg-gold/10 px-4 py-2 text-sm text-gold-soft">{notice}</p> : null}
 
-      <div className="rounded-xl border border-white/20 bg-white/10 p-4">
-        <h2 className="mb-3 text-lg font-semibold text-offwhite">Current Logs</h2>
-        <div className="mb-3 flex flex-wrap gap-2">
-          <input
-            placeholder="Filter by event"
-            value={eventFilter}
-            onChange={(e) => {
-              setEventFilter(e.target.value);
-              setPage(1);
-            }}
-            className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-sm text-offwhite"
-          />
-          <input
-            placeholder="Search text"
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              setPage(1);
-            }}
-            className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-sm text-offwhite"
-          />
-          <select
-            value={level}
-            onChange={(e) => {
-              setLevel(e.target.value);
-              setPage(1);
-            }}
-            className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-sm text-offwhite"
-          >
-            <option value="" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>All levels</option>
-            <option value="INFO" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>INFO</option>
-            <option value="WARNING" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>WARNING</option>
-            <option value="ERROR" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>ERROR</option>
-          </select>
-          <button type="button" onClick={() => void loadLogs()} className="btn-secondary">Refresh</button>
-        </div>
-
-        {canManageLogs ? (
-          <div className="mb-4 flex flex-wrap gap-2">
-            <button
-              type="button"
-              className="rounded-md border border-gold/40 px-3 py-2 text-sm text-gold-soft transition hover:bg-gold/10"
-              onClick={() => void downloadCurrentLog()}
-            >
-              Download Current Log
-            </button>
-            <button
-              type="button"
-              className="rounded-md border border-gold/40 px-3 py-2 text-sm text-gold-soft transition hover:bg-gold/10"
-              onClick={() => void runAction(() => api.post("/admin/logs/compress"), "Current logs compressed.")}
-            >
-              Compress Current Logs
-            </button>
-            <button
-              type="button"
-              className="rounded-md border border-red-400/40 px-3 py-2 text-sm text-red-200 transition hover:bg-red-500/10"
-              onClick={() => void runAction(() => api.delete("/admin/logs/current"), "Current logs cleared.", { clearCurrentView: true })}
-            >
-              Clear Current Logs
-            </button>
-          </div>
-        ) : null}
-
-        <div className="space-y-2">
-          {loading ? <p className="text-sm text-mist/80">Loading logs...</p> : null}
-          {!loading && entries.length === 0 ? <p className="text-sm text-mist/80">No matching log entries.</p> : null}
-          {!loading && entries.map((entry, idx) => (
-            <article key={`${entry.timestamp}-${idx}`} className="rounded-md border border-white/20 bg-navy/40 p-3">
-              <p className="text-xs text-mist/75">{entry.timestamp ?? "-"} | {entry.level}</p>
-              <p className="mt-1 text-sm font-semibold text-gold-soft">{entry.event || "(no event name)"}</p>
-              {entry.context ? (
-                <pre className="mt-2 max-h-32 overflow-auto rounded border border-white/15 bg-black/20 p-2 text-xs text-mist/80">{JSON.stringify(entry.context, null, 2)}</pre>
-              ) : null}
-            </article>
-          ))}
-        </div>
-
-        <div className="mt-3 flex items-center justify-between text-xs text-mist/75">
-          <span>Page {meta.page} of {meta.last_page} | Total {meta.total}</span>
-          <div className="flex gap-2">
-            <button type="button" className="btn-secondary" disabled={meta.page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Prev</button>
-            <button type="button" className="btn-secondary" disabled={meta.page >= meta.last_page} onClick={() => setPage((p) => Math.min(meta.last_page, p + 1))}>Next</button>
-          </div>
-        </div>
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => setActiveTab("current")}
+          className={`rounded-md border px-4 py-2 text-sm ${activeTab === "current" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}
+        >
+          Current Logs
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("archives")}
+          className={`rounded-md border px-4 py-2 text-sm ${activeTab === "archives" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}
+        >
+          Compressed Archives
+        </button>
       </div>
 
-      <div className="rounded-xl border border-white/20 bg-white/10 p-4">
-        <h2 className="mb-3 text-lg font-semibold text-offwhite">Compressed Archives</h2>
-        <p className="mb-3 text-xs text-mist/75">
-          Archives older than 2 years are auto-deleted during archive operations.
-        </p>
-
-        <div className="mb-3 flex flex-wrap items-center gap-2">
-          <select
-            value={selectedArchive}
-            onChange={(e) => {
-              setSelectedArchive(e.target.value);
-              setArchivePage(1);
-            }}
-            className="min-w-[18rem] rounded-md border border-white/25 bg-white/10 px-3 py-2 text-sm text-offwhite"
-          >
-            {archives.length === 0 ? <option value="" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>No archives</option> : archiveOptions}
-          </select>
-          <button type="button" onClick={() => void loadArchives()} className="btn-secondary">Refresh Archives</button>
-          {selectedArchive ? (
+      {activeTab === "current" ? (
+        <div className="rounded-xl border border-white/20 bg-white/10 p-4">
+          <h2 className="mb-3 text-lg font-semibold text-offwhite">Current Logs</h2>
+          <div className="mb-3 flex flex-wrap gap-2">
+            <input
+              placeholder="Filter by event"
+              value={eventFilter}
+              onChange={(e) => setEventFilter(e.target.value)}
+              className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-sm text-offwhite"
+            />
+            <input
+              placeholder="Search text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-sm text-offwhite"
+            />
+            <select
+              value={level}
+              onChange={(e) => setLevel(e.target.value)}
+              className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-sm text-offwhite"
+            >
+              <option value="" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>All levels</option>
+              <option value="INFO" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>INFO</option>
+              <option value="WARNING" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>WARNING</option>
+              <option value="ERROR" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>ERROR</option>
+            </select>
             <button
               type="button"
-              onClick={() => void downloadSelectedArchive()}
-              className="rounded-md border border-gold/40 px-3 py-2 text-sm text-gold-soft transition hover:bg-gold/10"
+              onClick={() => {
+                setPage(1);
+                void loadLogs(1);
+              }}
+              className="btn-secondary"
             >
-              Download Selected Archive
+              Search
             </button>
-          ) : null}
-          {canManageLogs && selectedArchive ? (
-            <button
-              type="button"
-              onClick={() => void runAction(() => api.delete(`/admin/logs/archives/${encodeURIComponent(selectedArchive)}`), "Archive deleted.")}
-              className="rounded-md border border-red-400/40 px-3 py-2 text-sm text-red-200 transition hover:bg-red-500/10"
-            >
-              Delete Selected Archive
-            </button>
-          ) : null}
-        </div>
+          </div>
 
-        <div className="mb-3 max-h-36 overflow-auto rounded-md border border-white/20 bg-black/10 p-2 text-xs">
-          {archives.length === 0 ? <p className="text-mist/75">No archives available.</p> : archives.map((item) => (
-            <p key={item.name} className="text-mist/80">{item.name} | {formatBytes(item.size_bytes)} | {new Date(item.modified_at).toLocaleString()}</p>
-          ))}
-        </div>
-
-        {selectedArchive ? (
-          <>
-            <h3 className="mb-2 text-sm font-semibold text-offwhite">Contents: {selectedArchive}</h3>
-            {archiveLoading ? <p className="text-sm text-mist/80">Loading archive content...</p> : null}
-            {!archiveLoading && archiveEntries.length === 0 ? <p className="text-sm text-mist/80">No entries in selected archive.</p> : null}
-            <div className="space-y-2">
-              {!archiveLoading && archiveEntries.map((entry, idx) => (
-                <article key={`${entry.timestamp}-${idx}`} className="rounded-md border border-white/20 bg-navy/40 p-3">
-                  <p className="text-xs text-mist/75">{entry.timestamp ?? "-"} | {entry.level}</p>
-                  <p className="mt-1 text-sm font-semibold text-gold-soft">{entry.event || "(no event name)"}</p>
-                </article>
-              ))}
+          {canManageLogs ? (
+            <div className="mb-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="rounded-md border border-gold/40 px-3 py-2 text-sm text-gold-soft transition hover:bg-gold/10"
+                onClick={() => void downloadCurrentLog()}
+              >
+                Download Current Log
+              </button>
+              <button
+                type="button"
+                className="rounded-md border border-gold/40 px-3 py-2 text-sm text-gold-soft transition hover:bg-gold/10"
+                onClick={() => void runAction(() => api.post("/admin/logs/compress"), "Current logs compressed.")}
+              >
+                Compress Current Logs
+              </button>
+              <button
+                type="button"
+                className="rounded-md border border-red-400/40 px-3 py-2 text-sm text-red-200 transition hover:bg-red-500/10"
+                onClick={() => void runAction(() => api.delete("/admin/logs/current"), "Current logs cleared.", { clearCurrentView: true })}
+              >
+                Clear Current Logs
+              </button>
             </div>
-            <div className="mt-3 flex items-center justify-between text-xs text-mist/75">
-              <span>Page {archiveMeta.page} of {archiveMeta.last_page} | Total {archiveMeta.total}</span>
-              <div className="flex gap-2">
-                <button type="button" className="btn-secondary" disabled={archiveMeta.page <= 1} onClick={() => setArchivePage((p) => Math.max(1, p - 1))}>Prev</button>
-                <button type="button" className="btn-secondary" disabled={archiveMeta.page >= archiveMeta.last_page} onClick={() => setArchivePage((p) => Math.min(archiveMeta.last_page, p + 1))}>Next</button>
+          ) : null}
+
+          {!currentLogsLoaded ? (
+            <div className="rounded-md border border-white/20 bg-white/5 px-4 py-8 text-center text-sm text-mist/80">
+              Click Search to load current logs.
+            </div>
+          ) : (
+            <>
+              <div className="space-y-2">
+                {loading ? <p className="text-sm text-mist/80">Loading logs...</p> : null}
+                {!loading && entries.length === 0 ? <p className="text-sm text-mist/80">No matching log entries.</p> : null}
+                {!loading && entries.map((entry, idx) => (
+                  <article key={`${entry.timestamp}-${idx}`} className="rounded-md border border-white/20 bg-navy/40 p-3">
+                    <p className="text-xs text-mist/75">{entry.timestamp ?? "-"} | {entry.level}</p>
+                    <p className="mt-1 text-sm font-semibold text-gold-soft">{entry.event || "(no event name)"}</p>
+                    {entry.context ? (
+                      <pre className="mt-2 max-h-32 overflow-auto rounded border border-white/15 bg-black/20 p-2 text-xs text-mist/80">{JSON.stringify(entry.context, null, 2)}</pre>
+                    ) : null}
+                  </article>
+                ))}
               </div>
+
+              <div className="mt-3 flex items-center justify-between text-xs text-mist/75">
+                <span>Page {meta.page} of {meta.last_page} | Total {meta.total}</span>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    disabled={meta.page <= 1}
+                    onClick={() => {
+                      const nextPage = Math.max(1, meta.page - 1);
+                      setPage(nextPage);
+                      void loadLogs(nextPage);
+                    }}
+                  >
+                    Prev
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    disabled={meta.page >= meta.last_page}
+                    onClick={() => {
+                      const nextPage = Math.min(meta.last_page, meta.page + 1);
+                      setPage(nextPage);
+                      void loadLogs(nextPage);
+                    }}
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      ) : (
+        <div className="rounded-xl border border-white/20 bg-white/10 p-4">
+          <h2 className="mb-3 text-lg font-semibold text-offwhite">Compressed Archives</h2>
+          <p className="mb-3 text-xs text-mist/75">
+            Archives older than 2 years are auto-deleted during archive operations.
+          </p>
+
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <select
+              value={selectedArchive}
+              onChange={(e) => {
+                setSelectedArchive(e.target.value);
+                setArchivePage(1);
+              }}
+              className="min-w-[18rem] rounded-md border border-white/25 bg-white/10 px-3 py-2 text-sm text-offwhite"
+            >
+              {archives.length === 0 ? <option value="" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>No archives</option> : archiveOptions}
+            </select>
+            <button
+              type="button"
+              onClick={() => {
+                setArchivePage(1);
+                void loadArchives();
+              }}
+              className="btn-secondary"
+            >
+              Search
+            </button>
+            {selectedArchive ? (
+              <button
+                type="button"
+                onClick={() => void downloadSelectedArchive()}
+                className="rounded-md border border-gold/40 px-3 py-2 text-sm text-gold-soft transition hover:bg-gold/10"
+              >
+                Download Selected Archive
+              </button>
+            ) : null}
+            {canManageLogs && selectedArchive ? (
+              <button
+                type="button"
+                onClick={() => void runAction(() => api.delete(`/admin/logs/archives/${encodeURIComponent(selectedArchive)}`), "Archive deleted.")}
+                className="rounded-md border border-red-400/40 px-3 py-2 text-sm text-red-200 transition hover:bg-red-500/10"
+              >
+                Delete Selected Archive
+              </button>
+            ) : null}
+          </div>
+
+          {!archivesLoaded ? (
+            <div className="rounded-md border border-white/20 bg-white/5 px-4 py-8 text-center text-sm text-mist/80">
+              Click Search to load archives.
             </div>
-          </>
-        ) : null}
-      </div>
+          ) : (
+            <>
+              <div className="mb-3 max-h-36 overflow-auto rounded-md border border-white/20 bg-black/10 p-2 text-xs">
+                {archives.length === 0 ? <p className="text-mist/75">No archives available.</p> : archives.map((item) => (
+                  <p key={item.name} className="text-mist/80">{item.name} | {formatBytes(item.size_bytes)} | {new Date(item.modified_at).toLocaleString()}</p>
+                ))}
+              </div>
+
+              {selectedArchive ? (
+                <>
+                  <h3 className="mb-2 text-sm font-semibold text-offwhite">Contents: {selectedArchive}</h3>
+                  {archiveLoading ? <p className="text-sm text-mist/80">Loading archive content...</p> : null}
+                  {!archiveLoading && archiveEntries.length === 0 ? <p className="text-sm text-mist/80">No entries in selected archive.</p> : null}
+                  <div className="space-y-2">
+                    {!archiveLoading && archiveEntries.map((entry, idx) => (
+                      <article key={`${entry.timestamp}-${idx}`} className="rounded-md border border-white/20 bg-navy/40 p-3">
+                        <p className="text-xs text-mist/75">{entry.timestamp ?? "-"} | {entry.level}</p>
+                        <p className="mt-1 text-sm font-semibold text-gold-soft">{entry.event || "(no event name)"}</p>
+                      </article>
+                    ))}
+                  </div>
+                  <div className="mt-3 flex items-center justify-between text-xs text-mist/75">
+                    <span>Page {archiveMeta.page} of {archiveMeta.last_page} | Total {archiveMeta.total}</span>
+                    <div className="flex gap-2">
+                      <button type="button" className="btn-secondary" disabled={archiveMeta.page <= 1} onClick={() => setArchivePage((p) => Math.max(1, p - 1))}>Prev</button>
+                      <button type="button" className="btn-secondary" disabled={archiveMeta.page >= archiveMeta.last_page} onClick={() => setArchivePage((p) => Math.min(archiveMeta.last_page, p + 1))}>Next</button>
+                    </div>
+                  </div>
+                </>
+              ) : null}
+            </>
+          )}
+        </div>
+      )}
     </section>
   );
 }

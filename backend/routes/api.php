@@ -13,6 +13,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\LogManagementController;
 
 Route::prefix('v1')->group(function () {
+    Route::get('/content/homepage-community', [PostController::class, 'publicHomepageCommunity']);
     Route::get('/content/{section}', [PostController::class, 'publicBySection']);
     Route::get('/content/post/{slug}', [PostController::class, 'publicBySlug']);
     Route::post('/member-applications', [MemberApplicationController::class, 'submit'])
@@ -84,6 +85,7 @@ Route::prefix('v1')->group(function () {
         Route::put('/admin/users/{user}', [AdminUserController::class, 'update'])->middleware('portal.permission:members.update');
         Route::delete('/admin/users/{user}', [AdminUserController::class, 'destroy'])->middleware('portal.permission:members.delete');
         Route::put('/admin/users/{user}/role', [AdminUserController::class, 'updateRole'])->middleware('portal.permission:roles.delegate');
+        Route::put('/admin/users/{user}/password', [AdminUserController::class, 'resetPassword'])->middleware('portal.permission:users.password.reset');
         Route::post('/admin/users/me/link-member-profile', [AdminUserController::class, 'linkCurrentUserMemberProfile'])->middleware('portal.permission:members.update');
 
         Route::get('/finance/members', [FinanceController::class, 'searchMembers'])->middleware('portal.permission:finance.view');

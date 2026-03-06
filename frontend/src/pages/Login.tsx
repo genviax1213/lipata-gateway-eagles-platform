@@ -49,6 +49,14 @@ export default function Login() {
     }
   }, [emailFromQuery, location.pathname, tokenFromQuery]);
 
+  useEffect(() => {
+    const storedNotice = localStorage.getItem("portal_auth_notice");
+    if (storedNotice) {
+      setNotice(storedNotice);
+      localStorage.removeItem("portal_auth_notice");
+    }
+  }, []);
+
   const parseError = (err: unknown, fallback: string): string => {
     if (!axios.isAxiosError(err)) return fallback;
     const message = (err.response?.data as { message?: string; errors?: Record<string, string[]> } | undefined)?.message;

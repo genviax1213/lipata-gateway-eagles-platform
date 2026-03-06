@@ -306,7 +306,6 @@ class AuditLoggingTest extends TestCase
 
         $this->putJson("/api/v1/admin/members/{$candidate->id}/role", [
             'role_id' => $memberRole->id,
-            'finance_role' => 'auditor',
         ])->assertOk();
 
         Log::shouldHaveReceived('info')
@@ -314,8 +313,7 @@ class AuditLoggingTest extends TestCase
                 return $event === 'admin.role_assigned'
                     && (int) ($context['actor_user_id'] ?? 0) === (int) $actor->id
                     && (int) ($context['target_member_id'] ?? 0) === (int) $candidate->id
-                    && ($context['primary_role'] ?? null) === 'member'
-                    && ($context['finance_role'] ?? null) === 'auditor';
+                    && ($context['primary_role'] ?? null) === 'member';
             })
             ->once();
     }
@@ -487,113 +485,6 @@ class AuditLoggingTest extends TestCase
                     && (int) ($context['actor_user_id'] ?? 0) === (int) $chairman->id
                     && (int) ($context['application_id'] ?? 0) === (int) $application->id
                     && ($context['reason'] ?? null) === 'Insufficient documentary requirements';
-            })
-            ->once();
-    }
-
-    public function test_approving_finance_edit_request_emits_audit_log(): void
-    {
-        Log::spy();
-
-        $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
-        $auditor = User::factory()->create([
-            'role_id' => $adminRole->id,
-            'finance_role' => 'auditor',
-        ]);
-        $encodedBy = User::factory()->create(['role_id' => $adminRole->id]);
-
-        $member = Member::query()->create([
-            'member_number' => 'M-FIN-001',
-            'first_name' => 'Finance',
-            'middle_name' => null,
-            'last_name' => 'Approve',
-            'email' => 'finance-approve@example.com',
-            'membership_status' => 'active',
-        ]);
-
-        $contribution = Contribution::query()->create([
-            'member_id' => $member->id,
-            'category' => 'monthly_contribution',
-            'contribution_date' => now()->toDateString(),
-            'amount' => 1000,
-            'note' => 'Original amount',
-            'encoded_by_user_id' => $encodedBy->id,
-            'encoded_at' => now(),
-        ]);
-
-        $editRequest = ContributionEditRequest::query()->create([
-            'contribution_id' => $contribution->id,
-            'requested_amount' => 1200,
-            'reason' => 'Correction',
-            'requested_by_user_id' => $encodedBy->id,
-            'status' => 'pending',
-        ]);
-
-        Sanctum::actingAs($auditor);
-
-        $this->postJson("/api/v1/finance/edit-requests/{$editRequest->id}/approve")
-            ->assertOk();
-
-        Log::shouldHaveReceived('info')
-            ->withArgs(function (string $event, array $context) use ($auditor, $editRequest, $contribution) {
-                return $event === 'finance.edit_request_approved'
-                    && (int) ($context['actor_user_id'] ?? 0) === (int) $auditor->id
-                    && (int) ($context['request_id'] ?? 0) === (int) $editRequest->id
-                    && (int) ($context['contribution_id'] ?? 0) === (int) $contribution->id;
-            })
-            ->once();
-    }
-
-    public function test_rejecting_finance_edit_request_emits_audit_log(): void
-    {
-        Log::spy();
-
-        $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
-        $auditor = User::factory()->create([
-            'role_id' => $adminRole->id,
-            'finance_role' => 'auditor',
-        ]);
-        $encodedBy = User::factory()->create(['role_id' => $adminRole->id]);
-
-        $member = Member::query()->create([
-            'member_number' => 'M-FIN-002',
-            'first_name' => 'Finance',
-            'middle_name' => null,
-            'last_name' => 'Reject',
-            'email' => 'finance-reject@example.com',
-            'membership_status' => 'active',
-        ]);
-
-        $contribution = Contribution::query()->create([
-            'member_id' => $member->id,
-            'category' => 'monthly_contribution',
-            'contribution_date' => now()->toDateString(),
-            'amount' => 900,
-            'note' => 'Original amount',
-            'encoded_by_user_id' => $encodedBy->id,
-            'encoded_at' => now(),
-        ]);
-
-        $editRequest = ContributionEditRequest::query()->create([
-            'contribution_id' => $contribution->id,
-            'requested_amount' => 1500,
-            'reason' => 'Outlier request',
-            'requested_by_user_id' => $encodedBy->id,
-            'status' => 'pending',
-        ]);
-
-        Sanctum::actingAs($auditor);
-
-        $this->postJson("/api/v1/finance/edit-requests/{$editRequest->id}/reject", [
-            'review_notes' => 'Insufficient basis for requested change.',
-        ])->assertOk();
-
-        Log::shouldHaveReceived('info')
-            ->withArgs(function (string $event, array $context) use ($auditor, $editRequest, $contribution) {
-                return $event === 'finance.edit_request_rejected'
-                    && (int) ($context['actor_user_id'] ?? 0) === (int) $auditor->id
-                    && (int) ($context['request_id'] ?? 0) === (int) $editRequest->id
-                    && (int) ($context['contribution_id'] ?? 0) === (int) $contribution->id;
             })
             ->once();
     }

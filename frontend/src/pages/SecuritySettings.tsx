@@ -1,6 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import axios from "axios";
 import api from "../services/api";
+
+type SecurityTab = "password" | "policy" | "sessions";
+const SECURITY_PAGE_SIZE = 5;
 
 function parseError(err: unknown, fallback: string): string {
   if (!axios.isAxiosError(err)) return fallback;
@@ -10,6 +13,7 @@ function parseError(err: unknown, fallback: string): string {
 }
 
 export default function SecuritySettings() {
+  const [activeTab, setActiveTab] = useState<SecurityTab>("password");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [newPasswordConfirmation, setNewPasswordConfirmation] = useState("");
@@ -18,7 +22,9 @@ export default function SecuritySettings() {
   const [notice, setNotice] = useState("");
   const [sessionsLoading, setSessionsLoading] = useState(false);
   const [sessionsError, setSessionsError] = useState("");
+  const [sessionsLoaded, setSessionsLoaded] = useState(false);
   const [revokingTokenId, setRevokingTokenId] = useState<number | null>(null);
+  const [sessionsPage, setSessionsPage] = useState(1);
   const [sessions, setSessions] = useState<{
     active_token_id: number | null;
     active_session_id: string | null;
@@ -54,16 +60,13 @@ export default function SecuritySettings() {
         }>;
       }>("/auth/sessions");
       setSessions(res.data);
+      setSessionsLoaded(true);
     } catch (err) {
       setSessionsError(parseError(err, "Unable to load active sessions."));
     } finally {
       setSessionsLoading(false);
     }
   }, []);
-
-  useEffect(() => {
-    void loadSessions();
-  }, [loadSessions]);
 
   const onSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -86,7 +89,9 @@ export default function SecuritySettings() {
       setCurrentPassword("");
       setNewPassword("");
       setNewPasswordConfirmation("");
-      void loadSessions();
+      if (sessionsLoaded) {
+        void loadSessions();
+      }
     } catch (err) {
       setError(parseError(err, "Unable to update password. Please try again."));
     } finally {
@@ -107,6 +112,12 @@ export default function SecuritySettings() {
     }
   };
 
+  const pagedSessions = useCallback(() => {
+    const start = (sessionsPage - 1) * SECURITY_PAGE_SIZE;
+    return sessions.tokens.slice(start, start + SECURITY_PAGE_SIZE);
+  }, [sessions.tokens, sessionsPage]);
+  const sessionsLastPage = Math.max(1, Math.ceil(sessions.tokens.length / SECURITY_PAGE_SIZE));
+
   return (
     <section className="space-y-6">
       <header>
@@ -116,6 +127,13 @@ export default function SecuritySettings() {
         </p>
       </header>
 
+      <div className="flex flex-wrap gap-2">
+        <button type="button" onClick={() => setActiveTab("password")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "password" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Password</button>
+        <button type="button" onClick={() => setActiveTab("policy")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "policy" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Policy</button>
+        <button type="button" onClick={() => setActiveTab("sessions")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "sessions" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Sessions</button>
+      </div>
+
+      {activeTab === "password" && (
       <div className="glass-card max-w-2xl p-6">
         <h2 className="text-base font-semibold text-offwhite">Change Password</h2>
         <form className="mt-4 space-y-4" onSubmit={onSubmit}>
@@ -173,7 +191,9 @@ export default function SecuritySettings() {
           </button>
         </form>
       </div>
+      )}
 
+      {activeTab === "policy" && (
       <div className="glass-card max-w-2xl p-6">
         <h2 className="text-base font-semibold text-offwhite">Session Security</h2>
         <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-mist/85">
@@ -182,17 +202,22 @@ export default function SecuritySettings() {
           <li>When a new login succeeds, previous sessions are ended with a notice.</li>
         </ul>
       </div>
+      )}
 
+      {activeTab === "sessions" && (
       <div className="glass-card max-w-2xl p-6">
         <div className="flex items-center justify-between gap-4">
           <h2 className="text-base font-semibold text-offwhite">Active Devices / Sessions</h2>
           <button
             type="button"
-            onClick={() => void loadSessions()}
+            onClick={() => {
+              setSessionsPage(1);
+              void loadSessions();
+            }}
             className="rounded-md border border-white/20 px-3 py-1.5 text-xs text-offwhite/90 transition hover:bg-white/10"
             disabled={sessionsLoading}
           >
-            {sessionsLoading ? "Refreshing..." : "Refresh"}
+            {sessionsLoading ? "Refreshing..." : "Search"}
           </button>
         </div>
 
@@ -200,11 +225,16 @@ export default function SecuritySettings() {
           <p className="mt-3 rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-100">{sessionsError}</p>
         ) : null}
 
+        {!sessionsLoaded ? (
+          <div className="mt-4 rounded-md border border-white/20 bg-white/5 px-4 py-8 text-center text-sm text-mist/80">
+            Click Search to load active sessions.
+          </div>
+        ) : (
         <div className="mt-4 space-y-3">
           {sessions.tokens.length === 0 ? (
             <p className="text-sm text-mist/80">No token sessions found for this account.</p>
           ) : (
-            sessions.tokens.map((token) => (
+            pagedSessions().map((token) => (
               <div key={token.id} className="rounded-md border border-white/15 bg-[#0b1222]/50 px-3 py-3">
                 <div className="flex items-start justify-between gap-4">
                   <div>
@@ -233,7 +263,18 @@ export default function SecuritySettings() {
             ))
           )}
         </div>
+        )}
+        {sessionsLoaded && (
+          <div className="mt-4 flex items-center justify-between text-xs text-mist/80">
+            <span>Page {sessionsPage} of {sessionsLastPage} | Total {sessions.tokens.length}</span>
+            <div className="flex gap-2">
+              <button type="button" className="btn-secondary" disabled={sessionsPage <= 1} onClick={() => setSessionsPage((current) => Math.max(1, current - 1))}>Prev</button>
+              <button type="button" className="btn-secondary" disabled={sessionsPage >= sessionsLastPage} onClick={() => setSessionsPage((current) => Math.min(sessionsLastPage, current + 1))}>Next</button>
+            </div>
+          </div>
+        )}
       </div>
+      )}
     </section>
   );
 }

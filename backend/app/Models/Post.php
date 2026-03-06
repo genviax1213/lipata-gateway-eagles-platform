@@ -17,6 +17,7 @@ class Post extends Model
         'content',
         'image_path',
         'is_featured',
+        'show_on_homepage_community',
         'status',
         'published_at',
         'author_id',
@@ -24,6 +25,7 @@ class Post extends Model
 
     protected $casts = [
         'is_featured' => 'boolean',
+        'show_on_homepage_community' => 'boolean',
         'published_at' => 'datetime',
     ];
 

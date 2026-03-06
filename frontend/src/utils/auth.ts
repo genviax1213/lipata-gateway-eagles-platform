@@ -13,14 +13,13 @@ export function isAdminUser(user: AuthUser): boolean {
   if (!user) return false;
 
   const roleName = extractRoleName(user);
-  return roleName === "admin";
+  return roleName === "superadmin" || roleName === "admin";
 }
 
 export function hasPermission(user: AuthUser, permissionName: string): boolean {
   if (!user) return false;
 
   const role = user.role;
-  const financeRole = (user as { finance_role?: unknown }).finance_role;
   const forumRole = (user as { forum_role?: unknown }).forum_role;
 
   if (role && typeof role === "object") {
@@ -37,13 +36,9 @@ export function hasPermission(user: AuthUser, permissionName: string): boolean {
     }
   }
 
-  const financePermission =
-    (financeRole === "treasurer" && ["finance.view", "finance.input", "finance.request_edit"].includes(permissionName)) ||
-    (financeRole === "auditor" && ["finance.view", "finance.approve_edits"].includes(permissionName));
-
   const forumPermission =
     forumRole === "forum_moderator" &&
     ["forum.view", "forum.create_thread", "forum.reply", "forum.moderate"].includes(permissionName);
 
-  return financePermission || forumPermission;
+  return forumPermission;
 }

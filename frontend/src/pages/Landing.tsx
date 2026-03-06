@@ -1,25 +1,36 @@
 import { Link } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import api from "../services/api";
 import type { CmsPost } from "../types/cms";
 import { htmlToPlainText } from "../utils/richText";
 import { canonicalRoutes } from "../content/portalCopy";
+import HeroFeatureCard from "../components/landing/HeroFeatureCard";
+import CommunityCarousel from "../components/landing/CommunityCarousel";
+
+function contentSnippet(value: string, max = 120): string {
+  const plain = htmlToPlainText(value).replace(/\s+/g, " ").trim();
+  if (!plain) return "";
+  if (plain.length <= max) return plain;
+  return `${plain.slice(0, max).trim()}...`;
+}
 
 export default function Landing() {
   const [heroPosts, setHeroPosts] = useState<CmsPost[]>([]);
   const [heroPost, setHeroPost] = useState<CmsPost | null>(null);
   const [communityPosts, setCommunityPosts] = useState<CmsPost[]>([]);
   const [loadingCommunity, setLoadingCommunity] = useState(true);
+  const [communitySlide, setCommunitySlide] = useState(0);
+  const communityVisibleCount = 3;
+  const communitySlideCount = Math.max(1, Math.ceil(communityPosts.length / communityVisibleCount));
+  const visibleCommunityPosts = useMemo(() => {
+    if (communityPosts.length <= communityVisibleCount) return communityPosts;
+    const normalizedSlide = communitySlide % communitySlideCount;
+    const start = normalizedSlide * communityVisibleCount;
+    return communityPosts.slice(start, start + communityVisibleCount);
+  }, [communityPosts, communitySlide, communitySlideCount]);
   const heroContentPreview = heroPost?.content
     ? htmlToPlainText(heroPost.content).replace(/\s+/g, " ").trim()
     : "";
-
-  const contentSnippet = (value: string, max = 120): string => {
-    const plain = htmlToPlainText(value).replace(/\s+/g, " ").trim();
-    if (!plain) return "";
-    if (plain.length <= max) return plain;
-    return `${plain.slice(0, max).trim()}...`;
-  };
 
   useEffect(() => {
     let mounted = true;
@@ -52,7 +63,7 @@ export default function Landing() {
 
     const load = async () => {
       try {
-        const res = await api.get("/content/homepage_community");
+        const res = await api.get("/content/homepage-community");
 
         if (!mounted) return;
         const data = Array.isArray(res.data) ? (res.data as CmsPost[]) : [];
@@ -85,6 +96,16 @@ export default function Landing() {
 
     return () => clearInterval(timer);
   }, [heroPosts]);
+
+  useEffect(() => {
+    if (communitySlideCount <= 1) return;
+
+    const timer = setInterval(() => {
+      setCommunitySlide((current) => (current + 1) % communitySlideCount);
+    }, 5000);
+
+    return () => clearInterval(timer);
+  }, [communitySlideCount]);
 
   return (
     <section className="hero-gradient relative overflow-hidden">
@@ -127,106 +148,42 @@ export default function Landing() {
           </p>
 
           <div className="mt-6 lg:hidden">
-            <div className="surface-card card-lift overflow-hidden p-3">
-              {heroPost?.image_url ? (
-                <img
-                  src={heroPost.image_url}
-                  alt={heroPost.title}
-                  className="h-56 w-full rounded-lg object-cover"
-                />
-              ) : (
-                <div className="flex h-56 w-full items-center justify-center rounded-lg border border-white/20 bg-white/5 text-center text-sm text-mist/75">
-                  No hero image yet. Upload one in CMS section
-                  <br />
-                  <span className="text-gold-soft">homepage_hero</span>.
-                </div>
-              )}
-              {heroContentPreview && (
-                <p className="mt-2 line-clamp-2 text-xs text-mist/80">{heroContentPreview}</p>
-              )}
-              {heroPost?.slug && (
-                <div className="mt-3">
-                  <Link to={`/news/${heroPost.slug}`} className="btn-secondary">
-                    Learn More
-                  </Link>
-                </div>
-              )}
-            </div>
+            <HeroFeatureCard
+              post={heroPost}
+              contentPreview={heroContentPreview}
+              imageHeightClassName="h-56"
+            />
           </div>
         </div>
 
         <aside className="relative z-10 hidden lg:block">
-          <div className="surface-card card-lift overflow-hidden p-3">
-            {heroPost?.image_url ? (
-              <img
-                src={heroPost.image_url}
-                alt={heroPost.title}
-                className="h-[26rem] w-full rounded-lg object-cover"
-              />
-            ) : (
-              <div className="flex h-[26rem] w-full items-center justify-center rounded-lg border border-white/20 bg-white/5 text-center text-sm text-mist/75">
-                No hero image yet. Upload one in CMS section
-                <br />
-                <span className="text-gold-soft">homepage_hero</span>.
-              </div>
-            )}
-            {heroContentPreview && (
-              <p className="mt-2 line-clamp-2 text-xs text-mist/80">{heroContentPreview}</p>
-            )}
-            {heroPost?.slug && (
-              <div className="mt-3">
-                <Link to={`/news/${heroPost.slug}`} className="btn-secondary">
-                  Learn More
-                </Link>
-              </div>
-            )}
-          </div>
+          <HeroFeatureCard
+            post={heroPost}
+            contentPreview={heroContentPreview}
+            imageHeightClassName="h-[26rem]"
+          />
         </aside>
       </div>
 
       <div className="section-wrap relative z-10 pb-16">
         <h2 className="mb-4 font-heading text-3xl text-offwhite">Community In Action</h2>
-        <p className="mb-5 max-w-3xl text-sm text-mist/85">
-          Curated highlights from our homepage_community CMS section. For the complete activity archive and full
-          timeline, visit the Activities page.
-        </p>
 
         {communityPosts.length > 0 ? (
-          <div className="grid gap-4 md:grid-cols-3">
-            {communityPosts.map((post) => (
-              <article key={post.id} className="surface-card card-lift p-5">
-                {post.image_url && (
-                  <img
-                    src={post.image_url}
-                    alt={post.title}
-                    className="mb-4 h-40 w-full rounded-md object-cover"
-                  />
-                )}
-                <h3 className="font-heading text-2xl text-offwhite">{post.title}</h3>
-                <p className="mt-2 line-clamp-2 text-sm text-mist/85">
-                  {post.excerpt ?? contentSnippet(post.content)}
-                </p>
-                {post.slug && (
-                  <div className="mt-4 flex flex-wrap gap-3">
-                    <Link to={`/news/${post.slug}`} className="btn-secondary">
-                      Read Article
-                    </Link>
-                    <Link to="/activities" className="rounded-md border border-white/25 px-3 py-2 text-xs text-offwhite hover:border-gold/50 hover:text-gold-soft">
-                      Full Activities Archive
-                    </Link>
-                  </div>
-                )}
-              </article>
-            ))}
-          </div>
+          <CommunityCarousel
+            posts={visibleCommunityPosts}
+            slide={communitySlide}
+            slideCount={communitySlideCount}
+            onPrev={() => setCommunitySlide((current) => (current - 1 + communitySlideCount) % communitySlideCount)}
+            onNext={() => setCommunitySlide((current) => (current + 1) % communitySlideCount)}
+            contentSnippet={contentSnippet}
+          />
         ) : (
           !loadingCommunity && (
             <div className="rounded-xl border border-white/20 bg-white/5 p-6 text-sm text-mist/80">
-              No community highlights yet. Add published posts in CMS section
-              <span className="ml-1 text-gold-soft">homepage_community</span>.
+              No community highlights yet.
               <div className="mt-3">
                 <Link to="/activities" className="text-gold-soft hover:text-gold">
-                  Browse Activities Archive
+                  View Activities
                 </Link>
               </div>
             </div>

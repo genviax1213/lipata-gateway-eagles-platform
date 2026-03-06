@@ -9,6 +9,7 @@ namespace App\Support;
 class RoleHierarchy
 {
     // Primary role names (must match Role model names in database)
+    public const SUPERADMIN = 'superadmin';
     public const ADMIN = 'admin';
     public const OFFICER = 'officer';
     public const MEMBERSHIP_CHAIRMAN = 'membership_chairman';
@@ -25,7 +26,8 @@ class RoleHierarchy
     /**
      * Maximum number of admin accounts allowed in the system.
      */
-    public const MAX_ADMIN_ACCOUNTS = 3;
+    public const MAX_SUPERADMIN_ACCOUNTS = 1;
+    public const MAX_ADMIN_ACCOUNTS = 2;
 
     /**
      * Finance permissions granted by treasurer role.
@@ -68,7 +70,7 @@ class RoleHierarchy
      */
     public static function isElevatedRole(string $roleName): bool
     {
-        return in_array($roleName, [self::ADMIN, self::OFFICER], true);
+        return in_array($roleName, [self::SUPERADMIN, self::ADMIN, self::OFFICER], true);
     }
 
     /**
@@ -76,7 +78,15 @@ class RoleHierarchy
      */
     public static function canManageUsers(string $roleName): bool
     {
-        return $roleName === self::ADMIN;
+        return in_array($roleName, [self::SUPERADMIN, self::ADMIN], true);
+    }
+
+    /**
+     * Check if a role can reset other users' passwords.
+     */
+    public static function canResetUserPasswords(string $roleName): bool
+    {
+        return in_array($roleName, [self::SUPERADMIN, self::ADMIN], true);
     }
 
     /**
@@ -102,6 +112,7 @@ class RoleHierarchy
     public static function allPrimaryRoles(): array
     {
         return [
+            self::SUPERADMIN,
             self::ADMIN,
             self::OFFICER,
             self::MEMBERSHIP_CHAIRMAN,

@@ -6,6 +6,7 @@ use App\Models\Role;
 use App\Models\User;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Hash;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -56,10 +57,10 @@ class AdminUserPolicyAuthorizationTest extends TestCase
         ]);
 
         $response->assertStatus(403)
-            ->assertJsonPath('message', 'Only administrators can manage administrator accounts.');
+            ->assertJsonPath('message', 'Only the superadmin can manage administrator accounts.');
     }
 
-    public function test_only_admin_can_create_admin_account(): void
+    public function test_only_superadmin_can_create_admin_account(): void
     {
         $officerRole = Role::query()->where('name', 'officer')->firstOrFail();
         $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
@@ -75,10 +76,10 @@ class AdminUserPolicyAuthorizationTest extends TestCase
         ]);
 
         $response->assertStatus(403)
-            ->assertJsonPath('message', 'Only administrators can create or assign administrator accounts.');
+            ->assertJsonPath('message', 'Only the superadmin can create or assign administrator accounts.');
     }
 
-    public function test_only_admin_can_assign_admin_account(): void
+    public function test_only_superadmin_can_assign_admin_account(): void
     {
         $officerRole = Role::query()->where('name', 'officer')->firstOrFail();
         $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
@@ -96,7 +97,7 @@ class AdminUserPolicyAuthorizationTest extends TestCase
         ]);
 
         $response->assertStatus(403)
-            ->assertJsonPath('message', 'Only administrators can create or assign administrator accounts.');
+            ->assertJsonPath('message', 'Only the superadmin can create or assign administrator accounts.');
     }
 
     public function test_officer_can_still_create_non_admin_user_account(): void
@@ -116,5 +117,132 @@ class AdminUserPolicyAuthorizationTest extends TestCase
 
         $response->assertStatus(201)
             ->assertJsonPath('role.name', 'member');
+    }
+
+    public function test_superadmin_can_promote_user_to_admin_within_limit(): void
+    {
+        $superadminRole = Role::query()->where('name', 'superadmin')->firstOrFail();
+        $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
+
+        $superadmin = User::factory()->create(['role_id' => $superadminRole->id]);
+        $target = User::factory()->create();
+
+        Sanctum::actingAs($superadmin);
+
+        $response = $this->putJson("/api/v1/admin/users/{$target->id}", [
+            'name' => $target->name,
+            'email' => $target->email,
+            'role_id' => $adminRole->id,
+        ]);
+
+        $response->assertStatus(200)
+            ->assertJsonPath('role.name', 'admin');
+    }
+
+    public function test_superadmin_cannot_exceed_max_admin_count(): void
+    {
+        $superadminRole = Role::query()->where('name', 'superadmin')->firstOrFail();
+        $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
+
+        $superadmin = User::factory()->create(['role_id' => $superadminRole->id]);
+        User::factory()->create(['role_id' => $adminRole->id]);
+        User::factory()->create(['role_id' => $adminRole->id]);
+        $target = User::factory()->create();
+
+        Sanctum::actingAs($superadmin);
+
+        $response = $this->putJson("/api/v1/admin/users/{$target->id}", [
+            'name' => $target->name,
+            'email' => $target->email,
+            'role_id' => $adminRole->id,
+        ]);
+
+        $response->assertStatus(422)
+            ->assertJsonPath('message', 'Maximum administrator accounts reached.');
+    }
+
+    public function test_superadmin_can_reset_admin_password(): void
+    {
+        $superadminRole = Role::query()->where('name', 'superadmin')->firstOrFail();
+        $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
+        $superadmin = User::factory()->create(['role_id' => $superadminRole->id]);
+        $target = User::factory()->create([
+            'role_id' => $adminRole->id,
+            'password' => Hash::make('OldPass123'),
+        ]);
+
+        Sanctum::actingAs($superadmin);
+
+        $response = $this->putJson("/api/v1/admin/users/{$target->id}/password", [
+            'password' => 'NewPass456',
+            'password_confirmation' => 'NewPass456',
+        ]);
+
+        $response->assertOk()
+            ->assertJsonPath('message', 'Password updated successfully.');
+        $this->assertTrue(Hash::check('NewPass456', (string) $target->fresh()->password));
+    }
+
+    public function test_admin_cannot_reset_superadmin_password(): void
+    {
+        $superadminRole = Role::query()->where('name', 'superadmin')->firstOrFail();
+        $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
+        $admin = User::factory()->create(['role_id' => $adminRole->id]);
+        $target = User::factory()->create([
+            'role_id' => $superadminRole->id,
+            'password' => Hash::make('OldPass123'),
+        ]);
+
+        Sanctum::actingAs($admin);
+
+        $response = $this->putJson("/api/v1/admin/users/{$target->id}/password", [
+            'password' => 'NewPass456',
+            'password_confirmation' => 'NewPass456',
+        ]);
+
+        $response->assertStatus(403)
+            ->assertJsonPath('message', 'Administrators cannot reset the superadmin password.');
+    }
+
+    public function test_admin_cannot_reset_fellow_admin_password(): void
+    {
+        $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
+        $admin = User::factory()->create(['role_id' => $adminRole->id]);
+        $target = User::factory()->create([
+            'role_id' => $adminRole->id,
+            'password' => Hash::make('OldPass123'),
+        ]);
+
+        Sanctum::actingAs($admin);
+
+        $response = $this->putJson("/api/v1/admin/users/{$target->id}/password", [
+            'password' => 'NewPass456',
+            'password_confirmation' => 'NewPass456',
+        ]);
+
+        $response->assertStatus(403)
+            ->assertJsonPath('message', 'Administrators cannot reset fellow administrator passwords.');
+    }
+
+    public function test_admin_can_reset_member_password(): void
+    {
+        $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
+        $memberRole = Role::query()->where('name', 'member')->firstOrFail();
+        $admin = User::factory()->create(['role_id' => $adminRole->id]);
+        $target = User::factory()->create([
+            'role_id' => $memberRole->id,
+            'password' => Hash::make('OldPass123'),
+        ]);
+
+        Sanctum::actingAs($admin);
+
+        $response = $this->putJson("/api/v1/admin/users/{$target->id}/password", [
+            'password' => 'NewPass456',
+            'password_confirmation' => 'NewPass456',
+        ]);
+
+        $response->assertOk()
+            ->assertJsonPath('message', 'Password updated successfully.');
+        $this->assertTrue(Hash::check('NewPass456', (string) $target->fresh()->password));
     }
 }

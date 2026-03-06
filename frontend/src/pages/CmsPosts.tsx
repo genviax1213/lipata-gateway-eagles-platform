@@ -10,7 +10,6 @@ import { htmlToPlainText, sanitizeRichHtml } from "../utils/richText";
 
 const sectionOptions = [
   "homepage_hero",
-  "homepage_community",
   "activities",
   "about",
   "history",
@@ -39,6 +38,7 @@ type FormState = {
   content: string;
   status: "draft" | "published";
   is_featured: boolean;
+  show_on_homepage_community: boolean;
   published_at: string;
   image: File | null;
   selected_image_path: string;
@@ -56,6 +56,17 @@ type AvailableCmsImage = {
     section: string;
     usage: string[];
   }>;
+};
+
+type PaginatedMeta = {
+  current_page: number;
+  last_page: number;
+  per_page: number;
+  total: number;
+};
+
+type PaginatedResponse<T> = PaginatedMeta & {
+  data: T[];
 };
 
 type ProcessedImageMeta = {
@@ -78,6 +89,8 @@ type SourceImageState = {
   height: number;
 };
 
+type CmsTab = "editor" | "images" | "preview" | "posts";
+
 const initialForm: FormState = {
   title: "",
   section: "activities",
@@ -85,6 +98,7 @@ const initialForm: FormState = {
   content: "",
   status: "published",
   is_featured: false,
+  show_on_homepage_community: false,
   published_at: "",
   image: null,
   selected_image_path: "",
@@ -284,12 +298,23 @@ export default function CmsPosts() {
   const canCreatePosts = hasPermission(user, "posts.create");
   const canUpdatePosts = hasPermission(user, "posts.update");
   const canDeletePosts = hasPermission(user, "posts.delete");
+  const [activeTab, setActiveTab] = useState<CmsTab>("editor");
   const [posts, setPosts] = useState<CmsPost[]>([]);
+  const [postsMeta, setPostsMeta] = useState<PaginatedMeta>({ current_page: 1, last_page: 1, per_page: 12, total: 0 });
+  const [postsLoaded, setPostsLoaded] = useState(false);
+  const [postQueryDraft, setPostQueryDraft] = useState("");
+  const [postSectionFilterDraft, setPostSectionFilterDraft] = useState("");
+  const [appliedPostQuery, setAppliedPostQuery] = useState("");
+  const [appliedPostSectionFilter, setAppliedPostSectionFilter] = useState("");
   const [availableImages, setAvailableImages] = useState<AvailableCmsImage[]>([]);
-  const [imageFilter, setImageFilter] = useState<"all" | "linked" | "unlinked">("all");
+  const [imagesMeta, setImagesMeta] = useState<PaginatedMeta>({ current_page: 1, last_page: 1, per_page: 8, total: 0 });
+  const [imagesLoaded, setImagesLoaded] = useState(false);
+  const [imageFilterDraft, setImageFilterDraft] = useState<"all" | "linked" | "unlinked">("all");
+  const [appliedImageFilter, setAppliedImageFilter] = useState<"all" | "linked" | "unlinked">("all");
+  const [imageQueryDraft, setImageQueryDraft] = useState("");
+  const [appliedImageQuery, setAppliedImageQuery] = useState("");
   const [form, setForm] = useState<FormState>(initialForm);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -311,11 +336,6 @@ export default function CmsPosts() {
     () => availableImages.find((image) => image.path === form.selected_image_path) ?? null,
     [availableImages, form.selected_image_path],
   );
-  const filteredLibraryImages = useMemo(() => {
-    if (imageFilter === "all") return availableImages;
-    if (imageFilter === "linked") return availableImages.filter((image) => image.is_linked);
-    return availableImages.filter((image) => !image.is_linked);
-  }, [availableImages, imageFilter]);
   const previewImageUrl = previewUploadUrl || selectedLibraryImage?.url || editingPost?.image_url || "";
   const cropRendered = sourceImage
     ? renderedCropDimensions(sourceImage.width, sourceImage.height, crop.zoom)
@@ -352,16 +372,40 @@ export default function CmsPosts() {
     return validationMessage || data?.message || `Request failed (${err.response?.status ?? "unknown"})`;
   }
 
-  async function fetchPosts() {
-    const res = await api.get("/cms/posts");
-    const list = (res.data?.data ?? res.data) as CmsPost[];
-    setPosts(Array.isArray(list) ? list : []);
+  async function fetchPosts(page = 1, overrides?: { q?: string; section?: string }) {
+    const params = {
+      page,
+      per_page: 12,
+      q: overrides?.q ?? (appliedPostQuery || undefined),
+      section: overrides?.section ?? (appliedPostSectionFilter || undefined),
+    };
+    const res = await api.get<PaginatedResponse<CmsPost>>("/cms/posts", { params });
+    setPosts(Array.isArray(res.data?.data) ? res.data.data : []);
+    setPostsMeta({
+      current_page: Number(res.data?.current_page ?? 1),
+      last_page: Number(res.data?.last_page ?? 1),
+      per_page: Number(res.data?.per_page ?? 12),
+      total: Number(res.data?.total ?? 0),
+    });
+    setPostsLoaded(true);
   }
 
-  async function fetchAvailableImages() {
-    const res = await api.get("/cms/posts/image-library");
-    const list = res.data as AvailableCmsImage[] | undefined;
-    setAvailableImages(Array.isArray(list) ? list : []);
+  async function fetchAvailableImages(page = 1, overrides?: { q?: string; linkState?: "all" | "linked" | "unlinked" }) {
+    const params = {
+      page,
+      per_page: 8,
+      q: overrides?.q ?? (appliedImageQuery || undefined),
+      link_state: overrides?.linkState ?? appliedImageFilter,
+    };
+    const res = await api.get<PaginatedResponse<AvailableCmsImage>>("/cms/posts/image-library", { params });
+    setAvailableImages(Array.isArray(res.data?.data) ? res.data.data : []);
+    setImagesMeta({
+      current_page: Number(res.data?.current_page ?? 1),
+      last_page: Number(res.data?.last_page ?? 1),
+      per_page: Number(res.data?.per_page ?? 8),
+      total: Number(res.data?.total ?? 0),
+    });
+    setImagesLoaded(true);
   }
 
   async function pickExistingInlineImage(): Promise<string | null> {
@@ -380,29 +424,66 @@ export default function CmsPosts() {
     return selected.url;
   }
 
+  async function runPostSearch(page = 1) {
+    setError("");
+    try {
+      await fetchPosts(page, {
+        q: appliedPostQuery,
+        section: appliedPostSectionFilter,
+      });
+    } catch {
+      setError("Unable to load CMS posts.");
+    }
+  }
+
+  async function applyPostSearch() {
+    const nextQuery = postQueryDraft.trim();
+    const nextSection = postSectionFilterDraft;
+    setAppliedPostQuery(nextQuery);
+    setAppliedPostSectionFilter(nextSection);
+    setError("");
+    try {
+      await fetchPosts(1, {
+        q: nextQuery,
+        section: nextSection,
+      });
+    } catch {
+      setError("Unable to load CMS posts.");
+    }
+  }
+
+  async function runImageSearch(page = 1) {
+    setError("");
+    try {
+      await fetchAvailableImages(page, {
+        q: appliedImageQuery,
+        linkState: appliedImageFilter,
+      });
+    } catch {
+      setError("Unable to load image library.");
+    }
+  }
+
+  async function applyImageSearch() {
+    const nextQuery = imageQueryDraft.trim();
+    const nextFilter = imageFilterDraft;
+    setAppliedImageQuery(nextQuery);
+    setAppliedImageFilter(nextFilter);
+    setError("");
+    try {
+      await fetchAvailableImages(1, {
+        q: nextQuery,
+        linkState: nextFilter,
+      });
+    } catch {
+      setError("Unable to load image library.");
+    }
+  }
+
   useEffect(() => {
     if (!canManageCmsPosts) {
-      setLoading(false);
       return;
     }
-
-    let mounted = true;
-
-    const load = async () => {
-      try {
-        await Promise.all([fetchPosts(), fetchAvailableImages()]);
-      } catch {
-        if (mounted) setError("Unable to load CMS posts.");
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    };
-
-    void load();
-
-    return () => {
-      mounted = false;
-    };
   }, [canManageCmsPosts]);
 
   useEffect(() => {
@@ -551,6 +632,7 @@ export default function CmsPosts() {
     setSourceImage(null);
     setCrop({ x: 0, y: 0, zoom: 1 });
     setEditingId(null);
+    setActiveTab("editor");
   }
 
   function cancelOrDiscardForm() {
@@ -570,6 +652,7 @@ export default function CmsPosts() {
     if (!canUpdatePosts) return;
 
     setEditingId(post.id);
+    setActiveTab("editor");
     setForm({
       title: post.title,
       section: post.section,
@@ -577,6 +660,7 @@ export default function CmsPosts() {
       content: post.content,
       status: post.status,
       is_featured: post.is_featured,
+      show_on_homepage_community: post.show_on_homepage_community,
       published_at: toDateTimeLocal(post.published_at),
       image: null,
       selected_image_path: "",
@@ -617,6 +701,7 @@ export default function CmsPosts() {
         content: form.content,
         status: form.status,
         is_featured: form.is_featured ? 1 : 0,
+        show_on_homepage_community: form.show_on_homepage_community ? 1 : 0,
         ...(form.selected_image_path ? { selected_image_path: form.selected_image_path } : {}),
         ...(form.published_at
           ? { published_at: new Date(form.published_at).toISOString() }
@@ -631,6 +716,7 @@ export default function CmsPosts() {
         payload.append("content", basePayload.content);
         payload.append("status", basePayload.status);
         payload.append("is_featured", String(basePayload.is_featured));
+        payload.append("show_on_homepage_community", String(basePayload.show_on_homepage_community));
         if (basePayload.published_at) payload.append("published_at", basePayload.published_at);
         if (basePayload.selected_image_path) payload.append("selected_image_path", basePayload.selected_image_path);
         payload.append("image", imageToUpload);
@@ -651,8 +737,8 @@ export default function CmsPosts() {
         setMessage("Post created.");
       }
 
-      await fetchPosts();
-      await fetchAvailableImages();
+      if (postsLoaded) await runPostSearch(postsMeta.current_page);
+      if (imagesLoaded) await runImageSearch(imagesMeta.current_page);
       resetForm();
     } catch (err: unknown) {
       setError(getApiErrorMessage(err));
@@ -670,7 +756,12 @@ export default function CmsPosts() {
     try {
       await api.delete(`/cms/posts/${id}`);
       if (editingId === id) resetForm();
-      await Promise.all([fetchPosts(), fetchAvailableImages()]);
+      if (postsLoaded) {
+        await runPostSearch(postsMeta.current_page);
+      }
+      if (imagesLoaded) {
+        await runImageSearch(imagesMeta.current_page);
+      }
       setMessage("Post deleted.");
     } catch (err: unknown) {
       setError(getApiErrorMessage(err));
@@ -692,23 +783,36 @@ export default function CmsPosts() {
     <section>
       <h1 className="mb-2 font-heading text-4xl text-offwhite">CMS Posts</h1>
       <p className="mb-6 text-sm text-mist/85">
-        Publish articles for homepage, activities, about, history, and other sections.
-      </p>
-      <p className="mb-4 text-xs text-mist/75">
-        Use <span className="text-gold-soft">homepage_hero</span> for homepage main hero content/image,
-        <span className="mx-1 text-gold-soft">homepage_community</span> for homepage community cards,
-        and <span className="text-gold-soft">activities</span> for the Activities page archive.
+        Publish articles for the website sections. Use <span className="text-gold-soft">Show on Homepage Community</span> to include an activity in the homepage carousel.
       </p>
 
       {error && <p className="mb-4 rounded-md border border-red-300/30 bg-red-400/10 px-4 py-2 text-sm text-red-200">{error}</p>}
       {message && <p className="mb-4 rounded-md border border-gold/30 bg-gold/10 px-4 py-2 text-sm text-gold-soft">{message}</p>}
+      <div className="mb-6 flex flex-wrap gap-2">
+        {([
+          ["editor", editingId ? "Edit Post" : "Create Post"],
+          ["images", "Image Library"],
+          ["preview", "Live Preview"],
+          ["posts", "Posts"],
+        ] as const).map(([tab, label]) => (
+          <button
+            key={tab}
+            type="button"
+            onClick={() => setActiveTab(tab)}
+            className={`rounded-md border px-4 py-2 text-sm ${activeTab === tab ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
 
-      <div className="mb-6 rounded-xl border border-white/20 bg-white/10 p-5">
-        <h2 className="mb-4 font-heading text-2xl text-offwhite">
-          {editingId ? "Edit Post" : "Create Post"}
-        </h2>
+      {activeTab === "editor" && (
+        <div className="mb-6 rounded-xl border border-white/20 bg-white/10 p-5">
+          <h2 className="mb-4 font-heading text-2xl text-offwhite">
+            {editingId ? "Edit Post" : "Create Post"}
+          </h2>
 
-        <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4 md:grid-cols-2">
           <input
             aria-label="Post title"
             value={form.title}
@@ -787,97 +891,6 @@ export default function CmsPosts() {
             }}
             className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite md:col-span-2"
           />
-          <div className="md:col-span-2">
-            <p className="mb-2 text-xs text-mist/80">
-              Image Library: choose linked/unlinked host images for post featured image and editor Image button.
-            </p>
-            <div className="mb-3 flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => setImageFilter("all")}
-                className={`rounded-md border px-3 py-1 text-xs ${imageFilter === "all" ? "border-gold bg-gold text-ink" : "border-white/30 text-offwhite"}`}
-              >
-                All
-              </button>
-              <button
-                type="button"
-                onClick={() => setImageFilter("linked")}
-                className={`rounded-md border px-3 py-1 text-xs ${imageFilter === "linked" ? "border-gold bg-gold text-ink" : "border-white/30 text-offwhite"}`}
-              >
-                Linked
-              </button>
-              <button
-                type="button"
-                onClick={() => setImageFilter("unlinked")}
-                className={`rounded-md border px-3 py-1 text-xs ${imageFilter === "unlinked" ? "border-gold bg-gold text-ink" : "border-white/30 text-offwhite"}`}
-              >
-                Unlinked
-              </button>
-              <button
-                type="button"
-                onClick={() => void fetchAvailableImages()}
-                className="rounded-md border border-white/30 px-3 py-1 text-xs text-offwhite"
-              >
-                Refresh
-              </button>
-            </div>
-
-            {filteredLibraryImages.length === 0 ? (
-              <p className="text-xs text-mist/70">No images found for this filter.</p>
-            ) : (
-              <div className="grid gap-3 md:grid-cols-2">
-                {filteredLibraryImages.map((image) => (
-                  <label
-                    key={image.path}
-                    className={`rounded-md border p-2 ${form.selected_image_path === image.path ? "border-gold/70 bg-gold/10" : "border-white/20 bg-white/5"}`}
-                  >
-                    <div className="flex items-start gap-3">
-                      <input
-                        type="checkbox"
-                        checked={form.selected_image_path === image.path}
-                        onChange={(e) => {
-                          const checked = e.target.checked;
-                          setForm((prev) => ({
-                            ...prev,
-                            selected_image_path: checked ? image.path : "",
-                            image: checked ? null : prev.image,
-                          }));
-                          if (checked) {
-                            setProcessedImageMeta(null);
-                            setSourceImage(null);
-                            setCrop({ x: 0, y: 0, zoom: 1 });
-                          }
-                        }}
-                        className="mt-1"
-                      />
-                      <img
-                        src={image.url}
-                        alt={image.name}
-                        className="h-16 w-28 rounded border border-white/20 object-cover"
-                      />
-                      <div className="min-w-0">
-                        <p className="truncate text-xs text-offwhite">{image.name}</p>
-                        <p className={`text-xs ${image.is_linked ? "text-gold-soft" : "text-mist/75"}`}>
-                          {image.is_linked ? "Linked" : "Unlinked"}
-                        </p>
-                        {image.links.length > 0 ? (
-                          <div className="mt-1 space-y-1">
-                            {image.links.map((link) => (
-                              <p key={`${image.path}-${link.post_id}`} className="text-[11px] text-mist/75">
-                                {link.section} / {link.title} ({link.usage.join(", ")})
-                              </p>
-                            ))}
-                          </div>
-                        ) : (
-                          <p className="mt-1 text-[11px] text-mist/65">No current link.</p>
-                        )}
-                      </div>
-                    </div>
-                  </label>
-                ))}
-              </div>
-            )}
-          </div>
           {sourceImage && sourceImageUrl && (
             <div className="md:col-span-2 rounded-lg border border-white/20 bg-white/5 p-3">
               <p className="mb-2 text-xs text-mist/80">
@@ -972,6 +985,14 @@ export default function CmsPosts() {
             />
             Mark as featured
           </label>
+          <label className="inline-flex items-center gap-2 text-sm text-offwhite">
+            <input
+              type="checkbox"
+              checked={form.show_on_homepage_community}
+              onChange={(e) => setForm((prev) => ({ ...prev, show_on_homepage_community: e.target.checked }))}
+            />
+            Show on Homepage Community
+          </label>
         </div>
 
         <div className="mt-5 flex gap-3">
@@ -989,170 +1010,336 @@ export default function CmsPosts() {
               {editingId ? "Cancel Edit" : "Discard Draft"}
             </button>
           )}
+          </div>
         </div>
-      </div>
+      )}
 
-      <div className="mb-6 rounded-xl border border-white/20 bg-white/10 p-5">
-        <h2 className="mb-4 font-heading text-2xl text-offwhite">Live Article Preview</h2>
-        <p className="mb-4 text-sm text-mist/80">
-          Preview long-form readability before publishing.
-        </p>
-
-        <div className="mb-4 grid gap-3 rounded-lg border border-white/20 bg-white/5 p-3 md:grid-cols-[1fr_auto_auto] md:items-center">
-          <div className="text-xs text-mist/80">
-            Rich preview · {previewWordCount.toLocaleString()} words
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setPreviewFontSize((v) => Math.max(15, v - 1))}
-              className="rounded-md border border-white/30 px-3 py-1 text-sm"
-            >
-              A-
-            </button>
-            <span className="text-xs text-mist/80">{previewFontSize}px</span>
-            <button
-              type="button"
-              onClick={() => setPreviewFontSize((v) => Math.min(24, v + 1))}
-              className="rounded-md border border-white/30 px-3 py-1 text-sm"
-            >
-              A+
-            </button>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setPreviewLayout("single")}
-              className={`rounded-md border px-3 py-1 text-sm ${previewLayout === "single" ? "border-gold bg-gold text-ink" : "border-white/30 text-mist/80"}`}
-            >
-              Single Column
-            </button>
-            <button
-              type="button"
-              onClick={() => setPreviewLayout("columns")}
-              className={`rounded-md border px-3 py-1 text-sm ${previewLayout === "columns" ? "border-gold bg-gold text-ink" : "border-white/30 text-mist/80"}`}
-            >
-              Multi Column
-            </button>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 md:justify-end">
+      {activeTab === "images" && (
+        <div className="mb-6 rounded-xl border border-white/20 bg-white/10 p-5">
+          <h2 className="mb-4 font-heading text-2xl text-offwhite">Image Library</h2>
+          <div className="mb-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_220px_auto]">
+            <input
+              aria-label="Image library search"
+              value={imageQueryDraft}
+              onChange={(e) => setImageQueryDraft(e.target.value)}
+              placeholder="Search image name or linked post title"
+              className="rounded-md border border-white/25 bg-white/10 px-4 py-2.5 text-offwhite placeholder:text-mist/70"
+            />
             <select
-              aria-label="Preview font size"
-              value={previewFontSize}
-              onChange={(e) => setPreviewFontSize(Number(e.target.value))}
-              className="rounded-md border border-white/30 bg-white/10 px-3 py-1 text-sm text-offwhite"
+              aria-label="Image library filter"
+              value={imageFilterDraft}
+              onChange={(e) => setImageFilterDraft(e.target.value as "all" | "linked" | "unlinked")}
+              className="rounded-md border border-white/25 bg-white/10 px-4 py-2.5 text-offwhite"
             >
-              {PAGE_SIZES.map((size) => (
-                <option key={size.value} value={size.value} style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>
-                  {size.label}
+              <option value="all" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>All</option>
+              <option value="linked" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Linked</option>
+              <option value="unlinked" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Unlinked</option>
+            </select>
+            <button type="button" onClick={() => void applyImageSearch()} className="btn-secondary">
+              Search
+            </button>
+          </div>
+
+          {!imagesLoaded ? (
+            <p className="text-sm text-mist/80">Run a search to load image results.</p>
+          ) : availableImages.length === 0 ? (
+            <p className="text-sm text-mist/80">No images found for the current search.</p>
+          ) : (
+            <>
+              <div className="grid gap-3 md:grid-cols-2">
+                {availableImages.map((image) => (
+                  <label
+                    key={image.path}
+                    className={`rounded-md border p-2 ${form.selected_image_path === image.path ? "border-gold/70 bg-gold/10" : "border-white/20 bg-white/5"}`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <input
+                        type="checkbox"
+                        checked={form.selected_image_path === image.path}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setForm((prev) => ({
+                            ...prev,
+                            selected_image_path: checked ? image.path : "",
+                            image: checked ? null : prev.image,
+                          }));
+                          if (checked) {
+                            setProcessedImageMeta(null);
+                            setSourceImage(null);
+                            setCrop({ x: 0, y: 0, zoom: 1 });
+                          }
+                        }}
+                        className="mt-1"
+                      />
+                      <img
+                        src={image.url}
+                        alt={image.name}
+                        className="h-16 w-28 rounded border border-white/20 object-cover"
+                      />
+                      <div className="min-w-0">
+                        <p className="truncate text-xs text-offwhite">{image.name}</p>
+                        <p className={`text-xs ${image.is_linked ? "text-gold-soft" : "text-mist/75"}`}>
+                          {image.is_linked ? "Linked" : "Unlinked"}
+                        </p>
+                        {image.links.length > 0 ? (
+                          <div className="mt-1 space-y-1">
+                            {image.links.map((link) => (
+                              <p key={`${image.path}-${link.post_id}`} className="text-[11px] text-mist/75">
+                                {link.section} / {link.title} ({link.usage.join(", ")})
+                              </p>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="mt-1 text-[11px] text-mist/65">No current link.</p>
+                        )}
+                      </div>
+                    </div>
+                  </label>
+                ))}
+              </div>
+
+              <div className="mt-5 flex items-center justify-between text-sm text-mist/80">
+                <span>Page {imagesMeta.current_page} of {imagesMeta.last_page} | Total {imagesMeta.total}</span>
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => void runImageSearch(Math.max(1, imagesMeta.current_page - 1))}
+                    disabled={imagesMeta.current_page <= 1}
+                    className="btn-secondary disabled:opacity-50"
+                  >
+                    Prev
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void runImageSearch(Math.min(imagesMeta.last_page, imagesMeta.current_page + 1))}
+                    disabled={imagesMeta.current_page >= imagesMeta.last_page}
+                    className="btn-secondary disabled:opacity-50"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {activeTab === "preview" && (
+        <div className="mb-6 rounded-xl border border-white/20 bg-white/10 p-5">
+          <h2 className="mb-4 font-heading text-2xl text-offwhite">Live Article Preview</h2>
+          <p className="mb-4 text-sm text-mist/80">
+            Preview long-form readability before publishing.
+          </p>
+
+          <div className="mb-4 grid gap-3 rounded-lg border border-white/20 bg-white/5 p-3 md:grid-cols-[1fr_auto_auto] md:items-center">
+            <div className="text-xs text-mist/80">
+              Rich preview · {previewWordCount.toLocaleString()} words
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setPreviewFontSize((v) => Math.max(15, v - 1))}
+                className="rounded-md border border-white/30 px-3 py-1 text-sm"
+              >
+                A-
+              </button>
+              <span className="text-xs text-mist/80">{previewFontSize}px</span>
+              <button
+                type="button"
+                onClick={() => setPreviewFontSize((v) => Math.min(24, v + 1))}
+                className="rounded-md border border-white/30 px-3 py-1 text-sm"
+              >
+                A+
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setPreviewLayout("single")}
+                className={`rounded-md border px-3 py-1 text-sm ${previewLayout === "single" ? "border-gold bg-gold text-ink" : "border-white/30 text-mist/80"}`}
+              >
+                Single Column
+              </button>
+              <button
+                type="button"
+                onClick={() => setPreviewLayout("columns")}
+                className={`rounded-md border px-3 py-1 text-sm ${previewLayout === "columns" ? "border-gold bg-gold text-ink" : "border-white/30 text-mist/80"}`}
+              >
+                Multi Column
+              </button>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 md:justify-end">
+              <select
+                aria-label="Preview font size"
+                value={previewFontSize}
+                onChange={(e) => setPreviewFontSize(Number(e.target.value))}
+                className="rounded-md border border-white/30 bg-white/10 px-3 py-1 text-sm text-offwhite"
+              >
+                {PAGE_SIZES.map((size) => (
+                  <option key={size.value} value={size.value} style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>
+                    {size.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <article className="rounded-lg border border-white/20 bg-ink/35 p-4 md:p-6">
+            {previewImageUrl && (
+              <img
+                src={previewImageUrl}
+                alt={form.title || "Preview image"}
+                className="mb-5 h-56 w-full rounded-md object-cover md:h-80"
+              />
+            )}
+
+            <p className="text-xs uppercase tracking-[0.22em] text-gold-soft">
+              {(form.section || "news").replaceAll("_", " ")}
+            </p>
+            <h3 className="mt-2 font-heading text-3xl leading-tight text-offwhite md:text-5xl">
+              {form.title || "Article title preview"}
+            </h3>
+            {form.excerpt && (
+              <p className="mt-4 text-mist/90">{form.excerpt}</p>
+            )}
+
+            <div
+              className={`rich-content mt-5 leading-relaxed text-mist/90 ${previewLayout === "columns" ? "md:columns-2 xl:columns-3 md:gap-10" : "max-w-4xl"}`}
+              style={{ fontSize: `${previewFontSize}px` }}
+              dangerouslySetInnerHTML={{
+                __html: previewHtml || "<p>Article content preview will appear here.</p>",
+              }}
+            >
+            </div>
+          </article>
+        </div>
+      )}
+
+      {activeTab === "posts" && (
+        <div className="rounded-xl border border-white/20 bg-white/10 p-5">
+          <h2 className="mb-4 font-heading text-2xl text-offwhite">Posts</h2>
+          <div className="mb-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_220px_auto]">
+            <input
+              aria-label="Post search"
+              value={postQueryDraft}
+              onChange={(e) => setPostQueryDraft(e.target.value)}
+              placeholder="Search title, slug, or excerpt"
+              className="rounded-md border border-white/25 bg-white/10 px-4 py-2.5 text-offwhite placeholder:text-mist/70"
+            />
+            <select
+              aria-label="Post section filter"
+              value={postSectionFilterDraft}
+              onChange={(e) => setPostSectionFilterDraft(e.target.value)}
+              className="rounded-md border border-white/25 bg-white/10 px-4 py-2.5 text-offwhite"
+            >
+              <option value="" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>All sections</option>
+              {sectionOptions.map((section) => (
+                <option key={section} value={section} style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>
+                  {titleCaseWords(section)}
                 </option>
               ))}
             </select>
+            <button type="button" onClick={() => void applyPostSearch()} className="btn-secondary">
+              Search
+            </button>
           </div>
+
+          {!postsLoaded ? (
+            <p className="text-sm text-mist/80">Run a search to load posts.</p>
+          ) : (
+            <>
+              <div className="overflow-hidden rounded-xl border border-white/20 bg-white/10">
+                <table className="min-w-full text-left text-sm text-offwhite">
+                  <thead className="bg-navy/70 text-gold-soft">
+                    <tr>
+                      <th className="px-4 py-3">Title</th>
+                      <th className="px-4 py-3">Image</th>
+                      <th className="px-4 py-3">Content</th>
+                      <th className="px-4 py-3">Section</th>
+                      <th className="px-4 py-3">Status</th>
+                      <th className="px-4 py-3">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {posts.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="px-4 py-8 text-center text-mist/80">No posts found for the current search.</td>
+                      </tr>
+                    )}
+
+                    {posts.map((post) => (
+                      <tr key={post.id} className="border-t border-white/15">
+                        <td className="px-4 py-3">{post.title}</td>
+                        <td className="px-4 py-3">
+                          {post.image_url ? (
+                            <img
+                              src={post.image_url}
+                              alt={post.title}
+                              className="h-14 w-24 rounded border border-white/20 object-cover"
+                            />
+                          ) : (
+                            <span className="text-xs text-mist/75">No image</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <p className="max-w-xs line-clamp-3 text-xs text-mist/85">
+                            {post.excerpt || htmlToPlainText(post.content)}
+                          </p>
+                        </td>
+                        <td className="px-4 py-3 capitalize">{post.section}</td>
+                        <td className="px-4 py-3">{post.status}</td>
+                        <td className="px-4 py-3 space-x-3">
+                          <button
+                            type="button"
+                            onClick={() => startEdit(post)}
+                            disabled={!canUpdatePosts}
+                            className="text-gold hover:underline disabled:opacity-45"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void remove(post.id)}
+                            disabled={!canDeletePosts}
+                            className="text-red-300 hover:underline disabled:opacity-45"
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="mt-5 flex items-center justify-between text-sm text-mist/80">
+                <span>Page {postsMeta.current_page} of {postsMeta.last_page} | Total {postsMeta.total}</span>
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => void runPostSearch(Math.max(1, postsMeta.current_page - 1))}
+                    disabled={postsMeta.current_page <= 1}
+                    className="btn-secondary disabled:opacity-50"
+                  >
+                    Prev
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void runPostSearch(Math.min(postsMeta.last_page, postsMeta.current_page + 1))}
+                    disabled={postsMeta.current_page >= postsMeta.last_page}
+                    className="btn-secondary disabled:opacity-50"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
         </div>
-
-        <article className="rounded-lg border border-white/20 bg-ink/35 p-4 md:p-6">
-          {previewImageUrl && (
-            <img
-              src={previewImageUrl}
-              alt={form.title || "Preview image"}
-              className="mb-5 h-56 w-full rounded-md object-cover md:h-80"
-            />
-          )}
-
-          <p className="text-xs uppercase tracking-[0.22em] text-gold-soft">
-            {(form.section || "news").replaceAll("_", " ")}
-          </p>
-          <h3 className="mt-2 font-heading text-3xl leading-tight text-offwhite md:text-5xl">
-            {form.title || "Article title preview"}
-          </h3>
-          {form.excerpt && (
-            <p className="mt-4 text-mist/90">{form.excerpt}</p>
-          )}
-
-          <div
-            className={`rich-content mt-5 leading-relaxed text-mist/90 ${previewLayout === "columns" ? "md:columns-2 xl:columns-3 md:gap-10" : "max-w-4xl"}`}
-            style={{ fontSize: `${previewFontSize}px` }}
-            dangerouslySetInnerHTML={{
-              __html: previewHtml || "<p>Article content preview will appear here.</p>",
-            }}
-          >
-          </div>
-        </article>
-      </div>
-
-      <div className="overflow-hidden rounded-xl border border-white/20 bg-white/10">
-        <table className="min-w-full text-left text-sm text-offwhite">
-          <thead className="bg-navy/70 text-gold-soft">
-            <tr>
-              <th className="px-4 py-3">Title</th>
-              <th className="px-4 py-3">Image</th>
-              <th className="px-4 py-3">Content</th>
-              <th className="px-4 py-3">Section</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading && (
-              <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-mist/80">Loading posts...</td>
-              </tr>
-            )}
-
-            {!loading && posts.length === 0 && (
-              <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-mist/80">No posts yet.</td>
-              </tr>
-            )}
-
-            {!loading && posts.map((post) => (
-              <tr key={post.id} className="border-t border-white/15">
-                <td className="px-4 py-3">{post.title}</td>
-                <td className="px-4 py-3">
-                  {post.image_url ? (
-                    <img
-                      src={post.image_url}
-                      alt={post.title}
-                      className="h-14 w-24 rounded border border-white/20 object-cover"
-                    />
-                  ) : (
-                    <span className="text-xs text-mist/75">No image</span>
-                  )}
-                </td>
-                <td className="px-4 py-3">
-                  <p className="max-w-xs line-clamp-3 text-xs text-mist/85">
-                    {post.excerpt || htmlToPlainText(post.content)}
-                  </p>
-                </td>
-                <td className="px-4 py-3 capitalize">{post.section}</td>
-                <td className="px-4 py-3">{post.status}</td>
-                <td className="px-4 py-3 space-x-3">
-                  <button
-                    type="button"
-                    onClick={() => startEdit(post)}
-                    disabled={!canUpdatePosts}
-                    className="text-gold hover:underline disabled:opacity-45"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void remove(post.id)}
-                    disabled={!canDeletePosts}
-                    className="text-red-300 hover:underline disabled:opacity-45"
-                  >
-                    Delete
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      )}
     </section>
   );
 }

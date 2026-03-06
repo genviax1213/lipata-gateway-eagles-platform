@@ -6,6 +6,7 @@ use App\Models\Member;
 use App\Models\MemberApplication;
 use App\Models\Role;
 use App\Models\User;
+use App\Support\RoleHierarchy;
 use App\Support\TextCase;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -15,8 +16,12 @@ use Illuminate\Support\Str;
 
 class AdminUserController extends Controller
 {
-    private const FINANCE_ROLES = ['auditor', 'treasurer'];
     private const FORUM_ROLES = ['forum_moderator'];
+
+    private function isProtectedAdminRole(?string $roleName): bool
+    {
+        return in_array($roleName, [RoleHierarchy::SUPERADMIN, RoleHierarchy::ADMIN], true);
+    }
 
     private function normalizeEmail(string $value): string
     {
@@ -25,9 +30,17 @@ class AdminUserController extends Controller
 
     public function index(Request $request)
     {
+        $search = (string) $request->query('search', '');
+
         $users = User::query()
             ->with('role:id,name')
             ->select(['id', 'name', 'email', 'role_id', 'finance_role', 'forum_role', 'created_at'])
+            ->when($search !== '', function ($query) use ($search) {
+                $query->where(function ($inner) use ($search) {
+                    $inner->where('name', 'like', "%{$search}%")
+                        ->orWhere('email', 'like', "%{$search}%");
+                });
+            })
             ->orderBy('name')
             ->paginate(20);
 
@@ -71,21 +84,13 @@ class AdminUserController extends Controller
     {
         $validated = $request->validate([
             'role_id' => 'required|integer|exists:roles,id',
-            'finance_role' => 'nullable|in:auditor,treasurer',
             'forum_role' => 'nullable|in:forum_moderator',
         ]);
 
         $selectedRole = Role::query()
             ->select(['id', 'name'])
             ->findOrFail($validated['role_id']);
-        $financeRole = $validated['finance_role'] ?? null;
         $forumRole = $validated['forum_role'] ?? null;
-
-        if (in_array($selectedRole->name, self::FINANCE_ROLES, true)) {
-            return response()->json([
-                'message' => 'Auditor/Treasurer are secondary finance roles only. Assign a non-finance primary role first.',
-            ], 422);
-        }
 
         /** @var User $authUser */
         $authUser = $request->user()->loadMissing('role:id,name');
@@ -115,9 +120,14 @@ class AdminUserController extends Controller
             }
         }
 
-        if ($linkedUser && $authUser->id === $linkedUser->id && $selectedRole->name !== 'admin') {
+        if (
+            $linkedUser
+            && $authUser->id === $linkedUser->id
+            && $this->isProtectedAdminRole(optional($authUser->role)->name)
+            && !$this->isProtectedAdminRole($selectedRole->name)
+        ) {
             return response()->json([
-                'message' => 'You cannot remove your own admin role.',
+                'message' => 'You cannot remove your own top-level administrative role.',
             ], 422);
         }
 
@@ -137,7 +147,7 @@ class AdminUserController extends Controller
             $linkedUser->role_id = $selectedRole->id;
         }
 
-        $linkedUser->finance_role = $financeRole;
+        $linkedUser->finance_role = null;
         $linkedUser->forum_role = in_array($forumRole, self::FORUM_ROLES, true) ? $forumRole : null;
         $linkedUser->save();
 
@@ -156,7 +166,6 @@ class AdminUserController extends Controller
             'target_user_id' => $linkedUser->id,
             'target_member_id' => $member->id,
             'primary_role' => $selectedRole->name,
-            'finance_role' => $linkedUser->finance_role,
             'forum_role' => $linkedUser->forum_role,
             'ip' => $request->ip(),
         ]);
@@ -181,9 +190,13 @@ class AdminUserController extends Controller
         /** @var User $authUser */
         $authUser = $request->user()->loadMissing('role:id,name');
 
-        if ($authUser->id === $user->id && $selectedRole->name !== 'admin') {
+        if (
+            $authUser->id === $user->id
+            && $this->isProtectedAdminRole(optional($authUser->role)->name)
+            && !$this->isProtectedAdminRole($selectedRole->name)
+        ) {
             return response()->json([
-                'message' => 'You cannot remove your own admin role.',
+                'message' => 'You cannot remove your own top-level administrative role.',
             ], 422);
         }
 
@@ -310,15 +323,40 @@ class AdminUserController extends Controller
         return response()->json(['message' => 'User deleted']);
     }
 
+    public function resetPassword(Request $request, User $user)
+    {
+        /** @var User $actor */
+        $actor = $request->user();
+        $this->authorize('resetUserPassword', [User::class, $user]);
+
+        $validated = $request->validate([
+            'password' => 'required|string|min:8|confirmed|max:255',
+        ]);
+
+        $user->password = Hash::make($validated['password']);
+        $user->save();
+
+        Log::info('admin.user_password_reset', [
+            'actor_user_id' => $actor->id,
+            'target_user_id' => $user->id,
+            'target_role' => optional($user->role)->name,
+            'ip' => $request->ip(),
+        ]);
+
+        return response()->json([
+            'message' => 'Password updated successfully.',
+        ]);
+    }
+
     public function linkCurrentUserMemberProfile(Request $request)
     {
         /** @var User $actor */
         $actor = $request->user()->loadMissing('role:id,name');
         $this->authorize('manageAdminUsers', [User::class, 'members.update']);
 
-        if (optional($actor->role)->name !== 'admin') {
+        if (!RoleHierarchy::canManageUsers((string) optional($actor->role)->name)) {
             return response()->json([
-                'message' => 'Only administrators can use this utility.',
+                'message' => 'Only top-level administrators can use this utility.',
             ], 403);
         }
 

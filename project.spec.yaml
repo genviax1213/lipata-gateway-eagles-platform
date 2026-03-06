@@ -180,7 +180,10 @@ invariants:
   arch: [layers_explicit, contracts_and_ownership_explicit, bb]
   exec: [sdlc, incremental_checkpointed_delivery, no_done_without_verification]
   repo: [respect_conventions_and_dep_direction, minimal_diff_surface, no_unrelated_changes]
-  sec: [no_secret_material_in_code, env_secret_management]
+  sec:
+    - no_secret_material_in_code
+    - env_secret_management
+    - portal_session_security_default(inactivity_logout_30m+single_active_session+forced_logout_notice)
 
 execution_protocol:
   preflight:

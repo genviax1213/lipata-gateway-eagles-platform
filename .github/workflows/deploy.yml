@@ -91,6 +91,8 @@ jobs:
       DEPLOY_BRANCH: ${{ vars.DEPLOY_BRANCH != '' && vars.DEPLOY_BRANCH || 'main' }}
       RUN_SEED: ${{ vars.RUN_SEED != '' && vars.RUN_SEED || 'false' }}
       RESTART_COMMAND: ${{ vars.RESTART_COMMAND }}
+      PHP_BIN: ${{ vars.PHP_BIN != '' && vars.PHP_BIN || 'php' }}
+      COMPOSER_BIN: ${{ vars.COMPOSER_BIN != '' && vars.COMPOSER_BIN || 'composer' }}
     steps:
       - name: Download Frontend Artifact
         uses: actions/download-artifact@v4
@@ -133,6 +135,8 @@ jobs:
           if [ -z "\$BACKEND_DIR" ]; then
             BACKEND_DIR="\$APP_DIR/backend"
           fi
+          PHP_BIN="${PHP_BIN}"
+          COMPOSER_BIN="${COMPOSER_BIN}"
 
           # Prevent direct web access to backend source tree.
           cat > "\$BACKEND_DIR/.htaccess" <<'HTACCESS'
@@ -164,19 +168,19 @@ HTACCESS
             cp .env.example .env
           fi
 
-          composer install --no-dev --optimize-autoloader --no-interaction
-          php artisan key:generate --force || true
-          php artisan migrate --force --no-interaction
+          "\$COMPOSER_BIN" install --no-dev --optimize-autoloader --no-interaction
+          "\$PHP_BIN" artisan key:generate --force || true
+          "\$PHP_BIN" artisan migrate --force --no-interaction
 
           if [ "${RUN_SEED}" = "true" ]; then
-            php artisan db:seed --force --no-interaction
+            "\$PHP_BIN" artisan db:seed --force --no-interaction
           fi
 
-          php artisan storage:link || true
-          php artisan optimize:clear
-          php artisan config:cache
-          php artisan route:cache
-          php artisan view:cache
+          "\$PHP_BIN" artisan storage:link || true
+          "\$PHP_BIN" artisan optimize:clear
+          "\$PHP_BIN" artisan config:cache
+          "\$PHP_BIN" artisan route:cache
+          "\$PHP_BIN" artisan view:cache
 
           if [ -n "${RESTART_COMMAND}" ]; then
             ${RESTART_COMMAND}

@@ -53,8 +53,7 @@ export default function Activities() {
         Activities & Community Projects
       </h2>
       <p className="mb-6 max-w-3xl text-sm text-mist/85">
-        Complete archive of activities, projects, and community engagements. Unlike the homepage highlights,
-        this page is intended to provide full historical coverage.
+        Complete archive of activities, projects, and community engagements.
       </p>
 
       {loading && (

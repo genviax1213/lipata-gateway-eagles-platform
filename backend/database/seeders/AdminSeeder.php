@@ -12,7 +12,7 @@ class AdminSeeder extends Seeder
 {
     public function run(): void
     {
-        $adminRole = Role::where('name', 'admin')->first();
+        $superadminRole = Role::where('name', 'superadmin')->first();
         $admin = User::query()->where('email', 'admin@lipataeagles.ph')->first();
 
         if (!$admin) {
@@ -20,13 +20,13 @@ class AdminSeeder extends Seeder
                 'name' => 'System Administrator',
                 'email' => 'admin@lipataeagles.ph',
                 'password' => Hash::make((string) env('ADMIN_INITIAL_PASSWORD', Str::random(48))),
-                'role_id' => $adminRole?->id,
+                'role_id' => $superadminRole?->id,
             ]);
             return;
         }
 
         $admin->name = 'System Administrator';
-        $admin->role_id = $adminRole?->id;
+        $admin->role_id = $superadminRole?->id;
         $admin->save();
     }
 }

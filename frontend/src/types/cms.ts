@@ -7,6 +7,7 @@ export interface CmsPost {
   content: string;
   image_url: string | null;
   is_featured: boolean;
+  show_on_homepage_community: boolean;
   status: "draft" | "published";
   published_at: string | null;
   created_at: string | null;

@@ -35,7 +35,13 @@ interface ForumThread {
 
 interface ThreadListPayload {
   data: ForumThread[];
+  current_page: number;
+  last_page: number;
+  total: number;
 }
+
+type ForumTab = "threads" | "thread" | "new-thread";
+const FORUM_PAGE_SIZE = 10;
 
 export default function Forum() {
   const FORUM_REFRESH_MS = 1000;
@@ -48,13 +54,19 @@ export default function Forum() {
   const canModerate = hasPermission(user, "forum.moderate");
   const currentUserId = typeof user?.id === "number" ? user.id : null;
 
+  const [activeTab, setActiveTab] = useState<ForumTab>("threads");
   const [threads, setThreads] = useState<ForumThread[]>([]);
+  const [threadsLoaded, setThreadsLoaded] = useState(false);
   const [selectedThreadId, setSelectedThreadId] = useState<number | null>(null);
   const [selectedThread, setSelectedThread] = useState<ForumThread | null>(null);
   const [threadTitle, setThreadTitle] = useState("");
   const [threadBody, setThreadBody] = useState("");
   const [replyBody, setReplyBody] = useState("");
   const [search, setSearch] = useState("");
+  const [threadsPage, setThreadsPage] = useState(1);
+  const [threadsLastPage, setThreadsLastPage] = useState(1);
+  const [threadsTotal, setThreadsTotal] = useState(0);
+  const [postsPage, setPostsPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -90,7 +102,7 @@ export default function Forum() {
     return fallback;
   };
 
-  const fetchThreads = useCallback(async (silent = false) => {
+  const fetchThreads = useCallback(async (silent = false, nextPage = threadsPage) => {
     if (!canViewForum) return;
 
     if (!silent) {
@@ -100,7 +112,7 @@ export default function Forum() {
 
     try {
       const res = await api.get<ThreadListPayload>("/forum/threads", {
-        params: { search, _t: Date.now() },
+        params: { search, page: nextPage, _t: Date.now() },
         headers: {
           "Cache-Control": "no-cache",
           Pragma: "no-cache",
@@ -108,6 +120,10 @@ export default function Forum() {
       });
       const items = res.data.data ?? [];
       setThreads(items);
+      setThreadsPage(res.data.current_page ?? nextPage);
+      setThreadsLastPage(res.data.last_page ?? 1);
+      setThreadsTotal(res.data.total ?? items.length);
+      setThreadsLoaded(true);
       const selectedStillExists = selectedThreadId
         ? items.some((thread) => thread.id === selectedThreadId)
         : false;
@@ -125,7 +141,7 @@ export default function Forum() {
         setLoading(false);
       }
     }
-  }, [canViewForum, search, selectedThreadId]);
+  }, [canViewForum, search, selectedThreadId, threadsPage]);
 
   const fetchThread = useCallback(async (threadId: number, silent = false) => {
     if (!canViewForum) return;
@@ -162,20 +178,17 @@ export default function Forum() {
   }, [canViewForum, fetchThreads]);
 
   useEffect(() => {
-    void fetchThreads();
-  }, [fetchThreads]);
-
-  useEffect(() => {
-    if (!selectedThreadId) {
+    if (!threadsLoaded || !selectedThreadId) {
       setSelectedThread(null);
       return;
     }
 
+    setPostsPage(1);
     void fetchThread(selectedThreadId);
-  }, [fetchThread, selectedThreadId]);
+  }, [fetchThread, selectedThreadId, threadsLoaded]);
 
   useEffect(() => {
-    if (!canViewForum) return;
+    if (!canViewForum || !threadsLoaded) return;
 
     const timer = window.setInterval(() => {
       void fetchThreads(true);
@@ -187,7 +200,7 @@ export default function Forum() {
     return () => {
       window.clearInterval(timer);
     };
-  }, [canViewForum, fetchThread, fetchThreads, selectedThreadId]);
+  }, [canViewForum, fetchThread, fetchThreads, selectedThreadId, threadsLoaded]);
 
   const createThread = async () => {
     if (!canCreateThread) return;
@@ -204,8 +217,9 @@ export default function Forum() {
       setThreadTitle("");
       setThreadBody("");
       setNotice("Forum thread created.");
-      await fetchThreads();
+      await fetchThreads(false, 1);
       setSelectedThreadId(res.data.id);
+      setActiveTab("thread");
     } catch (err) {
       setError(parseError(err, "Unable to create forum thread."));
     } finally {
@@ -277,7 +291,7 @@ export default function Forum() {
       if (selectedThread) {
         await fetchThread(selectedThread.id);
       }
-      await fetchThreads();
+      await fetchThreads(false, threadsPage);
       setNotice(hidden ? "Post hidden." : "Post restored.");
     } catch (err) {
       setError(parseError(err, "Unable to update post visibility."));
@@ -298,7 +312,7 @@ export default function Forum() {
       setNotice("Thread deleted.");
       setSelectedThread(null);
       setSelectedThreadId(null);
-      await fetchThreads();
+      await fetchThreads(false, threadsPage);
     } catch (err) {
       setError(parseError(err, "Unable to delete thread."));
     } finally {
@@ -316,7 +330,7 @@ export default function Forum() {
       if (selectedThread) {
         await fetchThread(selectedThread.id);
       }
-      await fetchThreads();
+      await fetchThreads(false, threadsPage);
       setNotice("Post deleted.");
     } catch (err) {
       setError(parseError(err, "Unable to delete post."));
@@ -340,6 +354,15 @@ export default function Forum() {
     if (posts.length === 0) return null;
     return posts[posts.length - 1]?.id ?? null;
   }, [selectedThread?.posts]);
+  const pagedPosts = useMemo(() => {
+    const posts = selectedThread?.posts ?? [];
+    const start = (postsPage - 1) * FORUM_PAGE_SIZE;
+    return posts.slice(start, start + FORUM_PAGE_SIZE);
+  }, [postsPage, selectedThread?.posts]);
+  const postsLastPage = useMemo(
+    () => Math.max(1, Math.ceil((selectedThread?.posts?.length ?? 0) / FORUM_PAGE_SIZE)),
+    [selectedThread?.posts?.length],
+  );
 
   useEffect(() => {
     const currentThreadId = selectedThread?.id ?? null;
@@ -397,18 +420,126 @@ export default function Forum() {
       {error && <p className="mb-4 rounded-md border border-red-300/30 bg-red-400/10 px-4 py-2 text-sm text-red-200">{error}</p>}
       {notice && <p className="mb-4 rounded-md border border-gold/30 bg-gold/10 px-4 py-2 text-sm text-gold-soft">{notice}</p>}
 
-      <div className="mb-4 flex flex-wrap gap-3">
-        <input
-          aria-label="Search forum threads"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search forum threads"
-          className="min-w-[18rem] rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
-        />
-        <button className="btn-secondary" onClick={() => void fetchThreads()}>Search</button>
+      <div className="mb-6 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => setActiveTab("threads")}
+          className={`rounded-md border px-4 py-2 text-sm ${activeTab === "threads" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}
+        >
+          Threads
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("thread")}
+          className={`rounded-md border px-4 py-2 text-sm ${activeTab === "thread" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}
+        >
+          Thread View
+        </button>
+        {canCreateThread && (
+          <button
+            type="button"
+            onClick={() => setActiveTab("new-thread")}
+            className={`rounded-md border px-4 py-2 text-sm ${activeTab === "new-thread" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}
+          >
+            New Thread
+          </button>
+        )}
       </div>
 
-      {canCreateThread && (
+      {activeTab === "threads" && (
+        <div className="mb-6 rounded-xl border border-white/20 bg-white/10 p-4">
+          <div className="mb-4 flex flex-wrap gap-3">
+            <input
+              aria-label="Search forum threads"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search forum threads"
+              className="min-w-[18rem] rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+            />
+            <button
+              className="btn-secondary"
+              onClick={() => {
+                setThreadsPage(1);
+                void fetchThreads(false, 1);
+              }}
+            >
+              Search
+            </button>
+          </div>
+
+          {!threadsLoaded ? (
+            <div className="rounded-md border border-white/20 bg-white/5 px-4 py-8 text-center text-sm text-mist/75">
+              Click Search to load threads.
+            </div>
+          ) : (
+            <>
+              <div className="max-h-[32rem] space-y-2 overflow-y-auto pr-1">
+                {!loading && threads.map((thread) => (
+                  <button
+                    key={thread.id}
+                    onClick={() => {
+                      setSelectedThreadId(thread.id);
+                      setActiveTab("thread");
+                    }}
+                    className={`w-full rounded-lg border px-3 py-2 text-left transition ${
+                      thread.id === selectedThreadId
+                        ? "border-gold/60 bg-gold/10"
+                        : "border-white/20 bg-white/5 hover:bg-white/10"
+                    }`}
+                  >
+                    <p className="text-sm font-semibold text-offwhite">{thread.title}</p>
+                    <p className="mt-1 text-xs text-mist/75">
+                      by {thread.author?.name ?? "Unknown"}
+                    </p>
+                    <p className="mt-1 text-xs text-mist/75">
+                      {thread.visible_posts_count ?? 0} posts
+                      {thread.is_locked ? " | Locked" : ""}
+                      {thread.is_pinned ? " | Pinned" : ""}
+                    </p>
+                  </button>
+                ))}
+                {!loading && threads.length === 0 && (
+                  <p className="rounded-md border border-white/20 bg-white/5 px-3 py-3 text-sm text-mist/75">
+                    No threads yet.
+                  </p>
+                )}
+              </div>
+
+              <div className="mt-4 flex items-center justify-between text-xs text-mist/75">
+                <span>Page {threadsPage} of {threadsLastPage} | Total {threadsTotal}</span>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    disabled={threadsPage <= 1}
+                    onClick={() => {
+                      const nextPage = Math.max(1, threadsPage - 1);
+                      setThreadsPage(nextPage);
+                      void fetchThreads(false, nextPage);
+                    }}
+                  >
+                    Prev
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    disabled={threadsPage >= threadsLastPage}
+                    onClick={() => {
+                      const nextPage = Math.min(threadsLastPage, threadsPage + 1);
+                      setThreadsPage(nextPage);
+                      void fetchThreads(false, nextPage);
+                    }}
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {activeTab === "new-thread" && canCreateThread && (
         <div className="mb-6 grid gap-3 rounded-xl border border-white/20 bg-white/10 p-4">
           <p className="text-xs uppercase tracking-[0.22em] text-gold-soft">Start New Thread</p>
           <input
@@ -437,39 +568,7 @@ export default function Forum() {
         </div>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-[340px_1fr]">
-        <div className="rounded-xl border border-white/20 bg-white/10 p-4">
-          <h2 className="mb-3 font-heading text-2xl text-offwhite">Threads</h2>
-          <div className="max-h-[28rem] space-y-2 overflow-y-auto pr-1">
-            {!loading && threads.map((thread) => (
-              <button
-                key={thread.id}
-                onClick={() => setSelectedThreadId(thread.id)}
-                className={`w-full rounded-lg border px-3 py-2 text-left transition ${
-                  thread.id === selectedThreadId
-                    ? "border-gold/60 bg-gold/10"
-                    : "border-white/20 bg-white/5 hover:bg-white/10"
-                }`}
-              >
-                <p className="text-sm font-semibold text-offwhite">{thread.title}</p>
-                <p className="mt-1 text-xs text-mist/75">
-                  by {thread.author?.name ?? "Unknown"}
-                </p>
-                <p className="mt-1 text-xs text-mist/75">
-                  {thread.visible_posts_count ?? 0} posts
-                  {thread.is_locked ? " | Locked" : ""}
-                  {thread.is_pinned ? " | Pinned" : ""}
-                </p>
-              </button>
-            ))}
-            {!loading && threads.length === 0 && (
-              <p className="rounded-md border border-white/20 bg-white/5 px-3 py-3 text-sm text-mist/75">
-                No threads yet.
-              </p>
-            )}
-          </div>
-        </div>
-
+      {activeTab === "thread" && (
         <div className="rounded-xl border border-white/20 bg-white/10 p-4">
           <h2 className="mb-1 font-heading text-2xl text-offwhite">
             {selectedThread?.title ?? selectedSummary?.title ?? "Select a thread"}
@@ -505,8 +604,14 @@ export default function Forum() {
             </div>
           )}
 
+          {!selectedThread ? (
+            <div className="rounded-md border border-white/20 bg-white/5 px-4 py-8 text-center text-sm text-mist/75">
+              Select a thread from the Threads tab first.
+            </div>
+          ) : (
+            <>
           <div className="max-h-[34rem] space-y-3 overflow-y-auto pr-1">
-            {(selectedThread?.posts ?? []).map((post) => (
+            {pagedPosts.map((post) => (
               <article
                 key={post.id}
                 ref={post.id === lastVisiblePostId ? (node) => { latestPostRef.current = node; } : undefined}
@@ -549,6 +654,27 @@ export default function Forum() {
               </p>
             )}
           </div>
+          <div className="mt-4 flex items-center justify-between text-xs text-mist/75">
+            <span>Page {postsPage} of {postsLastPage} | Total {(selectedThread.posts ?? []).length}</span>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className="btn-secondary"
+                disabled={postsPage <= 1}
+                onClick={() => setPostsPage((current) => Math.max(1, current - 1))}
+              >
+                Prev
+              </button>
+              <button
+                type="button"
+                className="btn-secondary"
+                disabled={postsPage >= postsLastPage}
+                onClick={() => setPostsPage((current) => Math.min(postsLastPage, current + 1))}
+              >
+                Next
+              </button>
+            </div>
+          </div>
 
           {selectedThread && canReply && (
             <div className="mt-4 grid gap-3">
@@ -570,8 +696,10 @@ export default function Forum() {
               </button>
             </div>
           )}
+            </>
+          )}
         </div>
-      </div>
+      )}
     </section>
   );
 }

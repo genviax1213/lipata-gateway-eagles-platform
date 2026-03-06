@@ -24,6 +24,8 @@ const api = axios.create({
   xsrfHeaderName: "X-XSRF-TOKEN",
 });
 
+const AUTH_NOTICE_KEY = "portal_auth_notice";
+
 export async function ensureCsrfCookie(force = false): Promise<void> {
   if (csrfCookieLoaded && !force) return;
   const candidates = [
@@ -72,5 +74,24 @@ api.interceptors.request.use((config) => {
   }
   return config;
 });
+
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (!axios.isAxiosError(error)) {
+      return Promise.reject(error);
+    }
+
+    const status = error.response?.status;
+    const payload = (error.response?.data as { code?: string; message?: string } | undefined) ?? {};
+    if (status === 401 && (payload.code === "session_inactive" || payload.code === "session_replaced")) {
+      localStorage.setItem(AUTH_NOTICE_KEY, payload.message ?? "Your portal session ended. Please log in again.");
+      localStorage.removeItem("auth_token");
+      localStorage.removeItem("auth_user_cache");
+    }
+
+    return Promise.reject(error);
+  },
+);
 
 export default api;

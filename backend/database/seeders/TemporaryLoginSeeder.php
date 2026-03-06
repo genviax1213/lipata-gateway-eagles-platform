@@ -18,13 +18,27 @@ class TemporaryLoginSeeder extends Seeder
         }
 
         $roles = Role::query()
-            ->whereIn('name', ['admin', 'officer', 'member', 'treasurer', 'auditor', 'applicant', 'membership_chairman'])
+            ->whereIn('name', ['superadmin', 'admin', 'officer', 'member', 'treasurer', 'auditor', 'applicant', 'membership_chairman'])
             ->pluck('id', 'name');
 
         $accounts = [
             [
                 'name' => 'Temp Admin',
                 'email' => 'admin@lipataeagles.ph',
+                'role' => 'superadmin',
+                'finance_role' => null,
+                'forum_role' => null,
+            ],
+            [
+                'name' => 'Temp Admin 1',
+                'email' => 'temp.admin.one@lipataeagles.ph',
+                'role' => 'admin',
+                'finance_role' => null,
+                'forum_role' => null,
+            ],
+            [
+                'name' => 'Temp Admin 2',
+                'email' => 'temp.admin.two@lipataeagles.ph',
                 'role' => 'admin',
                 'finance_role' => null,
                 'forum_role' => null,

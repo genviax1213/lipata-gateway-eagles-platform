@@ -42,6 +42,22 @@ class PostController extends Controller
         return response()->json($posts->map(fn (Post $post) => $this->transform($post)));
     }
 
+    public function publicHomepageCommunity()
+    {
+        $posts = Post::query()
+            ->where('section', 'activities')
+            ->where('show_on_homepage_community', true)
+            ->where('status', 'published')
+            ->where(function ($q) {
+                $q->whereNull('published_at')->orWhere('published_at', '<=', now());
+            })
+            ->latest('published_at')
+            ->latest('id')
+            ->get();
+
+        return response()->json($posts->map(fn (Post $post) => $this->transform($post)));
+    }
+
     public function publicBySlug(string $slug)
     {
         $post = Post::query()
@@ -65,7 +81,17 @@ class PostController extends Controller
             $query->where('section', $request->string('section'));
         }
 
-        $posts = $query->latest('id')->paginate(20);
+        if ($request->filled('q')) {
+            $term = trim((string) $request->string('q'));
+            $query->where(function ($q) use ($term) {
+                $q->where('title', 'like', "%{$term}%")
+                    ->orWhere('slug', 'like', "%{$term}%")
+                    ->orWhere('excerpt', 'like', "%{$term}%");
+            });
+        }
+
+        $perPage = max(1, min(50, (int) $request->query('per_page', 12)));
+        $posts = $query->latest('id')->paginate($perPage);
 
         $posts->getCollection()->transform(fn (Post $post) => $this->transform($post, true));
 
@@ -83,7 +109,44 @@ class PostController extends Controller
     {
         $this->authorize('viewCmsIndex', Post::class);
 
-        return response()->json($this->postImageLibrary());
+        $library = collect($this->postImageLibrary());
+
+        $query = trim((string) $request->query('q', ''));
+        if ($query !== '') {
+            $library = $library->filter(function (array $image) use ($query): bool {
+                if (str_contains(strtolower($image['name']), strtolower($query))) {
+                    return true;
+                }
+
+                foreach ($image['links'] as $link) {
+                    if (str_contains(strtolower((string) $link['title']), strtolower($query))) {
+                        return true;
+                    }
+                }
+
+                return false;
+            })->values();
+        }
+
+        $linkState = (string) $request->query('link_state', 'all');
+        if ($linkState === 'linked') {
+            $library = $library->where('is_linked', true)->values();
+        } elseif ($linkState === 'unlinked') {
+            $library = $library->where('is_linked', false)->values();
+        }
+
+        $perPage = max(1, min(50, (int) $request->query('per_page', 8)));
+        $page = max(1, (int) $request->query('page', 1));
+        $total = $library->count();
+        $items = $library->slice(($page - 1) * $perPage, $perPage)->values();
+
+        return response()->json([
+            'data' => $items,
+            'current_page' => $page,
+            'last_page' => max(1, (int) ceil($total / $perPage)),
+            'per_page' => $perPage,
+            'total' => $total,
+        ]);
     }
 
     public function store(Request $request)
@@ -98,6 +161,7 @@ class PostController extends Controller
             'excerpt' => 'nullable|string|max:300',
             'content' => 'required|string|max:' . self::MAX_RICH_CONTENT_CHARS,
             'is_featured' => 'sometimes|boolean',
+            'show_on_homepage_community' => 'sometimes|boolean',
             'status' => 'required|in:draft,published',
             'published_at' => 'nullable|date',
             'image' => 'nullable|image|max:' . $this->maxCmsImageKb(),
@@ -149,6 +213,7 @@ class PostController extends Controller
             'excerpt' => 'nullable|string|max:300',
             'content' => 'required|string|max:' . self::MAX_RICH_CONTENT_CHARS,
             'is_featured' => 'sometimes|boolean',
+            'show_on_homepage_community' => 'sometimes|boolean',
             'status' => 'required|in:draft,published',
             'published_at' => 'nullable|date',
             'image' => 'nullable|image|max:' . $this->maxCmsImageKb(),
@@ -258,6 +323,7 @@ class PostController extends Controller
             'content' => $post->content,
             'image_url' => $this->resolveImageUrl($post->image_path),
             'is_featured' => (bool) $post->is_featured,
+            'show_on_homepage_community' => (bool) $post->show_on_homepage_community,
             'status' => $post->status,
             'published_at' => optional($post->published_at)?->toISOString(),
             'created_at' => optional($post->created_at)?->toISOString(),

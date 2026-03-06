@@ -50,6 +50,7 @@ class User extends Authenticatable
     {
         return [
             'email_verified_at' => 'datetime',
+            'last_activity_at' => 'datetime',
             'password' => 'hashed',
         ];
     }
@@ -110,23 +111,7 @@ class User extends Authenticatable
             return true;
         }
 
-        return $this->hasFinancePermission($permission);
-    }
-
-    private function hasFinancePermission(string $permission): bool
-    {
-        $financeRole = $this->finance_role;
-        if (!$financeRole) {
-            return false;
-        }
-
-        $permissions = match ($financeRole) {
-            RoleHierarchy::FINANCE_TREASURER => RoleHierarchy::treasurerPermissions(),
-            RoleHierarchy::FINANCE_AUDITOR => RoleHierarchy::auditorPermissions(),
-            default => [],
-        };
-
-        return in_array($permission, $permissions, true);
+        return false;
     }
 
     private function hasForumPermission(string $permission): bool

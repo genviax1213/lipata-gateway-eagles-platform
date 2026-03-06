@@ -28,16 +28,6 @@ function getPortalTitle(user: Record<string, unknown> | null): string {
   return "Member Portal";
 }
 
-function toShortTitle(label: string): string {
-  return label
-    .split(" ")
-    .filter((word) => word.length > 0)
-    .map((word) => word[0])
-    .join("")
-    .slice(0, 3)
-    .toUpperCase();
-}
-
 export default function AdminLayout({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -50,7 +40,6 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const canViewFinance = hasPermission(user, "finance.view");
   const canViewForum = !isApplicant;
   const portalTitle = getPortalTitle(user);
-  const portalShortTitle = toShortTitle(portalTitle);
 
   useEffect(() => {
     const applySavedTheme = () => {
@@ -129,25 +118,27 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen p-4 md:p-6">
       <div className="flex min-h-[calc(100vh-2rem)] gap-4 md:min-h-[calc(100vh-3rem)]">
-        <aside className={`${collapsed ? "w-20" : "w-72"} shrink-0 transition-all duration-300 glass-card p-5 text-offwhite`}>
+        <aside className={`${collapsed ? "w-16" : "w-72"} shrink-0 transition-all duration-300 glass-card ${collapsed ? "px-2 py-5" : "p-5"} text-offwhite`}>
           <div className="mb-8">
-            <div className={`mb-3 flex items-center ${collapsed ? "justify-center gap-2" : "justify-center gap-4"}`}>
+            <div className={`mb-3 flex items-center ${collapsed ? "flex-col justify-center gap-2" : "justify-center gap-4"}`}>
               <img
                 src="/images/tfoe-logo.png"
                 alt="TFOE Logo"
-                className={`${collapsed ? "h-10 w-10" : "h-16 w-16"} object-contain`}
+                className={`${collapsed ? "h-9 w-9" : "h-16 w-16"} object-contain`}
               />
               <img
                 src="/images/lgec-logo.png"
                 alt="LGEC Logo"
-                className={`${collapsed ? "h-10 w-10" : "h-16 w-16"} object-contain`}
+                className={`${collapsed ? "h-9 w-9" : "h-16 w-16"} object-contain`}
               />
             </div>
 
-            <div className="flex items-end justify-between">
-              <h2 className={`${collapsed ? "text-xs tracking-widest" : "text-xl"} font-heading leading-none`}>
-                {collapsed ? portalShortTitle : portalTitle}
-              </h2>
+            <div className={`flex ${collapsed ? "justify-center" : "items-end justify-between"}`}>
+              {!collapsed && (
+                <h2 className="text-xl font-heading leading-none">
+                  {portalTitle}
+                </h2>
+              )}
               <button
                 onClick={() => setCollapsed(!collapsed)}
                 className="rounded-md border border-white/20 px-2 py-1 text-xs opacity-70 transition hover:opacity-100"
