@@ -5,7 +5,9 @@ namespace Tests\Feature;
 use App\Models\Member;
 use App\Models\MemberApplication;
 use App\Models\Contribution;
-use App\Models\ContributionEditRequest;
+use App\Models\Expense;
+use App\Models\FinanceAccount;
+use App\Models\FinanceAccountOpeningBalance;
 use App\Models\Role;
 use App\Models\User;
 use Database\Seeders\RoleSeeder;
@@ -22,6 +24,11 @@ class AuditLoggingTest extends TestCase
     {
         parent::setUp();
         $this->seed(RoleSeeder::class);
+    }
+
+    private function financeAccount(string $code = 'gcash'): FinanceAccount
+    {
+        return FinanceAccount::query()->where('code', $code)->firstOrFail();
     }
 
     public function test_admin_role_update_emits_audit_log(): void
@@ -620,4 +627,247 @@ class AuditLoggingTest extends TestCase
             })
             ->once();
     }
+
+    public function test_finance_reversal_emits_audit_log(): void
+    {
+        Log::spy();
+
+        $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
+        $treasurer = User::factory()->create([
+            'role_id' => $adminRole->id,
+            'finance_role' => 'treasurer',
+        ]);
+        $account = $this->financeAccount();
+
+        $member = Member::query()->create([
+            'member_number' => 'M-REV-001',
+            'first_name' => 'Ledger',
+            'middle_name' => null,
+            'last_name' => 'Audit',
+            'email' => 'ledger-audit@example.com',
+            'membership_status' => 'active',
+        ]);
+
+        $contribution = Contribution::query()->create([
+            'member_id' => $member->id,
+            'category' => 'monthly_contribution',
+            'contribution_date' => now()->toDateString(),
+            'amount' => 500,
+            'note' => 'Initial ledger value',
+            'finance_account_id' => $account->id,
+            'encoded_by_user_id' => $treasurer->id,
+            'encoded_at' => now(),
+        ]);
+
+        Sanctum::actingAs($treasurer);
+
+        $this->postJson("/api/v1/finance/contributions/{$contribution->id}/reverse", [
+            'remarks' => 'Duplicate ledger entry',
+            'finance_account_id' => $account->id,
+        ])->assertCreated();
+
+        Log::shouldHaveReceived('info')
+            ->withArgs(function (string $event, array $context) use ($treasurer, $contribution) {
+                return $event === 'finance.contribution_reversed'
+                    && (int) ($context['actor_user_id'] ?? 0) === (int) $treasurer->id
+                    && (int) ($context['contribution_id'] ?? 0) === (int) $contribution->id
+                    && isset($context['reversal_contribution_id']);
+            })
+            ->once();
+    }
+
+    public function test_finance_audit_note_emits_audit_log(): void
+    {
+        Log::spy();
+
+        $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
+        $auditor = User::factory()->create([
+            'role_id' => $adminRole->id,
+            'finance_role' => 'auditor',
+        ]);
+
+        $member = Member::query()->create([
+            'member_number' => 'M-AUDLOG-001',
+            'first_name' => 'Audit',
+            'middle_name' => null,
+            'last_name' => 'Logging',
+            'email' => 'audit-log@example.com',
+            'membership_status' => 'active',
+        ]);
+
+        Sanctum::actingAs($auditor);
+
+        $this->postJson('/api/v1/finance/audit-notes', [
+            'member_id' => $member->id,
+            'target_month' => '2026-03',
+            'category' => 'monthly_contribution',
+            'discrepancy_type' => 'missing_monthly_payment',
+            'status' => 'needs_followup',
+            'note_text' => 'Missing March payment needs review.',
+        ])->assertCreated();
+
+        Log::shouldHaveReceived('info')
+            ->withArgs(function (string $event, array $context) use ($auditor, $member) {
+                return $event === 'finance.audit_note_created'
+                    && (int) ($context['actor_user_id'] ?? 0) === (int) $auditor->id
+                    && (int) ($context['member_id'] ?? 0) === (int) $member->id
+                    && ($context['discrepancy_type'] ?? null) === 'missing_monthly_payment'
+                    && ($context['status'] ?? null) === 'needs_followup';
+            })
+            ->once();
+    }
+
+    public function test_finance_expense_reversal_emits_audit_log(): void
+    {
+        Log::spy();
+
+        $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
+        $treasurer = User::factory()->create([
+            'role_id' => $adminRole->id,
+            'finance_role' => 'treasurer',
+        ]);
+        $account = $this->financeAccount('bank');
+
+        $expense = Expense::query()->create([
+            'category' => 'project_expense',
+            'expense_date' => '2026-03-07',
+            'amount' => 1200,
+            'note' => 'Project materials',
+            'payee_name' => 'Build Supply',
+            'finance_account_id' => $account->id,
+            'encoded_by_user_id' => $treasurer->id,
+            'encoded_at' => now(),
+        ]);
+
+        Sanctum::actingAs($treasurer);
+
+        $this->postJson("/api/v1/finance/expenses/{$expense->id}/reverse", [
+            'remarks' => 'Duplicate expense entry',
+            'finance_account_id' => $account->id,
+        ])->assertCreated();
+
+        Log::shouldHaveReceived('info')
+            ->withArgs(function (string $event, array $context) use ($treasurer, $expense) {
+                return $event === 'finance.expense_reversed'
+                    && (int) ($context['actor_user_id'] ?? 0) === (int) $treasurer->id
+                    && (int) ($context['expense_id'] ?? 0) === (int) $expense->id
+                    && isset($context['reversal_expense_id']);
+            })
+            ->once();
+    }
+
+    public function test_finance_expense_audit_note_emits_audit_log(): void
+    {
+        Log::spy();
+
+        $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
+        $auditor = User::factory()->create([
+            'role_id' => $adminRole->id,
+            'finance_role' => 'auditor',
+        ]);
+        $account = $this->financeAccount('cash_on_hand');
+
+        $expense = Expense::query()->create([
+            'category' => 'administrative_expense',
+            'expense_date' => '2026-03-05',
+            'amount' => 310,
+            'note' => 'Meeting supplies',
+            'payee_name' => 'Stationery Shop',
+            'finance_account_id' => $account->id,
+            'encoded_by_user_id' => $auditor->id,
+            'encoded_at' => now(),
+        ]);
+
+        Sanctum::actingAs($auditor);
+
+        $this->postJson('/api/v1/finance/expense-audit-notes', [
+            'expense_id' => $expense->id,
+            'target_month' => '2026-03',
+            'category' => 'administrative_expense',
+            'discrepancy_type' => 'missing_support_reference',
+            'status' => 'needs_followup',
+            'note_text' => 'Receipt attachment is missing.',
+        ])->assertCreated();
+
+        Log::shouldHaveReceived('info')
+            ->withArgs(function (string $event, array $context) use ($auditor, $expense) {
+                return $event === 'finance.expense_audit_note_created'
+                    && (int) ($context['actor_user_id'] ?? 0) === (int) $auditor->id
+                    && (int) ($context['expense_id'] ?? 0) === (int) $expense->id
+                    && ($context['discrepancy_type'] ?? null) === 'missing_support_reference'
+                    && ($context['status'] ?? null) === 'needs_followup';
+            })
+            ->once();
+    }
+
+    public function test_finance_opening_balance_recorded_emits_audit_log(): void
+    {
+        Log::spy();
+
+        $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
+        $treasurer = User::factory()->create([
+            'role_id' => $adminRole->id,
+            'finance_role' => 'treasurer',
+        ]);
+        $account = $this->financeAccount('bank');
+
+        Sanctum::actingAs($treasurer);
+
+        $this->postJson('/api/v1/finance/opening-balances', [
+            'finance_account_id' => $account->id,
+            'effective_date' => '2026-01-01',
+            'amount' => 5000,
+            'note' => 'Opening bank balance',
+        ])->assertCreated();
+
+        Log::shouldHaveReceived('info')
+            ->withArgs(function (string $event, array $context) use ($treasurer, $account) {
+                return $event === 'finance.opening_balance_recorded'
+                    && (int) ($context['actor_user_id'] ?? 0) === (int) $treasurer->id
+                    && (int) ($context['finance_account_id'] ?? 0) === (int) $account->id
+                    && (float) ($context['amount'] ?? 0) === 5000.0
+                    && isset($context['opening_balance_id']);
+            })
+            ->once();
+    }
+
+    public function test_finance_opening_balance_reversed_emits_audit_log(): void
+    {
+        Log::spy();
+
+        $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
+        $treasurer = User::factory()->create([
+            'role_id' => $adminRole->id,
+            'finance_role' => 'treasurer',
+        ]);
+        $account = $this->financeAccount('gcash');
+
+        $openingBalance = FinanceAccountOpeningBalance::query()->create([
+            'finance_account_id' => $account->id,
+            'effective_date' => '2026-01-01',
+            'amount' => 4200,
+            'note' => 'Initial GCash float',
+            'encoded_by_user_id' => $treasurer->id,
+            'encoded_at' => now(),
+        ]);
+
+        Sanctum::actingAs($treasurer);
+
+        $this->postJson("/api/v1/finance/opening-balances/{$openingBalance->id}/reverse", [
+            'remarks' => 'Opening amount encoded incorrectly',
+            'finance_account_id' => $account->id,
+        ])->assertCreated();
+
+        Log::shouldHaveReceived('info')
+            ->withArgs(function (string $event, array $context) use ($treasurer, $openingBalance) {
+                return $event === 'finance.opening_balance_reversed'
+                    && (int) ($context['actor_user_id'] ?? 0) === (int) $treasurer->id
+                    && (int) ($context['opening_balance_id'] ?? 0) === (int) $openingBalance->id
+                    && ($context['remarks'] ?? null) === 'Opening Amount Encoded Incorrectly'
+                    && isset($context['effective_date'])
+                    && isset($context['reversal_opening_balance_id']);
+            })
+            ->once();
+    }
+
 }

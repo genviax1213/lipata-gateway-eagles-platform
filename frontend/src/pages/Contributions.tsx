@@ -22,6 +22,15 @@ interface ContributionRow {
   category_label: string;
   contribution_date: string;
   recipient_indicator: string | null;
+  is_reversal: boolean;
+  reversal_of_contribution_id: number | null;
+  reversed_by_entry_id: number | null;
+  finance_account?: {
+    id: number;
+    name: string;
+    account_type: string;
+    account_label: string;
+  } | null;
   encoded_at: string;
   encoded_by?: { id: number; name: string } | null;
 }
@@ -40,19 +49,6 @@ interface ContributionPayload {
   monthly_summary: SummaryRow[];
   yearly_summary: SummaryRow[];
   data: ContributionRow[];
-}
-
-interface EditRequestRow {
-  id: number;
-  requested_amount: string;
-  reason: string;
-  status: "pending" | "approved" | "rejected";
-  contribution: {
-    id: number;
-    amount: string;
-    member: MemberOption;
-  };
-  requested_by?: { id: number; name: string } | null;
 }
 
 interface ComplianceRow {
@@ -77,7 +73,236 @@ interface CompliancePayload {
   data: ComplianceRow[];
 }
 
-type ContributionsTab = "mine" | "member-search" | "selected-member" | "compliance" | "edit-requests";
+interface ReportPreviewRow {
+  id: number;
+  member: {
+    id: number;
+    member_number: string;
+    name: string;
+    email: string | null;
+  } | null;
+  amount: number;
+  note: string | null;
+  category: string;
+  category_label: string;
+  contribution_date: string;
+  recipient_indicator: string | null;
+  is_reversal: boolean;
+  reversed_by_entry_id: number | null;
+  finance_account?: FinanceAccountOption | null;
+  encoded_by?: { id: number; name: string } | null;
+}
+
+interface ReportPreviewPayload {
+  filters: {
+    category: string;
+    search: string;
+    year: number | null;
+    month: string | null;
+    date_from: string | null;
+    date_to: string | null;
+    project_query: string | null;
+    recipient_query: string | null;
+  };
+  category_label: string;
+  total_amount: number;
+  total_records: number;
+  data: ReportPreviewRow[];
+  current_page: number;
+  last_page: number;
+}
+
+interface FinanceAccountOption {
+  id: number;
+  code?: string;
+  name: string;
+  account_type: string;
+  account_label?: string;
+  is_active?: boolean;
+}
+
+interface FinanceAccountBalanceRow {
+  account: FinanceAccountOption;
+  opening_balance_total?: number;
+  opening_balance_count?: number;
+  total_inflows: number;
+  total_outflows: number;
+  net_balance: number;
+}
+
+interface FinanceAccountBalancesPayload {
+  data: FinanceAccountBalanceRow[];
+  unassigned_contribution_total?: number;
+}
+
+interface OpeningBalanceRow {
+  id: number;
+  effective_date: string;
+  amount: number;
+  note: string;
+  finance_account: FinanceAccountOption | null;
+  is_reversal: boolean;
+  reversal_of_opening_balance_id: number | null;
+  reversed_by_entry_id: number | null;
+  encoded_at: string | null;
+  encoded_by?: { id: number; name: string } | null;
+}
+
+interface ExpenseRow {
+  id: number;
+  amount: number;
+  category: string;
+  category_label: string;
+  expense_date: string;
+  note: string | null;
+  payee_name: string | null;
+  support_reference: string | null;
+  approval_reference: string | null;
+  beneficiary_member?: {
+    id: number;
+    member_number: string;
+    name: string;
+    email: string | null;
+  } | null;
+  finance_account: FinanceAccountOption | null;
+  is_reversal: boolean;
+  reversal_of_expense_id: number | null;
+  reversed_by_entry_id: number | null;
+  encoded_by?: { id: number; name: string } | null;
+}
+
+interface ExpenseLedgerPayload {
+  filters: {
+    category: string | null;
+    account_id: number | null;
+    search: string | null;
+    payee_name: string | null;
+    support_only: boolean;
+    date_from: string | null;
+    date_to: string | null;
+  };
+  category_labels: Record<string, string>;
+  total_amount: number;
+  total_records: number;
+  data: ExpenseRow[];
+  current_page: number;
+  last_page: number;
+}
+
+interface ExpenseReportPreviewPayload {
+  filters: {
+    category: string | null;
+    account_id: number | null;
+    search: string | null;
+    payee_name: string | null;
+    date_from: string | null;
+    date_to: string | null;
+  };
+  total_amount: number;
+  total_records: number;
+  data: ExpenseRow[];
+  current_page: number;
+  last_page: number;
+}
+
+interface AuditNoteRow {
+  id: number;
+  status: string;
+  status_label: string;
+  note_text: string;
+  created_at: string | null;
+  created_by: { id: number; name: string } | null;
+}
+
+interface AuditFindingRow {
+  member: {
+    id: number;
+    member_number: string;
+    name: string;
+    email: string | null;
+  } | null;
+  contribution_id: number | null;
+  target_month: string;
+  category: string;
+  category_label: string;
+  discrepancy_type: string;
+  discrepancy_label: string;
+  details: string;
+  amount: number;
+  latest_status: string | null;
+  latest_status_label: string | null;
+  notes: AuditNoteRow[];
+}
+
+interface AuditFindingsPayload {
+  filters: {
+    month: string;
+    category: string | null;
+    member_search: string | null;
+    status: string | null;
+    discrepancy_type: string | null;
+    required_monthly_amount: number;
+  };
+  available_statuses: Record<string, string>;
+  available_discrepancies: Record<string, string>;
+  current_page: number;
+  last_page: number;
+  total: number;
+  data: AuditFindingRow[];
+}
+
+interface ExpenseAuditNoteRow {
+  id: number;
+  status: string;
+  status_label: string;
+  note_text: string;
+  created_at: string | null;
+  created_by: { id: number; name: string } | null;
+}
+
+interface ExpenseAuditFindingRow {
+  expense_id: number | null;
+  target_month: string;
+  category: string;
+  category_label: string;
+  payee_name: string | null;
+  finance_account: FinanceAccountOption | null;
+  discrepancy_type: string;
+  discrepancy_label: string;
+  details: string;
+  amount: number;
+  latest_status: string | null;
+  latest_status_label: string | null;
+  notes: ExpenseAuditNoteRow[];
+}
+
+interface ExpenseAuditFindingsPayload {
+  filters: {
+    month: string;
+    category: string | null;
+    account_id: number | null;
+    status: string | null;
+    discrepancy_type: string | null;
+    payee_name: string | null;
+  };
+  available_statuses: Record<string, string>;
+  available_discrepancies: Record<string, string>;
+  current_page: number;
+  last_page: number;
+  total: number;
+  data: ExpenseAuditFindingRow[];
+}
+
+type ContributionsTab =
+  | "mine"
+  | "member-search"
+  | "selected-member"
+  | "compliance"
+  | "report-preview"
+  | "audit-findings"
+  | "expense-ledger"
+  | "expense-audit"
+  | "expense-report";
 
 const PAGE_SIZE = 10;
 
@@ -88,11 +313,26 @@ const CATEGORY_OPTIONS = [
   { value: "extra_contribution", label: "Extra Contribution" },
 ];
 
+const EXPENSE_CATEGORY_OPTIONS = [
+  { value: "administrative_expense", label: "Administrative Expense" },
+  { value: "event_expense", label: "Event Expense" },
+  { value: "project_expense", label: "Project Expense" },
+  { value: "aid_expense", label: "Aid Expense" },
+  { value: "reimbursement_expense", label: "Reimbursement Expense" },
+  { value: "misc_expense", label: "Miscellaneous Expense" },
+];
+
 const CATEGORY_COLORS: Record<string, string> = {
   monthly_contribution: "#166534",
   alalayang_agila_contribution: "#92400e",
   project_contribution: "#1e3a8a",
   extra_contribution: "#581c87",
+  administrative_expense: "#7c2d12",
+  event_expense: "#9a3412",
+  project_expense: "#b91c1c",
+  aid_expense: "#991b1b",
+  reimbursement_expense: "#7f1d1d",
+  misc_expense: "#78350f",
 };
 
 const MONTH_OPTIONS = [
@@ -121,6 +361,20 @@ function money(value: number | string): string {
 
 function categoryLabel(category: string): string {
   return CATEGORY_OPTIONS.find((option) => option.value === category)?.label ?? category;
+}
+
+function financeAccountLabel(account?: FinanceAccountOption | null): string {
+  return account?.account_label ?? account?.name ?? account?.code ?? "-";
+}
+
+function normalizeSearchValue(value: string | null | undefined): string {
+  return (value ?? "").trim().toLowerCase();
+}
+
+function matchesDateRange(date: string, from: string, to: string): boolean {
+  if (from && date < from) return false;
+  if (to && date > to) return false;
+  return true;
 }
 
 interface ChartItem {
@@ -170,8 +424,13 @@ export default function Contributions() {
   const { user } = useAuth();
   const canViewFinance = hasPermission(user, "finance.view");
   const canInputFinance = hasPermission(user, "finance.input");
-  const canRequestEdit = hasPermission(user, "finance.request_edit");
-  const canApproveEdits = hasPermission(user, "finance.approve_edits");
+  const financeRole = typeof (user as { finance_role?: unknown } | null)?.finance_role === "string"
+    ? String((user as { finance_role?: string }).finance_role)
+    : "";
+  const roleName = typeof (user as { role?: { name?: unknown } } | null)?.role?.name === "string"
+    ? String((user as { role?: { name?: string } }).role?.name)
+    : "";
+  const canRecordAuditNotes = financeRole === "auditor" || roleName === "auditor";
 
   const [activeTab, setActiveTab] = useState<ContributionsTab>("mine");
   const [myData, setMyData] = useState<ContributionPayload | null>(null);
@@ -180,22 +439,65 @@ export default function Contributions() {
   const [members, setMembers] = useState<MemberOption[]>([]);
   const [membersLoaded, setMembersLoaded] = useState(false);
   const [complianceLoaded, setComplianceLoaded] = useState(false);
-  const [editRequestsLoaded, setEditRequestsLoaded] = useState(false);
   const [selectedMemberId, setSelectedMemberId] = useState<number | null>(null);
   const [contributionRows, setContributionRows] = useState<ContributionRow[]>([]);
   const [totalAmount, setTotalAmount] = useState(0);
+  const [financeAccounts, setFinanceAccounts] = useState<FinanceAccountOption[]>([]);
+  const [accountBalances, setAccountBalances] = useState<FinanceAccountBalanceRow[]>([]);
+  const [openingBalances, setOpeningBalances] = useState<OpeningBalanceRow[]>([]);
+  const [unassignedContributionTotal, setUnassignedContributionTotal] = useState(0);
+  const [openingBalanceAccountId, setOpeningBalanceAccountId] = useState("");
+  const [openingBalanceEffectiveDate, setOpeningBalanceEffectiveDate] = useState("");
+  const [openingBalanceAmount, setOpeningBalanceAmount] = useState("");
+  const [openingBalanceNote, setOpeningBalanceNote] = useState("");
+  const [reverseOpeningBalanceId, setReverseOpeningBalanceId] = useState<number | null>(null);
+  const [reverseOpeningBalanceDate, setReverseOpeningBalanceDate] = useState("");
+  const [reverseOpeningBalanceRemarks, setReverseOpeningBalanceRemarks] = useState("");
   const [amountInput, setAmountInput] = useState("");
   const [noteInput, setNoteInput] = useState("");
   const [categoryInput, setCategoryInput] = useState("monthly_contribution");
   const [contributionDateInput, setContributionDateInput] = useState("");
   const [recipientIndicatorInput, setRecipientIndicatorInput] = useState("");
-  const [requestAmount, setRequestAmount] = useState("");
-  const [requestReason, setRequestReason] = useState("");
-  const [selectedContributionId, setSelectedContributionId] = useState<number | null>(null);
-  const [editRequests, setEditRequests] = useState<EditRequestRow[]>([]);
+  const [contributionAccountId, setContributionAccountId] = useState("");
+  const [reverseContributionId, setReverseContributionId] = useState<number | null>(null);
+  const [reverseRemarks, setReverseRemarks] = useState("");
+  const [reverseDate, setReverseDate] = useState("");
+  const [expenseRows, setExpenseRows] = useState<ExpenseRow[]>([]);
+  const [expenseLoaded, setExpenseLoaded] = useState(false);
+  const [expenseTotal, setExpenseTotal] = useState(0);
+  const [expenseRecordCount, setExpenseRecordCount] = useState(0);
+  const [expensePage, setExpensePage] = useState(1);
+  const [expenseLastPage, setExpenseLastPage] = useState(1);
+  const [expenseCategoryInput, setExpenseCategoryInput] = useState("administrative_expense");
+  const [expenseDateInput, setExpenseDateInput] = useState("");
+  const [expenseAmountInput, setExpenseAmountInput] = useState("");
+  const [expensePayeeInput, setExpensePayeeInput] = useState("");
+  const [expenseAccountId, setExpenseAccountId] = useState("");
+  const [expenseNoteInput, setExpenseNoteInput] = useState("");
+  const [expenseSupportReferenceInput, setExpenseSupportReferenceInput] = useState("");
+  const [expenseApprovalReferenceInput, setExpenseApprovalReferenceInput] = useState("");
+  const [expenseBeneficiaryMemberId, setExpenseBeneficiaryMemberId] = useState("");
+  const [reverseExpenseId, setReverseExpenseId] = useState<number | null>(null);
+  const [reverseExpenseRemarks, setReverseExpenseRemarks] = useState("");
+  const [reverseExpenseDate, setReverseExpenseDate] = useState("");
+  const [expenseCategoryFilter, setExpenseCategoryFilter] = useState("");
+  const [expenseAccountFilter, setExpenseAccountFilter] = useState("");
+  const [expenseSearch, setExpenseSearch] = useState("");
+  const [expensePayeeFilter, setExpensePayeeFilter] = useState("");
+  const [expenseDateFrom, setExpenseDateFrom] = useState("");
+  const [expenseDateTo, setExpenseDateTo] = useState("");
+  const [expenseSupportOnly, setExpenseSupportOnly] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [errorContext, setErrorContext] = useState<"global" | "member-search" | "selected-member" | "edit-requests">("global");
+  const [errorContext, setErrorContext] = useState<
+    "global"
+    | "member-search"
+    | "selected-member"
+    | "report-preview"
+    | "expense-ledger"
+    | "expense-audit"
+    | "expense-report"
+  >("global");
   const [notice, setNotice] = useState("");
   const [complianceMonth, setComplianceMonth] = useState(() => new Date().toISOString().slice(0, 7));
   const [complianceYearSelect, setComplianceYearSelect] = useState("");
@@ -207,14 +509,79 @@ export default function Contributions() {
   const [myCategoryFilter, setMyCategoryFilter] = useState("");
   const [myYearFilter, setMyYearFilter] = useState("");
   const [myMonthFilter, setMyMonthFilter] = useState("");
+  const [myProjectFilter, setMyProjectFilter] = useState("");
+  const [myRecipientFilter, setMyRecipientFilter] = useState("");
+  const [myDateFromFilter, setMyDateFromFilter] = useState("");
+  const [myDateToFilter, setMyDateToFilter] = useState("");
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState("");
   const [selectedYearFilter, setSelectedYearFilter] = useState("");
   const [selectedMonthFilter, setSelectedMonthFilter] = useState("");
+  const [selectedProjectFilter, setSelectedProjectFilter] = useState("");
+  const [selectedRecipientFilter, setSelectedRecipientFilter] = useState("");
+  const [selectedDateFromFilter, setSelectedDateFromFilter] = useState("");
+  const [selectedDateToFilter, setSelectedDateToFilter] = useState("");
   const [myPage, setMyPage] = useState(1);
   const [selectedPage, setSelectedPage] = useState(1);
   const [membersPage, setMembersPage] = useState(1);
   const [compliancePage, setCompliancePage] = useState(1);
-  const [editRequestsPage, setEditRequestsPage] = useState(1);
+  const [reportPreviewLoaded, setReportPreviewLoaded] = useState(false);
+  const [reportPreviewRows, setReportPreviewRows] = useState<ReportPreviewRow[]>([]);
+  const [reportPreviewTotal, setReportPreviewTotal] = useState(0);
+  const [reportPreviewCount, setReportPreviewCount] = useState(0);
+  const [reportPreviewPage, setReportPreviewPage] = useState(1);
+  const [reportPreviewLastPage, setReportPreviewLastPage] = useState(1);
+  const [reportCategory, setReportCategory] = useState("monthly_contribution");
+  const [reportSearch, setReportSearch] = useState("");
+  const [reportYearFilter, setReportYearFilter] = useState(String(new Date().getFullYear()));
+  const [reportMonthFilter, setReportMonthFilter] = useState("");
+  const [reportDateFrom, setReportDateFrom] = useState("");
+  const [reportDateTo, setReportDateTo] = useState("");
+  const [reportProjectFilter, setReportProjectFilter] = useState("");
+  const [reportRecipientFilter, setReportRecipientFilter] = useState("");
+  const [auditLoaded, setAuditLoaded] = useState(false);
+  const [auditRows, setAuditRows] = useState<AuditFindingRow[]>([]);
+  const [auditTotal, setAuditTotal] = useState(0);
+  const [auditPage, setAuditPage] = useState(1);
+  const [auditLastPage, setAuditLastPage] = useState(1);
+  const [auditMonth, setAuditMonth] = useState(() => new Date().toISOString().slice(0, 7));
+  const [auditCategoryFilter, setAuditCategoryFilter] = useState("");
+  const [auditMemberSearch, setAuditMemberSearch] = useState("");
+  const [auditStatusFilter, setAuditStatusFilter] = useState("");
+  const [auditDiscrepancyFilter, setAuditDiscrepancyFilter] = useState("");
+  const [auditStatuses, setAuditStatuses] = useState<Record<string, string>>({});
+  const [auditDiscrepancies, setAuditDiscrepancies] = useState<Record<string, string>>({});
+  const [auditRequiredMonthlyAmount, setAuditRequiredMonthlyAmount] = useState(0);
+  const [auditNoteTargetKey, setAuditNoteTargetKey] = useState("");
+  const [auditNoteStatus, setAuditNoteStatus] = useState("needs_followup");
+  const [auditNoteText, setAuditNoteText] = useState("");
+  const [expenseAuditLoaded, setExpenseAuditLoaded] = useState(false);
+  const [expenseAuditRows, setExpenseAuditRows] = useState<ExpenseAuditFindingRow[]>([]);
+  const [expenseAuditTotal, setExpenseAuditTotal] = useState(0);
+  const [expenseAuditPage, setExpenseAuditPage] = useState(1);
+  const [expenseAuditLastPage, setExpenseAuditLastPage] = useState(1);
+  const [expenseAuditMonth, setExpenseAuditMonth] = useState(() => new Date().toISOString().slice(0, 7));
+  const [expenseAuditCategoryFilter, setExpenseAuditCategoryFilter] = useState("");
+  const [expenseAuditAccountFilter, setExpenseAuditAccountFilter] = useState("");
+  const [expenseAuditStatusFilter, setExpenseAuditStatusFilter] = useState("");
+  const [expenseAuditDiscrepancyFilter, setExpenseAuditDiscrepancyFilter] = useState("");
+  const [expenseAuditPayeeFilter, setExpenseAuditPayeeFilter] = useState("");
+  const [expenseAuditStatuses, setExpenseAuditStatuses] = useState<Record<string, string>>({});
+  const [expenseAuditDiscrepancies, setExpenseAuditDiscrepancies] = useState<Record<string, string>>({});
+  const [expenseAuditNoteTargetKey, setExpenseAuditNoteTargetKey] = useState("");
+  const [expenseAuditNoteStatus, setExpenseAuditNoteStatus] = useState("needs_followup");
+  const [expenseAuditNoteText, setExpenseAuditNoteText] = useState("");
+  const [expenseReportLoaded, setExpenseReportLoaded] = useState(false);
+  const [expenseReportRows, setExpenseReportRows] = useState<ExpenseRow[]>([]);
+  const [expenseReportTotal, setExpenseReportTotal] = useState(0);
+  const [expenseReportCount, setExpenseReportCount] = useState(0);
+  const [expenseReportPage, setExpenseReportPage] = useState(1);
+  const [expenseReportLastPage, setExpenseReportLastPage] = useState(1);
+  const [expenseReportCategoryFilter, setExpenseReportCategoryFilter] = useState("");
+  const [expenseReportAccountFilter, setExpenseReportAccountFilter] = useState("");
+  const [expenseReportSearch, setExpenseReportSearch] = useState("");
+  const [expenseReportPayeeFilter, setExpenseReportPayeeFilter] = useState("");
+  const [expenseReportDateFrom, setExpenseReportDateFrom] = useState("");
+  const [expenseReportDateTo, setExpenseReportDateTo] = useState("");
 
   const selectedMember = useMemo(
     () => members.find((m) => m.id === selectedMemberId) ?? null,
@@ -235,7 +602,7 @@ export default function Contributions() {
 
   const setScopedError = (
     message: string,
-    context: "global" | "member-search" | "selected-member" | "edit-requests",
+    context: "global" | "member-search" | "selected-member" | "report-preview" | "expense-ledger" | "expense-audit" | "expense-report",
   ) => {
     setError(message);
     setErrorContext(context);
@@ -292,19 +659,28 @@ export default function Contributions() {
     }
   }, [canViewFinance]);
 
-  const fetchEditRequests = useCallback(async () => {
-    if (!canApproveEdits) return;
+  const fetchFinanceAccounts = useCallback(async () => {
+    if (!canViewFinance) return;
 
     try {
-      const res = await api.get<{ data: EditRequestRow[] }>("/finance/edit-requests", {
-        params: { status: "pending" },
-      });
-      setEditRequests(res.data.data ?? []);
-      setEditRequestsLoaded(true);
+      const [accountsRes, balancesRes, openingBalancesRes] = await Promise.all([
+        api.get<{ data?: FinanceAccountOption[] } | FinanceAccountOption[]>("/finance/accounts"),
+        api.get<FinanceAccountBalancesPayload>("/finance/account-balances"),
+        api.get<{ data: OpeningBalanceRow[] }>("/finance/opening-balances"),
+      ]);
+
+      const accountsData = Array.isArray(accountsRes.data)
+        ? accountsRes.data
+        : accountsRes.data.data ?? [];
+
+      setFinanceAccounts(accountsData);
+      setAccountBalances(balancesRes.data.data ?? []);
+      setOpeningBalances(openingBalancesRes.data.data ?? []);
+      setUnassignedContributionTotal(Number(balancesRes.data.unassigned_contribution_total ?? 0));
     } catch (err) {
-      setScopedError(parseError(err, "Unable to load edit requests."), "edit-requests");
+      setScopedError(parseError(err, "Unable to load finance accounts."), "global");
     }
-  }, [canApproveEdits]);
+  }, [canViewFinance]);
 
   const fetchCompliance = useCallback(async () => {
     if (!canViewFinance) return;
@@ -329,9 +705,179 @@ export default function Contributions() {
     }
   }, [canViewFinance, complianceMonth, complianceNonCompliantOnly, complianceYears]);
 
+  const fetchReportPreview = useCallback(async (page = 1) => {
+    if (!canInputFinance) return;
+
+    setLoading(true);
+    setError("");
+    setErrorContext("report-preview");
+
+    try {
+      const res = await api.get<ReportPreviewPayload>("/finance/report-preview", {
+        params: {
+          page,
+          category: reportCategory,
+          search: reportSearch || null,
+          year: reportYearFilter || null,
+          month: reportMonthFilter || null,
+          date_from: reportDateFrom || null,
+          date_to: reportDateTo || null,
+          project_query: reportProjectFilter || null,
+          recipient_query: reportRecipientFilter || null,
+        },
+      });
+      setReportPreviewRows(res.data.data ?? []);
+      setReportPreviewTotal(Number(res.data.total_amount ?? 0));
+      setReportPreviewCount(Number(res.data.total_records ?? 0));
+      setReportPreviewPage(Number(res.data.current_page ?? 1));
+      setReportPreviewLastPage(Number(res.data.last_page ?? 1));
+      setReportPreviewLoaded(true);
+    } catch (err) {
+      setScopedError(parseError(err, "Unable to generate treasurer report preview."), "report-preview");
+    } finally {
+      setLoading(false);
+    }
+  }, [canInputFinance, reportCategory, reportDateFrom, reportDateTo, reportMonthFilter, reportProjectFilter, reportRecipientFilter, reportSearch, reportYearFilter]);
+
+  const fetchAuditFindings = useCallback(async (page = 1) => {
+    if (!canViewFinance) return;
+
+    setLoading(true);
+    setError("");
+    setErrorContext("report-preview");
+
+    try {
+      const res = await api.get<AuditFindingsPayload>("/finance/audit-findings", {
+        params: {
+          page,
+          month: auditMonth,
+          category: auditCategoryFilter || null,
+          member_search: auditMemberSearch || null,
+          status: auditStatusFilter || null,
+          discrepancy_type: auditDiscrepancyFilter || null,
+        },
+      });
+      setAuditRows(res.data.data ?? []);
+      setAuditTotal(Number(res.data.total ?? 0));
+      setAuditPage(Number(res.data.current_page ?? 1));
+      setAuditLastPage(Number(res.data.last_page ?? 1));
+      setAuditStatuses(res.data.available_statuses ?? {});
+      setAuditDiscrepancies(res.data.available_discrepancies ?? {});
+      setAuditRequiredMonthlyAmount(Number(res.data.filters?.required_monthly_amount ?? 0));
+      setAuditLoaded(true);
+    } catch (err) {
+      setScopedError(parseError(err, "Unable to load audit findings."), "report-preview");
+    } finally {
+      setLoading(false);
+    }
+  }, [auditCategoryFilter, auditDiscrepancyFilter, auditMemberSearch, auditMonth, auditStatusFilter, canViewFinance]);
+
+  const fetchExpenseLedger = useCallback(async (page = 1) => {
+    if (!canViewFinance) return;
+
+    setLoading(true);
+    setError("");
+    setErrorContext("expense-ledger");
+
+    try {
+      const res = await api.get<ExpenseLedgerPayload>("/finance/expenses", {
+        params: {
+          page,
+          category: expenseCategoryFilter || null,
+          finance_account_id: expenseAccountFilter || null,
+          search: expenseSearch || null,
+          payee_query: expensePayeeFilter || null,
+          support_state: expenseSupportOnly ? "with_support" : null,
+          date_from: expenseDateFrom || null,
+          date_to: expenseDateTo || null,
+        },
+      });
+      setExpenseRows(res.data.data ?? []);
+      setExpenseTotal(Number(res.data.total_amount ?? 0));
+      setExpenseRecordCount(Number(res.data.total_records ?? 0));
+      setExpensePage(Number(res.data.current_page ?? 1));
+      setExpenseLastPage(Number(res.data.last_page ?? 1));
+      setExpenseLoaded(true);
+    } catch (err) {
+      setScopedError(parseError(err, "Unable to load expenses."), "expense-ledger");
+    } finally {
+      setLoading(false);
+    }
+  }, [canViewFinance, expenseAccountFilter, expenseCategoryFilter, expenseDateFrom, expenseDateTo, expensePayeeFilter, expenseSearch, expenseSupportOnly]);
+
+  const fetchExpenseAuditFindings = useCallback(async (page = 1) => {
+    if (!canViewFinance) return;
+
+    setLoading(true);
+    setError("");
+    setErrorContext("expense-audit");
+
+    try {
+      const res = await api.get<ExpenseAuditFindingsPayload>("/finance/expense-audit-findings", {
+        params: {
+          page,
+          month: expenseAuditMonth,
+          category: expenseAuditCategoryFilter || null,
+          finance_account_id: expenseAuditAccountFilter || null,
+          status: expenseAuditStatusFilter || null,
+          discrepancy_type: expenseAuditDiscrepancyFilter || null,
+          search: expenseAuditPayeeFilter || null,
+        },
+      });
+      setExpenseAuditRows(res.data.data ?? []);
+      setExpenseAuditTotal(Number(res.data.total ?? 0));
+      setExpenseAuditPage(Number(res.data.current_page ?? 1));
+      setExpenseAuditLastPage(Number(res.data.last_page ?? 1));
+      setExpenseAuditStatuses(res.data.available_statuses ?? {});
+      setExpenseAuditDiscrepancies(res.data.available_discrepancies ?? {});
+      setExpenseAuditLoaded(true);
+    } catch (err) {
+      setScopedError(parseError(err, "Unable to load expense audit findings."), "expense-audit");
+    } finally {
+      setLoading(false);
+    }
+  }, [canViewFinance, expenseAuditAccountFilter, expenseAuditCategoryFilter, expenseAuditDiscrepancyFilter, expenseAuditMonth, expenseAuditPayeeFilter, expenseAuditStatusFilter]);
+
+  const fetchExpenseReportPreview = useCallback(async (page = 1) => {
+    if (!canInputFinance) return;
+
+    setLoading(true);
+    setError("");
+    setErrorContext("expense-report");
+
+    try {
+      const res = await api.get<ExpenseReportPreviewPayload>("/finance/expense-report-preview", {
+        params: {
+          page,
+          category: expenseReportCategoryFilter || null,
+          finance_account_id: expenseReportAccountFilter || null,
+          search: expenseReportSearch || null,
+          payee_query: expenseReportPayeeFilter || null,
+          date_from: expenseReportDateFrom || null,
+          date_to: expenseReportDateTo || null,
+        },
+      });
+      setExpenseReportRows(res.data.data ?? []);
+      setExpenseReportTotal(Number(res.data.total_amount ?? 0));
+      setExpenseReportCount(Number(res.data.total_records ?? 0));
+      setExpenseReportPage(Number(res.data.current_page ?? 1));
+      setExpenseReportLastPage(Number(res.data.last_page ?? 1));
+      setExpenseReportLoaded(true);
+    } catch (err) {
+      setScopedError(parseError(err, "Unable to generate expense report preview."), "expense-report");
+    } finally {
+      setLoading(false);
+    }
+  }, [canInputFinance, expenseReportAccountFilter, expenseReportCategoryFilter, expenseReportDateFrom, expenseReportDateTo, expenseReportPayeeFilter, expenseReportSearch]);
+
   useEffect(() => {
     void fetchMyContributions();
   }, [fetchMyContributions]);
+
+  useEffect(() => {
+    if (!canViewFinance) return;
+    void fetchFinanceAccounts();
+  }, [canViewFinance, fetchFinanceAccounts]);
 
   useEffect(() => {
     if (!selectedMemberId || !canViewFinance) {
@@ -355,74 +901,156 @@ export default function Contributions() {
         member_id: selectedMemberId,
         member_email: selectedMember?.email ?? null,
         amount: Number(amountInput),
-        note: noteInput || null,
+        note: noteInput,
         category: categoryInput,
         contribution_date: contributionDateInput || null,
         recipient_name: recipientIndicatorInput || null,
+        finance_account_id: contributionAccountId || null,
       });
-      setNotice("Contribution saved. This record is immutable; use edit request if changes are needed.");
+      setNotice("Contribution saved. This record is immutable. Use a reversal entry if you need to offset it later.");
       setAmountInput("");
       setNoteInput("");
       setRecipientIndicatorInput("");
       setContributionDateInput("");
+      setContributionAccountId("");
       await fetchContributions(selectedMemberId);
       await fetchMyContributions();
+      await fetchFinanceAccounts();
     } catch (err) {
       setScopedError(parseError(err, "Failed to save contribution."), "selected-member");
     }
   };
 
-  const submitEditRequest = async () => {
-    if (!canRequestEdit || !selectedContributionId) return;
+  const submitReversal = async () => {
+    if (!canInputFinance || !reverseContributionId || !selectedMemberId) return;
 
     setError("");
     setErrorContext("selected-member");
     setNotice("");
 
     try {
-      await api.post(`/finance/contributions/${selectedContributionId}/edit-requests`, {
-        requested_amount: Number(requestAmount),
-        reason: requestReason,
+      await api.post(`/finance/contributions/${reverseContributionId}/reverse`, {
+        remarks: reverseRemarks,
+        contribution_date: reverseDate || null,
+        finance_account_id: contributionRows.find((row) => row.id === reverseContributionId)?.finance_account?.id ?? null,
       });
-      setNotice("Edit request submitted for approval.");
-      setSelectedContributionId(null);
-      setRequestAmount("");
-      setRequestReason("");
-      await fetchEditRequests();
-    } catch (err) {
-      setScopedError(parseError(err, "Failed to submit edit request."), "selected-member");
-    }
-  };
-
-  const approveRequest = async (requestId: number) => {
-    setError("");
-    setErrorContext("edit-requests");
-    setNotice("");
-
-    try {
-      await api.post(`/finance/edit-requests/${requestId}/approve`);
-      setNotice("Edit request approved.");
-      await fetchEditRequests();
-      if (selectedMemberId) await fetchContributions(selectedMemberId);
+      setNotice("Reversal entry recorded. The original value is preserved, but the net total is now offset.");
+      setReverseContributionId(null);
+      setReverseRemarks("");
+      setReverseDate("");
+      await fetchContributions(selectedMemberId);
       await fetchMyContributions();
+      await fetchFinanceAccounts();
     } catch (err) {
-      setScopedError(parseError(err, "Failed to approve request."), "edit-requests");
+      setScopedError(parseError(err, "Failed to save reversal entry."), "selected-member");
     }
   };
 
-  const rejectRequest = async (requestId: number) => {
+  const createExpense = async () => {
+    if (!canInputFinance) return;
+
     setError("");
-    setErrorContext("edit-requests");
+    setErrorContext("expense-ledger");
     setNotice("");
 
     try {
-      await api.post(`/finance/edit-requests/${requestId}/reject`, {
-        review_notes: "Rejected by reviewer.",
+      await api.post("/finance/expenses", {
+        category: expenseCategoryInput,
+        expense_date: expenseDateInput || null,
+        amount: Number(expenseAmountInput),
+        payee_name: expensePayeeInput,
+        finance_account_id: expenseAccountId || null,
+        note: expenseNoteInput,
+        support_reference: expenseSupportReferenceInput || null,
+        approval_reference: expenseApprovalReferenceInput || null,
+        beneficiary_member_id: expenseBeneficiaryMemberId || null,
       });
-      setNotice("Edit request rejected.");
-      await fetchEditRequests();
+      setNotice("Expense recorded. The ledger stays immutable; use an expense reversal to offset mistakes.");
+      setExpenseCategoryInput("administrative_expense");
+      setExpenseDateInput("");
+      setExpenseAmountInput("");
+      setExpensePayeeInput("");
+      setExpenseAccountId("");
+      setExpenseNoteInput("");
+      setExpenseSupportReferenceInput("");
+      setExpenseApprovalReferenceInput("");
+      setExpenseBeneficiaryMemberId("");
+      await fetchExpenseLedger(1);
+      await fetchFinanceAccounts();
     } catch (err) {
-      setScopedError(parseError(err, "Failed to reject request."), "edit-requests");
+      setScopedError(parseError(err, "Failed to save expense."), "expense-ledger");
+    }
+  };
+
+  const submitExpenseReversal = async () => {
+    if (!canInputFinance || !reverseExpenseId) return;
+
+    setError("");
+    setErrorContext("expense-ledger");
+    setNotice("");
+
+    try {
+      await api.post(`/finance/expenses/${reverseExpenseId}/reverse`, {
+        remarks: reverseExpenseRemarks,
+        expense_date: reverseExpenseDate || null,
+        finance_account_id: expenseRows.find((row) => row.id === reverseExpenseId)?.finance_account?.id ?? null,
+      });
+      setNotice("Expense reversal recorded. The original expense remains visible and the net total is offset.");
+      setReverseExpenseId(null);
+      setReverseExpenseRemarks("");
+      setReverseExpenseDate("");
+      await fetchExpenseLedger(expensePage);
+      await fetchFinanceAccounts();
+    } catch (err) {
+      setScopedError(parseError(err, "Failed to save expense reversal."), "expense-ledger");
+    }
+  };
+
+  const createOpeningBalance = async () => {
+    if (!canInputFinance) return;
+
+    setError("");
+    setErrorContext("global");
+    setNotice("");
+
+    try {
+      await api.post("/finance/opening-balances", {
+        finance_account_id: openingBalanceAccountId || null,
+        effective_date: openingBalanceEffectiveDate || null,
+        amount: Number(openingBalanceAmount),
+        note: openingBalanceNote,
+      });
+      setNotice("Opening balance recorded. It is locked after save and must be corrected through a reversal or follow-on adjustment.");
+      setOpeningBalanceAccountId("");
+      setOpeningBalanceEffectiveDate("");
+      setOpeningBalanceAmount("");
+      setOpeningBalanceNote("");
+      await fetchFinanceAccounts();
+    } catch (err) {
+      setScopedError(parseError(err, "Failed to save opening balance."), "global");
+    }
+  };
+
+  const submitOpeningBalanceReversal = async () => {
+    if (!canInputFinance || !reverseOpeningBalanceId) return;
+
+    setError("");
+    setErrorContext("global");
+    setNotice("");
+
+    try {
+      await api.post(`/finance/opening-balances/${reverseOpeningBalanceId}/reverse`, {
+        remarks: reverseOpeningBalanceRemarks,
+        effective_date: reverseOpeningBalanceDate || null,
+        finance_account_id: openingBalances.find((row) => row.id === reverseOpeningBalanceId)?.finance_account?.id ?? null,
+      });
+      setNotice("Opening balance reversal recorded. The baseline remains visible and the net account value is offset.");
+      setReverseOpeningBalanceId(null);
+      setReverseOpeningBalanceDate("");
+      setReverseOpeningBalanceRemarks("");
+      await fetchFinanceAccounts();
+    } catch (err) {
+      setScopedError(parseError(err, "Failed to reverse opening balance."), "global");
     }
   };
 
@@ -441,9 +1069,14 @@ export default function Contributions() {
       if (myCategoryFilter && row.category !== myCategoryFilter) return false;
       if (myYearFilter && !row.contribution_date.startsWith(myYearFilter)) return false;
       if (myMonthFilter && row.contribution_date.slice(5, 7) !== myMonthFilter) return false;
+      if (!matchesDateRange(row.contribution_date, myDateFromFilter, myDateToFilter)) return false;
+      if (myProjectFilter && row.category === "project_contribution" && !normalizeSearchValue(row.note).includes(normalizeSearchValue(myProjectFilter))) return false;
+      if (myRecipientFilter && row.category === "alalayang_agila_contribution" && !normalizeSearchValue(row.recipient_indicator).includes(normalizeSearchValue(myRecipientFilter))) return false;
+      if (myProjectFilter && row.category !== "project_contribution") return false;
+      if (myRecipientFilter && row.category !== "alalayang_agila_contribution") return false;
       return true;
     });
-  }, [myCategoryFilter, myData, myMonthFilter, myYearFilter]);
+  }, [myCategoryFilter, myData, myDateFromFilter, myDateToFilter, myMonthFilter, myProjectFilter, myRecipientFilter, myYearFilter]);
   const filteredMyTotal = useMemo(
     () => filteredMyRows.reduce((sum, row) => sum + Number(row.amount), 0),
     [filteredMyRows],
@@ -459,9 +1092,14 @@ export default function Contributions() {
         if (selectedCategoryFilter && row.category !== selectedCategoryFilter) return false;
         if (selectedYearFilter && !row.contribution_date.startsWith(selectedYearFilter)) return false;
         if (selectedMonthFilter && row.contribution_date.slice(5, 7) !== selectedMonthFilter) return false;
+        if (!matchesDateRange(row.contribution_date, selectedDateFromFilter, selectedDateToFilter)) return false;
+        if (selectedProjectFilter && row.category === "project_contribution" && !normalizeSearchValue(row.note).includes(normalizeSearchValue(selectedProjectFilter))) return false;
+        if (selectedRecipientFilter && row.category === "alalayang_agila_contribution" && !normalizeSearchValue(row.recipient_indicator).includes(normalizeSearchValue(selectedRecipientFilter))) return false;
+        if (selectedProjectFilter && row.category !== "project_contribution") return false;
+        if (selectedRecipientFilter && row.category !== "alalayang_agila_contribution") return false;
         return true;
       }),
-    [contributionRows, selectedCategoryFilter, selectedMonthFilter, selectedYearFilter],
+    [contributionRows, selectedCategoryFilter, selectedDateFromFilter, selectedDateToFilter, selectedMonthFilter, selectedProjectFilter, selectedRecipientFilter, selectedYearFilter],
   );
   const filteredSelectedTotal = useMemo(
     () => filteredSelectedRows.reduce((sum, row) => sum + Number(row.amount), 0),
@@ -510,6 +1148,36 @@ export default function Contributions() {
       { label: "Non-Compliant", color: "#7f1d1d", total: nonCompliant },
     ];
   }, [complianceRows]);
+  const reportPreviewGraph = useMemo(() => {
+    const totals = reportPreviewRows.reduce<Record<string, number>>((acc, row) => {
+      const memberKey = row.member?.name ?? "Unlinked Member";
+      acc[memberKey] = (acc[memberKey] ?? 0) + Number(row.amount);
+      return acc;
+    }, {});
+
+    return Object.entries(totals)
+      .map(([label, total]) => ({
+        label,
+        color: "#1e3a8a",
+        total,
+      }))
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 8);
+  }, [reportPreviewRows]);
+  const auditGraph = useMemo(() => {
+    const totals = auditRows.reduce<Record<string, number>>((acc, row) => {
+      acc[row.discrepancy_label] = (acc[row.discrepancy_label] ?? 0) + 1;
+      return acc;
+    }, {});
+
+    return Object.entries(totals)
+      .map(([label, total]) => ({
+        label,
+        color: "#7f1d1d",
+        total,
+      }))
+      .sort((a, b) => b.total - a.total);
+  }, [auditRows]);
   const complianceYearSelectOptions = useMemo(() => {
     const currentYear = Number(complianceMonth.slice(0, 4)) || new Date().getFullYear();
     const fallback = Array.from({ length: 8 }, (_, index) => currentYear - index);
@@ -525,18 +1193,25 @@ export default function Contributions() {
     return complianceRows.slice(start, start + PAGE_SIZE);
   }, [compliancePage, complianceRows]);
   const complianceLastPage = Math.max(1, Math.ceil(complianceRows.length / PAGE_SIZE));
-  const pagedEditRequests = useMemo(() => {
-    const start = (editRequestsPage - 1) * PAGE_SIZE;
-    return editRequests.slice(start, start + PAGE_SIZE);
-  }, [editRequests, editRequestsPage]);
-  const editRequestsLastPage = Math.max(1, Math.ceil(editRequests.length / PAGE_SIZE));
-
   const resetContributionForm = () => {
     setAmountInput("");
     setNoteInput("");
     setCategoryInput("monthly_contribution");
     setContributionDateInput("");
     setRecipientIndicatorInput("");
+    setContributionAccountId("");
+  };
+
+  const resetExpenseForm = () => {
+    setExpenseCategoryInput("administrative_expense");
+    setExpenseDateInput("");
+    setExpenseAmountInput("");
+    setExpensePayeeInput("");
+    setExpenseAccountId("");
+    setExpenseNoteInput("");
+    setExpenseSupportReferenceInput("");
+    setExpenseApprovalReferenceInput("");
+    setExpenseBeneficiaryMemberId("");
   };
 
   const addComplianceYear = () => {
@@ -551,22 +1226,352 @@ export default function Contributions() {
     setComplianceYears((prev) => prev.filter((value) => value !== year));
   };
 
+  useEffect(() => {
+    setMyPage(1);
+  }, [myCategoryFilter, myYearFilter, myMonthFilter, myProjectFilter, myRecipientFilter, myDateFromFilter, myDateToFilter]);
+
+  useEffect(() => {
+    setSelectedPage(1);
+  }, [selectedCategoryFilter, selectedYearFilter, selectedMonthFilter, selectedProjectFilter, selectedRecipientFilter, selectedDateFromFilter, selectedDateToFilter]);
+
+  useEffect(() => {
+    setReportPreviewPage(1);
+  }, [reportCategory, reportSearch, reportYearFilter, reportMonthFilter, reportDateFrom, reportDateTo, reportProjectFilter, reportRecipientFilter]);
+
+  useEffect(() => {
+    setAuditPage(1);
+  }, [auditMonth, auditCategoryFilter, auditMemberSearch, auditStatusFilter, auditDiscrepancyFilter]);
+
+  useEffect(() => {
+    setExpensePage(1);
+  }, [expenseAccountFilter, expenseCategoryFilter, expenseDateFrom, expenseDateTo, expensePayeeFilter, expenseSearch, expenseSupportOnly]);
+
+  useEffect(() => {
+    setExpenseAuditPage(1);
+  }, [expenseAuditAccountFilter, expenseAuditCategoryFilter, expenseAuditDiscrepancyFilter, expenseAuditMonth, expenseAuditPayeeFilter, expenseAuditStatusFilter]);
+
+  useEffect(() => {
+    setExpenseReportPage(1);
+  }, [expenseReportAccountFilter, expenseReportCategoryFilter, expenseReportDateFrom, expenseReportDateTo, expenseReportPayeeFilter, expenseReportSearch]);
+
+  const submitAuditNote = async (row: AuditFindingRow) => {
+    if (!canRecordAuditNotes || !row.member) return;
+
+    setError("");
+    setErrorContext("report-preview");
+
+    try {
+      await api.post("/finance/audit-notes", {
+        member_id: row.member.id,
+        contribution_id: row.contribution_id,
+        target_month: row.target_month,
+        category: row.category,
+        discrepancy_type: row.discrepancy_type,
+        status: auditNoteStatus,
+        note_text: auditNoteText,
+      });
+      setNotice("Audit note recorded.");
+      setAuditNoteTargetKey("");
+      setAuditNoteStatus("needs_followup");
+      setAuditNoteText("");
+      await fetchAuditFindings(auditPage);
+    } catch (err) {
+      setScopedError(parseError(err, "Unable to save audit note."), "report-preview");
+    }
+  };
+
+  const submitExpenseAuditNote = async (row: ExpenseAuditFindingRow) => {
+    if (!canRecordAuditNotes) return;
+
+    setError("");
+    setErrorContext("expense-audit");
+
+    try {
+      await api.post("/finance/expense-audit-notes", {
+        expense_id: row.expense_id,
+        target_month: row.target_month,
+        category: row.category,
+        discrepancy_type: row.discrepancy_type,
+        status: expenseAuditNoteStatus,
+        note_text: expenseAuditNoteText,
+      });
+      setNotice("Expense audit note recorded.");
+      setExpenseAuditNoteTargetKey("");
+      setExpenseAuditNoteStatus("needs_followup");
+      setExpenseAuditNoteText("");
+      await fetchExpenseAuditFindings(expenseAuditPage);
+    } catch (err) {
+      setScopedError(parseError(err, "Unable to save expense audit note."), "expense-audit");
+    }
+  };
+
+  const contributionRemarksLabel = categoryInput === "project_contribution" ? "Project Name and Remarks" : "Remarks";
+  const contributionRemarksHint = categoryInput === "project_contribution"
+    ? "Use remarks to capture the project name. Repeated project names can be filtered later by date."
+      : categoryInput === "alalayang_agila_contribution"
+        ? "Remarks are required. Add context for the recipient or source of support."
+        : "Remarks are required for every contribution entry.";
+  const financeSummaryGraph = useMemo(() => {
+    return accountBalances.map((row) => ({
+      label: financeAccountLabel(row.account),
+      color: CATEGORY_COLORS[row.account.account_type] ?? "#0f766e",
+      total: Number(row.net_balance ?? 0),
+    }));
+  }, [accountBalances]);
+  const expenseGraph = useMemo(() => {
+    const totals = expenseRows.reduce<Record<string, number>>((acc, row) => {
+      acc[row.category_label] = (acc[row.category_label] ?? 0) + Number(row.amount);
+      return acc;
+    }, {});
+
+    return Object.entries(totals)
+      .map(([label, total]) => ({
+        label,
+        color: "#b91c1c",
+        total,
+      }))
+      .sort((a, b) => b.total - a.total);
+  }, [expenseRows]);
+  const expenseAuditGraph = useMemo(() => {
+    const totals = expenseAuditRows.reduce<Record<string, number>>((acc, row) => {
+      acc[row.discrepancy_label] = (acc[row.discrepancy_label] ?? 0) + 1;
+      return acc;
+    }, {});
+
+    return Object.entries(totals)
+      .map(([label, total]) => ({
+        label,
+        color: "#7f1d1d",
+        total,
+      }))
+      .sort((a, b) => b.total - a.total);
+  }, [expenseAuditRows]);
+  const expenseReportGraph = useMemo(() => {
+    const totals = expenseReportRows.reduce<Record<string, number>>((acc, row) => {
+      const payeeKey = row.payee_name ?? "Unknown payee";
+      acc[payeeKey] = (acc[payeeKey] ?? 0) + Number(row.amount);
+      return acc;
+    }, {});
+
+    return Object.entries(totals)
+      .map(([label, total]) => ({
+        label,
+        color: "#991b1b",
+        total,
+      }))
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 8);
+  }, [expenseReportRows]);
+
   return (
     <section>
-      <h1 className="mb-2 font-heading text-4xl text-offwhite">Contributions</h1>
+      <h1 className="mb-2 font-heading text-4xl text-offwhite">Finance</h1>
       <p className="mb-6 text-sm text-mist/85">
-        Members can view personal contribution history by month, year, and category. Authorized finance users can manage finance workflows.
+        Members can view personal contribution history by month, year, and category. Treasurer and auditor can review account balances, contribution and expense ledgers, and note-based findings without mutating saved history.
       </p>
 
       {error && errorContext === "global" && <p className="mb-4 rounded-md border border-red-300/30 bg-red-400/10 px-4 py-2 text-sm text-red-200">{error}</p>}
       {notice && <p className="mb-4 rounded-md border border-gold/30 bg-gold/10 px-4 py-2 text-sm text-gold-soft">{notice}</p>}
 
+      {canViewFinance && (
+        <div className="mb-6 rounded-xl border border-white/20 bg-white/10 p-4">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="font-heading text-2xl text-offwhite">Treasury Accounts</h2>
+              <p className="text-sm text-mist/80">Live balances across bank, GCash, and cash on hand based on the recorded finance ledger.</p>
+            </div>
+            <button type="button" onClick={() => void fetchFinanceAccounts()} className="btn-secondary">Refresh Accounts</button>
+          </div>
+          <div className="mb-4 grid gap-3 md:grid-cols-3">
+            {accountBalances.map((row) => (
+              <div key={`acct-${row.account.id}`} className="rounded-lg border border-gold/20 bg-gold/10 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-gold-soft">{financeAccountLabel(row.account)}</p>
+                <p className="mt-2 text-lg font-semibold text-offwhite">{money(row.net_balance)}</p>
+                <p className="mt-1 text-xs text-mist/80">
+                  Open: {money(row.opening_balance_total ?? 0)} | In: {money(row.total_inflows)} | Out: {money(row.total_outflows)}
+                </p>
+              </div>
+            ))}
+            {accountBalances.length === 0 && (
+              <div className="rounded-lg border border-white/15 bg-white/5 p-4 text-sm text-mist/80 md:col-span-3">
+                No finance account balances loaded yet.
+              </div>
+            )}
+          </div>
+          {unassignedContributionTotal !== 0 && (
+            <p className="text-xs text-amber-200">
+              Legacy contribution rows without an assigned treasury account: {money(unassignedContributionTotal)}
+            </p>
+          )}
+          <div className="mt-4 rounded-lg border border-white/20 bg-white/5 p-4">
+            <p className="mb-3 text-xs uppercase tracking-[0.2em] text-gold-soft">Account Balance Graph</p>
+            <VerticalBarChart items={financeSummaryGraph} valueFormatter={(value) => money(value)} emptyText="No account balances to graph." />
+          </div>
+          <div className="mt-4 rounded-lg border border-white/20 bg-white/5 p-4">
+            <h3 className="font-heading text-xl text-offwhite">Opening Balances</h3>
+            <p className="mt-1 text-sm text-mist/80">
+              Use this only for starting bank, GCash, or cash-on-hand values that existed before ledger tracking. These entries are immutable after save and must be corrected through reversal or offset.
+            </p>
+
+            {canInputFinance && (
+              <div className="mt-4 grid gap-3 md:grid-cols-4">
+                <select
+                  aria-label="Opening balance account"
+                  value={openingBalanceAccountId}
+                  onChange={(e) => setOpeningBalanceAccountId(e.target.value)}
+                  className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+                >
+                  <option value="" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Select Account</option>
+                  {financeAccounts.map((account) => (
+                    <option key={`opening-account-${account.id}`} value={String(account.id)} style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>
+                      {financeAccountLabel(account)}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  aria-label="Opening balance effective date"
+                  type="date"
+                  value={openingBalanceEffectiveDate}
+                  onChange={(e) => setOpeningBalanceEffectiveDate(e.target.value)}
+                  className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+                />
+                <input
+                  aria-label="Opening balance amount"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={openingBalanceAmount}
+                  onChange={(e) => setOpeningBalanceAmount(e.target.value)}
+                  placeholder="Opening amount"
+                  className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+                />
+                <input
+                  aria-label="Opening balance note"
+                  value={openingBalanceNote}
+                  onChange={(e) => setOpeningBalanceNote(e.target.value)}
+                  placeholder="Basis or remarks"
+                  className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+                />
+                <div className="md:col-span-4 flex gap-2">
+                  <button type="button" onClick={() => void createOpeningBalance()} className="btn-primary">Save Opening Balance</button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOpeningBalanceAccountId("");
+                      setOpeningBalanceEffectiveDate("");
+                      setOpeningBalanceAmount("");
+                      setOpeningBalanceNote("");
+                    }}
+                    className="rounded-md border border-white/30 px-3 py-2 text-sm text-offwhite/90 transition hover:bg-white/10"
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="mt-4 overflow-x-auto rounded-lg border border-white/20">
+              <table className="min-w-full text-sm text-offwhite">
+                <thead className="bg-navy/70 text-gold-soft">
+                  <tr>
+                    <th className="px-4 py-3 text-left">Effective Date</th>
+                    <th className="px-4 py-3 text-left">Account</th>
+                    <th className="px-4 py-3 text-left">Amount</th>
+                    <th className="px-4 py-3 text-left">Remarks</th>
+                    <th className="px-4 py-3 text-left">Encoded By</th>
+                    {canInputFinance && <th className="px-4 py-3 text-left">Action</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {openingBalances.map((row) => (
+                    <tr key={`opening-balance-${row.id}`} className="border-b border-white/15">
+                      <td className="px-4 py-3">{row.effective_date}</td>
+                      <td className="px-4 py-3">{financeAccountLabel(row.finance_account)}</td>
+                      <td className={`px-4 py-3 ${row.amount < 0 ? "text-red-200" : "text-emerald-200"}`}>{money(row.amount)}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span>{row.note}</span>
+                          {row.is_reversal && <span className="rounded-full border border-red-300/40 px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] text-red-200">Reversal</span>}
+                          {row.reversed_by_entry_id && <span className="rounded-full border border-amber-300/40 px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] text-amber-200">Offset</span>}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">{row.encoded_by?.name ?? "System"}</td>
+                      {canInputFinance && (
+                        <td className="px-4 py-3">
+                          {row.is_reversal ? (
+                            <span className="text-xs text-mist/70">Locked reversal</span>
+                          ) : row.reversed_by_entry_id ? (
+                            <span className="text-xs text-mist/70">Already offset</span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setReverseOpeningBalanceId(row.id);
+                                setReverseOpeningBalanceDate("");
+                                setReverseOpeningBalanceRemarks("");
+                              }}
+                              className="rounded-md border border-gold/50 px-3 py-1 text-xs text-gold hover:bg-gold/10"
+                            >
+                              Reverse Opening
+                            </button>
+                          )}
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                  {openingBalances.length === 0 && (
+                    <tr><td colSpan={canInputFinance ? 6 : 5} className="px-4 py-6 text-center text-mist/80">No opening balances recorded yet.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {canInputFinance && reverseOpeningBalanceId && (
+              <div className="mt-4 grid gap-3 rounded-lg border border-white/20 bg-white/10 p-4 md:grid-cols-[220px_1fr_auto]">
+                <input
+                  aria-label="Opening balance reversal date"
+                  type="date"
+                  value={reverseOpeningBalanceDate}
+                  onChange={(e) => setReverseOpeningBalanceDate(e.target.value)}
+                  className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+                />
+                <input
+                  aria-label="Opening balance reversal remarks"
+                  value={reverseOpeningBalanceRemarks}
+                  onChange={(e) => setReverseOpeningBalanceRemarks(e.target.value)}
+                  placeholder="Required remarks for the opening balance reversal"
+                  className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+                />
+                <div className="flex gap-2">
+                  <button type="button" className="btn-secondary" onClick={() => void submitOpeningBalanceReversal()}>Save Reversal</button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setReverseOpeningBalanceId(null);
+                      setReverseOpeningBalanceDate("");
+                      setReverseOpeningBalanceRemarks("");
+                    }}
+                    className="rounded-md border border-white/30 px-3 py-2 text-sm text-offwhite/90 transition hover:bg-white/10"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="mb-6 flex flex-wrap gap-2">
         <button type="button" onClick={() => setActiveTab("mine")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "mine" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>My Contributions</button>
         {canViewFinance && <button type="button" onClick={() => setActiveTab("member-search")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "member-search" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Member Search</button>}
         {canViewFinance && <button type="button" onClick={() => setActiveTab("selected-member")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "selected-member" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Selected Member</button>}
+        {canViewFinance && <button type="button" onClick={() => setActiveTab("expense-ledger")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "expense-ledger" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Expense Ledger</button>}
         {canViewFinance && <button type="button" onClick={() => setActiveTab("compliance")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "compliance" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Compliance</button>}
-        {canApproveEdits && <button type="button" onClick={() => setActiveTab("edit-requests")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "edit-requests" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Edit Requests</button>}
+        {canViewFinance && <button type="button" onClick={() => setActiveTab("audit-findings")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "audit-findings" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Audit Findings</button>}
+        {canViewFinance && <button type="button" onClick={() => setActiveTab("expense-audit")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "expense-audit" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Expense Audit</button>}
+        {canInputFinance && <button type="button" onClick={() => setActiveTab("report-preview")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "report-preview" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Contribution Report View</button>}
+        {canInputFinance && <button type="button" onClick={() => setActiveTab("expense-report")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "expense-report" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Expense Report View</button>}
       </div>
 
       {activeTab === "mine" && (
@@ -621,6 +1626,34 @@ export default function Contributions() {
                   </option>
                 ))}
               </select>
+              <input
+                aria-label="Filter my project contributions by project name"
+                value={myProjectFilter}
+                onChange={(e) => setMyProjectFilter(e.target.value)}
+                placeholder="Project name contains..."
+                className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+              />
+              <input
+                aria-label="Filter my alalayang contributions by recipient"
+                value={myRecipientFilter}
+                onChange={(e) => setMyRecipientFilter(e.target.value)}
+                placeholder="Alalayang recipient contains..."
+                className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+              />
+              <input
+                aria-label="Filter my contributions from date"
+                type="date"
+                value={myDateFromFilter}
+                onChange={(e) => setMyDateFromFilter(e.target.value)}
+                className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+              />
+              <input
+                aria-label="Filter my contributions to date"
+                type="date"
+                value={myDateToFilter}
+                onChange={(e) => setMyDateToFilter(e.target.value)}
+                className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+              />
             </div>
             <p className="mb-4 text-sm text-mist/85">
               Filtered Total: <span className="font-semibold text-gold-soft">{money(filteredMyTotal)}</span> ({filteredMyRows.length} record{filteredMyRows.length === 1 ? "" : "s"})
@@ -640,24 +1673,32 @@ export default function Contributions() {
                 <thead className="bg-navy/70 text-gold-soft">
                   <tr>
                     <th className="px-4 py-3 text-left">Date</th>
-                    <th className="px-4 py-3 text-left">Category</th>
-                    <th className="px-4 py-3 text-left">Amount</th>
-                    <th className="px-4 py-3 text-left">Recipient Indicator</th>
-                    <th className="px-4 py-3 text-left">Note</th>
+                      <th className="px-4 py-3 text-left">Category</th>
+                      <th className="px-4 py-3 text-left">Amount</th>
+                      <th className="px-4 py-3 text-left">Account</th>
+                      <th className="px-4 py-3 text-left">Recipient Indicator</th>
+                      <th className="px-4 py-3 text-left">Remarks</th>
                   </tr>
                 </thead>
                 <tbody>
                   {pagedMyRows.map((row) => (
                     <tr key={`mine-${row.id}`} className="border-b border-white/15">
                       <td className="px-4 py-3">{row.contribution_date}</td>
-                      <td className="px-4 py-3">{row.category_label}</td>
-                      <td className="px-4 py-3">{money(row.amount)}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span>{row.category_label}</span>
+                          {row.is_reversal && <span className="rounded-full border border-red-300/40 px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] text-red-200">Reversal</span>}
+                          {row.reversed_by_entry_id && <span className="rounded-full border border-amber-300/40 px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] text-amber-200">Offset</span>}
+                        </div>
+                      </td>
+                      <td className={`px-4 py-3 ${Number(row.amount) < 0 ? "text-red-200" : ""}`}>{money(row.amount)}</td>
+                      <td className="px-4 py-3">{row.finance_account?.account_label ?? "-"}</td>
                       <td className="px-4 py-3">{row.recipient_indicator ?? "-"}</td>
                       <td className="px-4 py-3">{row.note ?? "-"}</td>
                     </tr>
                   ))}
                   {filteredMyRows.length === 0 && (
-                    <tr><td colSpan={5} className="px-4 py-4 text-center text-mist/80">No contribution records yet.</td></tr>
+                    <tr><td colSpan={6} className="px-4 py-4 text-center text-mist/80">No contribution records yet.</td></tr>
                   )}
                 </tbody>
               </table>
@@ -882,12 +1923,1098 @@ export default function Contributions() {
         </div>
       )}
 
+      {activeTab === "report-preview" && canInputFinance && (
+        <div className="mb-6 rounded-xl border border-white/20 bg-white/10 p-4">
+          <h2 className="mb-2 font-heading text-2xl text-offwhite">Treasurer Report Preview</h2>
+          <p className="mb-3 text-sm text-mist/85">
+            This is a live, unsaved reporting view from the ledger. Use filters, review the total, then share externally by screenshot if needed.
+          </p>
+
+          <div className="mb-4 grid gap-3 md:grid-cols-3">
+            <select
+              aria-label="Report category"
+              value={reportCategory}
+              onChange={(e) => setReportCategory(e.target.value)}
+              className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+            >
+              {CATEGORY_OPTIONS.map((item) => (
+                <option key={`report-category-${item.value}`} value={item.value} style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+            <input
+              aria-label="Report search"
+              value={reportSearch}
+              onChange={(e) => setReportSearch(e.target.value)}
+              placeholder="Search member, note, or recipient"
+              className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+            />
+            <select
+              aria-label="Report year"
+              value={reportYearFilter}
+              onChange={(e) => setReportYearFilter(e.target.value)}
+              className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+            >
+              <option value="" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>All Years</option>
+              {complianceYearSelectOptions.map((year) => (
+                <option key={`report-year-${year}`} value={String(year)} style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>
+                  {year}
+                </option>
+              ))}
+            </select>
+            <select
+              aria-label="Report month"
+              value={reportMonthFilter}
+              onChange={(e) => setReportMonthFilter(e.target.value)}
+              className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+            >
+              <option value="" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>All Months</option>
+              {MONTH_OPTIONS.map((month) => (
+                <option key={`report-month-${month.value}`} value={month.value} style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>
+                  {month.label}
+                </option>
+              ))}
+            </select>
+            <input
+              aria-label="Report from date"
+              type="date"
+              value={reportDateFrom}
+              onChange={(e) => setReportDateFrom(e.target.value)}
+              className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+            />
+            <input
+              aria-label="Report to date"
+              type="date"
+              value={reportDateTo}
+              onChange={(e) => setReportDateTo(e.target.value)}
+              className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+            />
+            <input
+              aria-label="Report project filter"
+              value={reportProjectFilter}
+              onChange={(e) => setReportProjectFilter(e.target.value)}
+              placeholder="Project name contains..."
+              className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+            />
+            <input
+              aria-label="Report recipient filter"
+              value={reportRecipientFilter}
+              onChange={(e) => setReportRecipientFilter(e.target.value)}
+              placeholder="Recipient contains..."
+              className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+            />
+            <div className="md:col-span-3 flex gap-2">
+              <button type="button" onClick={() => void fetchReportPreview(1)} className="btn-secondary">Generate View</button>
+              <button
+                type="button"
+                onClick={() => {
+                  setReportSearch("");
+                  setReportYearFilter(String(new Date().getFullYear()));
+                  setReportMonthFilter("");
+                  setReportDateFrom("");
+                  setReportDateTo("");
+                  setReportProjectFilter("");
+                  setReportRecipientFilter("");
+                  setReportPreviewLoaded(false);
+                }}
+                className="rounded-md border border-white/30 px-3 py-2 text-sm text-offwhite/90 transition hover:bg-white/10"
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+
+          {error && errorContext === "report-preview" && (
+            <p className="mb-4 rounded-md border border-red-300/30 bg-red-400/10 px-4 py-2 text-sm text-red-200">{error}</p>
+          )}
+
+          {!reportPreviewLoaded ? (
+            <div className="rounded-md border border-white/20 bg-white/5 px-4 py-8 text-center text-sm text-mist/80">
+              Click Generate View to load a screenshot-ready treasurer summary.
+            </div>
+          ) : (
+            <>
+              <div className="mb-4 grid gap-3 md:grid-cols-3">
+                <div className="rounded-lg border border-gold/20 bg-gold/10 p-4">
+                  <p className="text-xs uppercase tracking-[0.2em] text-gold-soft">Category</p>
+                  <p className="mt-2 text-lg font-semibold text-offwhite">{categoryLabel(reportCategory)}</p>
+                </div>
+                <div className="rounded-lg border border-gold/20 bg-gold/10 p-4">
+                  <p className="text-xs uppercase tracking-[0.2em] text-gold-soft">Total Amount</p>
+                  <p className="mt-2 text-lg font-semibold text-offwhite">{money(reportPreviewTotal)}</p>
+                </div>
+                <div className="rounded-lg border border-gold/20 bg-gold/10 p-4">
+                  <p className="text-xs uppercase tracking-[0.2em] text-gold-soft">Records</p>
+                  <p className="mt-2 text-lg font-semibold text-offwhite">{reportPreviewCount}</p>
+                </div>
+              </div>
+
+              <div className="mb-4 rounded-lg border border-white/20 bg-white/5 p-4">
+                <p className="mb-3 text-xs uppercase tracking-[0.2em] text-gold-soft">Top Members By Filtered Total</p>
+                <VerticalBarChart
+                  items={reportPreviewGraph}
+                  valueFormatter={(value) => money(value)}
+                  emptyText="No data to graph for current report filters."
+                />
+              </div>
+
+              <div className="overflow-x-auto rounded-lg border border-white/20">
+                <table className="min-w-full text-sm text-offwhite">
+                  <thead className="bg-navy/70 text-gold-soft">
+                    <tr>
+                      <th className="px-4 py-3 text-left">Date</th>
+                      <th className="px-4 py-3 text-left">Member</th>
+                      <th className="px-4 py-3 text-left">Category</th>
+                      <th className="px-4 py-3 text-left">Amount</th>
+                      <th className="px-4 py-3 text-left">Account</th>
+                      <th className="px-4 py-3 text-left">Recipient</th>
+                      <th className="px-4 py-3 text-left">Remarks</th>
+                      <th className="px-4 py-3 text-left">Encoded By</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reportPreviewRows.map((row) => (
+                      <tr key={`report-preview-${row.id}`} className="border-b border-white/15">
+                        <td className="px-4 py-3">{row.contribution_date}</td>
+                        <td className="px-4 py-3">{row.member ? `${row.member.name} (${row.member.member_number})` : "Unknown member"}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span>{row.category_label}</span>
+                            {row.is_reversal && <span className="rounded-full border border-red-300/40 px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] text-red-200">Reversal</span>}
+                            {row.reversed_by_entry_id && <span className="rounded-full border border-amber-300/40 px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] text-amber-200">Offset</span>}
+                          </div>
+                        </td>
+                        <td className={`px-4 py-3 ${row.amount < 0 ? "text-red-200" : ""}`}>{money(row.amount)}</td>
+                        <td className="px-4 py-3">{row.finance_account?.account_label ?? "-"}</td>
+                        <td className="px-4 py-3">{row.recipient_indicator ?? "-"}</td>
+                        <td className="px-4 py-3">{row.note ?? "-"}</td>
+                        <td className="px-4 py-3">{row.encoded_by?.name ?? "System"}</td>
+                      </tr>
+                    ))}
+                    {reportPreviewRows.length === 0 && (
+                      <tr><td colSpan={8} className="px-4 py-6 text-center text-mist/80">No ledger rows match the current report filters.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="mt-4 flex items-center justify-between text-xs text-mist/80">
+                <span>Page {reportPreviewPage} of {reportPreviewLastPage} | Total {reportPreviewCount}</span>
+                <div className="flex gap-2">
+                  <button type="button" className="btn-secondary" disabled={reportPreviewPage <= 1 || loading} onClick={() => void fetchReportPreview(Math.max(1, reportPreviewPage - 1))}>Prev</button>
+                  <button type="button" className="btn-secondary" disabled={reportPreviewPage >= reportPreviewLastPage || loading} onClick={() => void fetchReportPreview(Math.min(reportPreviewLastPage, reportPreviewPage + 1))}>Next</button>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {activeTab === "audit-findings" && canViewFinance && (
+        <div className="mb-6 rounded-xl border border-white/20 bg-white/10 p-4">
+          <h2 className="mb-2 font-heading text-2xl text-offwhite">Audit Findings</h2>
+          <p className="mb-3 text-sm text-mist/85">
+            Auditor can record lightweight findings and statuses here. Treasurer can view the same findings for follow-up. Current monthly threshold: <span className="font-semibold text-gold-soft">{money(auditRequiredMonthlyAmount || 500)}</span>
+          </p>
+
+          <div className="mb-4 grid gap-3 md:grid-cols-3">
+            <input
+              aria-label="Audit month"
+              type="month"
+              value={auditMonth}
+              onChange={(e) => setAuditMonth(e.target.value)}
+              className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+            />
+            <select
+              aria-label="Audit category filter"
+              value={auditCategoryFilter}
+              onChange={(e) => setAuditCategoryFilter(e.target.value)}
+              className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+            >
+              <option value="" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>All Categories</option>
+              {CATEGORY_OPTIONS.map((item) => (
+                <option key={`audit-category-${item.value}`} value={item.value} style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+            <input
+              aria-label="Audit member search"
+              value={auditMemberSearch}
+              onChange={(e) => setAuditMemberSearch(e.target.value)}
+              placeholder="Search member..."
+              className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+            />
+            <select
+              aria-label="Audit status filter"
+              value={auditStatusFilter}
+              onChange={(e) => setAuditStatusFilter(e.target.value)}
+              className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+            >
+              <option value="" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>All Statuses</option>
+              {Object.entries(auditStatuses).map(([value, label]) => (
+                <option key={`audit-status-${value}`} value={value} style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>{label}</option>
+              ))}
+            </select>
+            <select
+              aria-label="Audit discrepancy filter"
+              value={auditDiscrepancyFilter}
+              onChange={(e) => setAuditDiscrepancyFilter(e.target.value)}
+              className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+            >
+              <option value="" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>All Findings</option>
+              {Object.entries(auditDiscrepancies).map(([value, label]) => (
+                <option key={`audit-discrepancy-${value}`} value={value} style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>{label}</option>
+              ))}
+            </select>
+            <div className="flex gap-2">
+              <button type="button" onClick={() => void fetchAuditFindings(1)} className="btn-secondary">Run</button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAuditCategoryFilter("");
+                  setAuditMemberSearch("");
+                  setAuditStatusFilter("");
+                  setAuditDiscrepancyFilter("");
+                  setAuditLoaded(false);
+                }}
+                className="rounded-md border border-white/30 px-3 py-2 text-sm text-offwhite/90 transition hover:bg-white/10"
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+
+          {error && errorContext === "report-preview" && (
+            <p className="mb-4 rounded-md border border-red-300/30 bg-red-400/10 px-4 py-2 text-sm text-red-200">{error}</p>
+          )}
+
+          {!auditLoaded ? (
+            <div className="rounded-md border border-white/20 bg-white/5 px-4 py-8 text-center text-sm text-mist/80">
+              Click Run to load discrepancy findings for the selected month.
+            </div>
+          ) : (
+            <>
+              <div className="mb-4 rounded-lg border border-white/20 bg-white/5 p-4">
+                <p className="mb-3 text-xs uppercase tracking-[0.2em] text-gold-soft">Findings Graph</p>
+                <VerticalBarChart
+                  items={auditGraph}
+                  valueFormatter={(value) => String(value)}
+                  emptyText="No discrepancy findings to graph."
+                />
+              </div>
+
+              <div className="overflow-x-auto rounded-lg border border-white/20">
+                <table className="min-w-full text-sm text-offwhite">
+                  <thead className="bg-navy/70 text-gold-soft">
+                    <tr>
+                      <th className="px-4 py-3 text-left">Member</th>
+                      <th className="px-4 py-3 text-left">Category</th>
+                      <th className="px-4 py-3 text-left">Finding</th>
+                      <th className="px-4 py-3 text-left">Amount</th>
+                      <th className="px-4 py-3 text-left">Latest Status</th>
+                      <th className="px-4 py-3 text-left">Notes</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {auditRows.map((row) => {
+                      const rowKey = `${row.member?.id ?? "x"}-${row.contribution_id ?? "none"}-${row.target_month}-${row.category}-${row.discrepancy_type}`;
+                      return (
+                        <tr key={rowKey} className="border-b border-white/15 align-top">
+                          <td className="px-4 py-3">{row.member ? `${row.member.name} (${row.member.member_number})` : "Unknown member"}</td>
+                          <td className="px-4 py-3">{row.category_label}</td>
+                          <td className="px-4 py-3">
+                            <div className="font-medium text-offwhite">{row.discrepancy_label}</div>
+                            <p className="mt-1 text-xs text-mist/75">{row.details}</p>
+                          </td>
+                          <td className="px-4 py-3">{money(row.amount)}</td>
+                          <td className="px-4 py-3">
+                            {row.latest_status_label ? (
+                              <span className="rounded-full border border-amber-300/40 px-2 py-1 text-xs text-amber-200">{row.latest_status_label}</span>
+                            ) : (
+                              <span className="text-xs text-mist/70">No note yet</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="space-y-2">
+                              {row.notes.map((note) => (
+                                <div key={note.id} className="rounded-md border border-white/15 bg-white/5 p-2">
+                                  <p className="text-xs text-gold-soft">{note.status_label} by {note.created_by?.name ?? "Auditor"}</p>
+                                  <p className="mt-1 text-xs text-mist/85">{note.note_text}</p>
+                                </div>
+                              ))}
+                              {row.notes.length === 0 && <p className="text-xs text-mist/70">No notes yet.</p>}
+
+                              {canRecordAuditNotes && (
+                                <div className="rounded-md border border-white/15 bg-white/5 p-2">
+                                  {auditNoteTargetKey === rowKey ? (
+                                    <div className="space-y-2">
+                                      <select
+                                        aria-label="Audit note status"
+                                        value={auditNoteStatus}
+                                        onChange={(e) => setAuditNoteStatus(e.target.value)}
+                                        className="w-full rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+                                      >
+                                        {Object.entries(auditStatuses).map(([value, label]) => (
+                                          <option key={`note-status-${value}`} value={value} style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>{label}</option>
+                                        ))}
+                                      </select>
+                                      <textarea
+                                        aria-label="Audit note text"
+                                        value={auditNoteText}
+                                        onChange={(e) => setAuditNoteText(e.target.value)}
+                                        placeholder="Record the finding, review result, or follow-up instruction."
+                                        rows={3}
+                                        className="w-full rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+                                      />
+                                      <div className="flex gap-2">
+                                        <button type="button" onClick={() => void submitAuditNote(row)} className="btn-secondary">Save Note</button>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setAuditNoteTargetKey("");
+                                            setAuditNoteStatus("needs_followup");
+                                            setAuditNoteText("");
+                                          }}
+                                          className="rounded-md border border-white/30 px-3 py-2 text-sm text-offwhite/90 transition hover:bg-white/10"
+                                        >
+                                          Cancel
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setAuditNoteTargetKey(rowKey);
+                                        setAuditNoteStatus(row.latest_status ?? "needs_followup");
+                                        setAuditNoteText("");
+                                      }}
+                                      className="rounded-md border border-gold/40 px-3 py-1.5 text-xs text-gold hover:bg-gold/10"
+                                    >
+                                      Add Auditor Note
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {auditRows.length === 0 && (
+                      <tr><td colSpan={6} className="px-4 py-6 text-center text-mist/80">No findings for the current audit filters.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="mt-4 flex items-center justify-between text-xs text-mist/80">
+                <span>Page {auditPage} of {auditLastPage} | Total {auditTotal}</span>
+                <div className="flex gap-2">
+                  <button type="button" className="btn-secondary" disabled={auditPage <= 1 || loading} onClick={() => void fetchAuditFindings(Math.max(1, auditPage - 1))}>Prev</button>
+                  <button type="button" className="btn-secondary" disabled={auditPage >= auditLastPage || loading} onClick={() => void fetchAuditFindings(Math.min(auditLastPage, auditPage + 1))}>Next</button>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {activeTab === "expense-ledger" && canViewFinance && (
+        <div className="mb-6 rounded-xl border border-white/20 bg-white/10 p-4">
+          <h2 className="mb-2 font-heading text-2xl text-offwhite">Expense Ledger</h2>
+          <p className="mb-3 text-sm text-mist/85">
+            Treasurer records immutable expense rows by treasury account. Auditor can review the same ledger without changing saved rows.
+          </p>
+
+          <div className="mb-4 grid gap-3 md:grid-cols-3">
+            <select
+              aria-label="Expense category filter"
+              value={expenseCategoryFilter}
+              onChange={(e) => setExpenseCategoryFilter(e.target.value)}
+              className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+            >
+              <option value="" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>All Expense Categories</option>
+              {EXPENSE_CATEGORY_OPTIONS.map((item) => (
+                <option key={`expense-filter-category-${item.value}`} value={item.value} style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+            <select
+              aria-label="Expense account filter"
+              value={expenseAccountFilter}
+              onChange={(e) => setExpenseAccountFilter(e.target.value)}
+              className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+            >
+              <option value="" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>All Accounts</option>
+              {financeAccounts.map((account) => (
+                <option key={`expense-filter-account-${account.id}`} value={String(account.id)} style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>
+                  {account.account_label}
+                </option>
+              ))}
+            </select>
+            <input
+              aria-label="Expense search"
+              value={expenseSearch}
+              onChange={(e) => setExpenseSearch(e.target.value)}
+              placeholder="Search remarks or references"
+              className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+            />
+            <input
+              aria-label="Expense payee filter"
+              value={expensePayeeFilter}
+              onChange={(e) => setExpensePayeeFilter(e.target.value)}
+              placeholder="Payee contains..."
+              className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+            />
+            <input
+              aria-label="Expense from date"
+              type="date"
+              value={expenseDateFrom}
+              onChange={(e) => setExpenseDateFrom(e.target.value)}
+              className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+            />
+            <input
+              aria-label="Expense to date"
+              type="date"
+              value={expenseDateTo}
+              onChange={(e) => setExpenseDateTo(e.target.value)}
+              className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+            />
+            <label className="flex items-center gap-2 rounded-md border border-white/20 bg-white/5 px-3 py-2 text-sm text-offwhite">
+              <input type="checkbox" checked={expenseSupportOnly} onChange={(e) => setExpenseSupportOnly(e.target.checked)} />
+              With support reference only
+            </label>
+            <div className="flex gap-2 md:col-span-2">
+              <button type="button" onClick={() => void fetchExpenseLedger(1)} className="btn-secondary">Load Expenses</button>
+              <button
+                type="button"
+                onClick={() => {
+                  setExpenseCategoryFilter("");
+                  setExpenseAccountFilter("");
+                  setExpenseSearch("");
+                  setExpensePayeeFilter("");
+                  setExpenseDateFrom("");
+                  setExpenseDateTo("");
+                  setExpenseSupportOnly(false);
+                  setExpenseLoaded(false);
+                }}
+                className="rounded-md border border-white/30 px-3 py-2 text-sm text-offwhite/90 transition hover:bg-white/10"
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+
+          {error && errorContext === "expense-ledger" && (
+            <p className="mb-4 rounded-md border border-red-300/30 bg-red-400/10 px-4 py-2 text-sm text-red-200">{error}</p>
+          )}
+
+          {canInputFinance && (
+            <div className="mb-4 rounded-lg border border-gold/20 bg-gold/10 p-4">
+              <p className="mb-3 text-sm text-mist/90">
+                Treasurer workflow: every expense must point to a treasury account. If an expense is encoded incorrectly, use an offsetting reversal row rather than editing the saved entry.
+              </p>
+              <div className="grid gap-3 md:grid-cols-2">
+                <select
+                  aria-label="Expense category"
+                  value={expenseCategoryInput}
+                  onChange={(e) => setExpenseCategoryInput(e.target.value)}
+                  className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+                >
+                  {EXPENSE_CATEGORY_OPTIONS.map((item) => (
+                    <option key={`expense-category-${item.value}`} value={item.value} style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  aria-label="Expense date"
+                  type="date"
+                  value={expenseDateInput}
+                  onChange={(e) => setExpenseDateInput(e.target.value)}
+                  className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+                />
+                <input
+                  aria-label="Expense amount"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={expenseAmountInput}
+                  onChange={(e) => setExpenseAmountInput(e.target.value)}
+                  placeholder="Amount"
+                  className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+                />
+                <input
+                  aria-label="Expense payee name"
+                  value={expensePayeeInput}
+                  onChange={(e) => setExpensePayeeInput(e.target.value)}
+                  placeholder="Payee name"
+                  className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+                />
+                <select
+                  aria-label="Expense treasury account"
+                  value={expenseAccountId}
+                  onChange={(e) => setExpenseAccountId(e.target.value)}
+                  className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+                >
+                  <option value="" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Select Treasury Account</option>
+                  {financeAccounts.map((account) => (
+                    <option key={`expense-account-${account.id}`} value={String(account.id)} style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>
+                      {account.account_label}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  aria-label="Expense beneficiary member"
+                  value={expenseBeneficiaryMemberId}
+                  onChange={(e) => setExpenseBeneficiaryMemberId(e.target.value)}
+                  className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+                >
+                  <option value="" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Optional beneficiary member</option>
+                  {members.map((member) => (
+                    <option key={`expense-beneficiary-${member.id}`} value={String(member.id)} style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>
+                      {member.member_number} - {nameOf(member)}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  aria-label="Expense support reference"
+                  value={expenseSupportReferenceInput}
+                  onChange={(e) => setExpenseSupportReferenceInput(e.target.value)}
+                  placeholder="Receipt, voucher, or support reference"
+                  className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+                />
+                <input
+                  aria-label="Expense approval reference"
+                  value={expenseApprovalReferenceInput}
+                  onChange={(e) => setExpenseApprovalReferenceInput(e.target.value)}
+                  placeholder="Approval reference"
+                  className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+                />
+                <input
+                  aria-label="Expense remarks"
+                  value={expenseNoteInput}
+                  onChange={(e) => setExpenseNoteInput(e.target.value)}
+                  placeholder="Purpose and remarks"
+                  className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite md:col-span-2"
+                />
+                <div className="md:col-span-2 flex gap-2">
+                  <button type="button" className="btn-primary" onClick={() => void createExpense()}>Save Expense</button>
+                  <button
+                    type="button"
+                    onClick={resetExpenseForm}
+                    className="rounded-md border border-white/30 px-3 py-2 text-sm text-offwhite/90 transition hover:bg-white/10"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {!expenseLoaded ? (
+            <div className="rounded-md border border-white/20 bg-white/5 px-4 py-8 text-center text-sm text-mist/80">
+              Click Load Expenses to review the current expense ledger.
+            </div>
+          ) : (
+            <>
+              <p className="mb-4 text-sm text-mist/85">
+                Filtered Expense Total: <span className="font-semibold text-gold-soft">{money(expenseTotal)}</span> ({expenseRecordCount} record{expenseRecordCount === 1 ? "" : "s"})
+              </p>
+              <div className="mb-4 rounded-lg border border-white/20 bg-white/5 p-4">
+                <p className="mb-3 text-xs uppercase tracking-[0.2em] text-gold-soft">Filtered Expense Graph</p>
+                <VerticalBarChart items={expenseGraph} valueFormatter={(value) => money(value)} emptyText="No expense data to graph." />
+              </div>
+              <div className="overflow-x-auto rounded-lg border border-white/20">
+                <table className="min-w-full text-sm text-offwhite">
+                  <thead className="bg-navy/70 text-gold-soft">
+                    <tr>
+                      <th className="px-4 py-3 text-left">Date</th>
+                      <th className="px-4 py-3 text-left">Category</th>
+                      <th className="px-4 py-3 text-left">Amount</th>
+                      <th className="px-4 py-3 text-left">Account</th>
+                      <th className="px-4 py-3 text-left">Payee</th>
+                      <th className="px-4 py-3 text-left">Support</th>
+                      <th className="px-4 py-3 text-left">Approval</th>
+                      <th className="px-4 py-3 text-left">Remarks</th>
+                      <th className="px-4 py-3 text-left">Encoded By</th>
+                      {canInputFinance && <th className="px-4 py-3 text-left">Action</th>}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {expenseRows.map((row) => (
+                      <tr key={`expense-row-${row.id}`} className="border-b border-white/15">
+                        <td className="px-4 py-3">{row.expense_date}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span>{row.category_label}</span>
+                            {row.is_reversal && <span className="rounded-full border border-red-300/40 px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] text-red-200">Reversal</span>}
+                            {row.reversed_by_entry_id && <span className="rounded-full border border-amber-300/40 px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] text-amber-200">Offset</span>}
+                          </div>
+                        </td>
+                        <td className={`px-4 py-3 ${row.amount < 0 ? "text-emerald-200" : "text-red-200"}`}>{money(row.amount)}</td>
+                        <td className="px-4 py-3">{row.finance_account?.account_label ?? "-"}</td>
+                        <td className="px-4 py-3">{row.payee_name ?? "-"}</td>
+                        <td className="px-4 py-3">{row.support_reference ?? "-"}</td>
+                        <td className="px-4 py-3">{row.approval_reference ?? "-"}</td>
+                        <td className="px-4 py-3">{row.note ?? "-"}</td>
+                        <td className="px-4 py-3">{row.encoded_by?.name ?? "System"}</td>
+                        {canInputFinance && (
+                          <td className="px-4 py-3">
+                            {row.is_reversal ? (
+                              <span className="text-xs text-mist/70">Locked reversal</span>
+                            ) : row.reversed_by_entry_id ? (
+                              <span className="text-xs text-mist/70">Already offset</span>
+                            ) : (
+                              <button
+                                type="button"
+                                className="rounded-md border border-gold/50 px-3 py-1 text-xs text-gold hover:bg-gold/10"
+                                onClick={() => {
+                                  setReverseExpenseId(row.id);
+                                  setReverseExpenseRemarks("");
+                                  setReverseExpenseDate("");
+                                }}
+                              >
+                                Reverse Expense
+                              </button>
+                            )}
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                    {expenseRows.length === 0 && (
+                      <tr><td colSpan={canInputFinance ? 10 : 9} className="px-4 py-6 text-center text-mist/80">No expense rows match the current filters.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <div className="mt-4 flex items-center justify-between text-xs text-mist/80">
+                <span>Page {expensePage} of {expenseLastPage} | Total {expenseRecordCount}</span>
+                <div className="flex gap-2">
+                  <button type="button" className="btn-secondary" disabled={expensePage <= 1 || loading} onClick={() => void fetchExpenseLedger(Math.max(1, expensePage - 1))}>Prev</button>
+                  <button type="button" className="btn-secondary" disabled={expensePage >= expenseLastPage || loading} onClick={() => void fetchExpenseLedger(Math.min(expenseLastPage, expensePage + 1))}>Next</button>
+                </div>
+              </div>
+            </>
+          )}
+
+          {canInputFinance && reverseExpenseId && (
+            <div className="mt-4 grid gap-3 rounded-lg border border-white/20 bg-white/10 p-4 md:grid-cols-[220px_1fr_auto]">
+              <input
+                aria-label="Expense reversal date"
+                type="date"
+                value={reverseExpenseDate}
+                onChange={(e) => setReverseExpenseDate(e.target.value)}
+                className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+              />
+              <input
+                aria-label="Expense reversal remarks"
+                value={reverseExpenseRemarks}
+                onChange={(e) => setReverseExpenseRemarks(e.target.value)}
+                placeholder="Required remarks for the expense reversal"
+                className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+              />
+              <div className="flex gap-2">
+                <button type="button" className="btn-secondary" onClick={() => void submitExpenseReversal()}>Save Reversal</button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReverseExpenseId(null);
+                    setReverseExpenseRemarks("");
+                    setReverseExpenseDate("");
+                  }}
+                  className="rounded-md border border-white/30 px-3 py-2 text-sm text-offwhite/90 transition hover:bg-white/10"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeTab === "expense-audit" && canViewFinance && (
+        <div className="mb-6 rounded-xl border border-white/20 bg-white/10 p-4">
+          <h2 className="mb-2 font-heading text-2xl text-offwhite">Expense Audit Findings</h2>
+          <p className="mb-3 text-sm text-mist/85">
+            Auditor can record note-based findings for expense support, approval, duplicate, and reversal issues. Treasurer can review the same findings for follow-up.
+          </p>
+          <div className="mb-4 grid gap-3 md:grid-cols-3">
+            <input
+              aria-label="Expense audit month"
+              type="month"
+              value={expenseAuditMonth}
+              onChange={(e) => setExpenseAuditMonth(e.target.value)}
+              className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+            />
+            <select
+              aria-label="Expense audit category filter"
+              value={expenseAuditCategoryFilter}
+              onChange={(e) => setExpenseAuditCategoryFilter(e.target.value)}
+              className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+            >
+              <option value="" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>All Expense Categories</option>
+              {EXPENSE_CATEGORY_OPTIONS.map((item) => (
+                <option key={`expense-audit-category-${item.value}`} value={item.value} style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>{item.label}</option>
+              ))}
+            </select>
+            <select
+              aria-label="Expense audit account filter"
+              value={expenseAuditAccountFilter}
+              onChange={(e) => setExpenseAuditAccountFilter(e.target.value)}
+              className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+            >
+              <option value="" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>All Accounts</option>
+              {financeAccounts.map((account) => (
+                <option key={`expense-audit-account-${account.id}`} value={String(account.id)} style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>{account.account_label}</option>
+              ))}
+            </select>
+            <input
+              aria-label="Expense audit payee filter"
+              value={expenseAuditPayeeFilter}
+              onChange={(e) => setExpenseAuditPayeeFilter(e.target.value)}
+              placeholder="Payee contains..."
+              className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+            />
+            <select
+              aria-label="Expense audit status filter"
+              value={expenseAuditStatusFilter}
+              onChange={(e) => setExpenseAuditStatusFilter(e.target.value)}
+              className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+            >
+              <option value="" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>All Statuses</option>
+              {Object.entries(expenseAuditStatuses).map(([value, label]) => (
+                <option key={`expense-audit-status-${value}`} value={value} style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>{label}</option>
+              ))}
+            </select>
+            <select
+              aria-label="Expense audit discrepancy filter"
+              value={expenseAuditDiscrepancyFilter}
+              onChange={(e) => setExpenseAuditDiscrepancyFilter(e.target.value)}
+              className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+            >
+              <option value="" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>All Findings</option>
+              {Object.entries(expenseAuditDiscrepancies).map(([value, label]) => (
+                <option key={`expense-audit-discrepancy-${value}`} value={value} style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>{label}</option>
+              ))}
+            </select>
+            <div className="flex gap-2">
+              <button type="button" onClick={() => void fetchExpenseAuditFindings(1)} className="btn-secondary">Run</button>
+              <button
+                type="button"
+                onClick={() => {
+                  setExpenseAuditCategoryFilter("");
+                  setExpenseAuditAccountFilter("");
+                  setExpenseAuditStatusFilter("");
+                  setExpenseAuditDiscrepancyFilter("");
+                  setExpenseAuditPayeeFilter("");
+                  setExpenseAuditLoaded(false);
+                }}
+                className="rounded-md border border-white/30 px-3 py-2 text-sm text-offwhite/90 transition hover:bg-white/10"
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+
+          {error && errorContext === "expense-audit" && (
+            <p className="mb-4 rounded-md border border-red-300/30 bg-red-400/10 px-4 py-2 text-sm text-red-200">{error}</p>
+          )}
+
+          {!expenseAuditLoaded ? (
+            <div className="rounded-md border border-white/20 bg-white/5 px-4 py-8 text-center text-sm text-mist/80">
+              Click Run to load expense discrepancy findings.
+            </div>
+          ) : (
+            <>
+              <div className="mb-4 rounded-lg border border-white/20 bg-white/5 p-4">
+                <p className="mb-3 text-xs uppercase tracking-[0.2em] text-gold-soft">Expense Findings Graph</p>
+                <VerticalBarChart items={expenseAuditGraph} valueFormatter={(value) => String(value)} emptyText="No expense findings to graph." />
+              </div>
+              <div className="overflow-x-auto rounded-lg border border-white/20">
+                <table className="min-w-full text-sm text-offwhite">
+                  <thead className="bg-navy/70 text-gold-soft">
+                    <tr>
+                      <th className="px-4 py-3 text-left">Payee</th>
+                      <th className="px-4 py-3 text-left">Category</th>
+                      <th className="px-4 py-3 text-left">Account</th>
+                      <th className="px-4 py-3 text-left">Finding</th>
+                      <th className="px-4 py-3 text-left">Amount</th>
+                      <th className="px-4 py-3 text-left">Latest Status</th>
+                      <th className="px-4 py-3 text-left">Notes</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {expenseAuditRows.map((row) => {
+                      const rowKey = `${row.expense_id ?? "none"}-${row.target_month}-${row.category}-${row.discrepancy_type}`;
+                      return (
+                        <tr key={rowKey} className="border-b border-white/15 align-top">
+                          <td className="px-4 py-3">{row.payee_name ?? "Unknown payee"}</td>
+                          <td className="px-4 py-3">{row.category_label}</td>
+                          <td className="px-4 py-3">{row.finance_account?.account_label ?? "-"}</td>
+                          <td className="px-4 py-3">
+                            <div className="font-medium text-offwhite">{row.discrepancy_label}</div>
+                            <p className="mt-1 text-xs text-mist/75">{row.details}</p>
+                          </td>
+                          <td className="px-4 py-3">{money(row.amount)}</td>
+                          <td className="px-4 py-3">
+                            {row.latest_status_label ? (
+                              <span className="rounded-full border border-amber-300/40 px-2 py-1 text-xs text-amber-200">{row.latest_status_label}</span>
+                            ) : (
+                              <span className="text-xs text-mist/70">No note yet</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="space-y-2">
+                              {row.notes.map((note) => (
+                                <div key={note.id} className="rounded-md border border-white/15 bg-white/5 p-2">
+                                  <p className="text-xs text-gold-soft">{note.status_label} by {note.created_by?.name ?? "Auditor"}</p>
+                                  <p className="mt-1 text-xs text-mist/85">{note.note_text}</p>
+                                </div>
+                              ))}
+                              {row.notes.length === 0 && <p className="text-xs text-mist/70">No notes yet.</p>}
+                              {canRecordAuditNotes && (
+                                <div className="rounded-md border border-white/15 bg-white/5 p-2">
+                                  {expenseAuditNoteTargetKey === rowKey ? (
+                                    <div className="space-y-2">
+                                      <select
+                                        aria-label="Expense audit note status"
+                                        value={expenseAuditNoteStatus}
+                                        onChange={(e) => setExpenseAuditNoteStatus(e.target.value)}
+                                        className="w-full rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+                                      >
+                                        {Object.entries(expenseAuditStatuses).map(([value, label]) => (
+                                          <option key={`expense-note-status-${value}`} value={value} style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>{label}</option>
+                                        ))}
+                                      </select>
+                                      <textarea
+                                        aria-label="Expense audit note text"
+                                        value={expenseAuditNoteText}
+                                        onChange={(e) => setExpenseAuditNoteText(e.target.value)}
+                                        placeholder="Record the expense finding, evidence gap, or follow-up action."
+                                        rows={3}
+                                        className="w-full rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+                                      />
+                                      <div className="flex gap-2">
+                                        <button type="button" onClick={() => void submitExpenseAuditNote(row)} className="btn-secondary">Save Note</button>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setExpenseAuditNoteTargetKey("");
+                                            setExpenseAuditNoteStatus("needs_followup");
+                                            setExpenseAuditNoteText("");
+                                          }}
+                                          className="rounded-md border border-white/30 px-3 py-2 text-sm text-offwhite/90 transition hover:bg-white/10"
+                                        >
+                                          Cancel
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setExpenseAuditNoteTargetKey(rowKey);
+                                        setExpenseAuditNoteStatus(row.latest_status ?? "needs_followup");
+                                        setExpenseAuditNoteText("");
+                                      }}
+                                      className="rounded-md border border-gold/40 px-3 py-1.5 text-xs text-gold hover:bg-gold/10"
+                                    >
+                                      Add Auditor Note
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {expenseAuditRows.length === 0 && (
+                      <tr><td colSpan={7} className="px-4 py-6 text-center text-mist/80">No expense findings for the current filters.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <div className="mt-4 flex items-center justify-between text-xs text-mist/80">
+                <span>Page {expenseAuditPage} of {expenseAuditLastPage} | Total {expenseAuditTotal}</span>
+                <div className="flex gap-2">
+                  <button type="button" className="btn-secondary" disabled={expenseAuditPage <= 1 || loading} onClick={() => void fetchExpenseAuditFindings(Math.max(1, expenseAuditPage - 1))}>Prev</button>
+                  <button type="button" className="btn-secondary" disabled={expenseAuditPage >= expenseAuditLastPage || loading} onClick={() => void fetchExpenseAuditFindings(Math.min(expenseAuditLastPage, expenseAuditPage + 1))}>Next</button>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {activeTab === "expense-report" && canInputFinance && (
+        <div className="mb-6 rounded-xl border border-white/20 bg-white/10 p-4">
+          <h2 className="mb-2 font-heading text-2xl text-offwhite">Treasurer Expense Report Preview</h2>
+          <p className="mb-3 text-sm text-mist/85">
+            This is a live, unsaved reporting view for expenses by account, payee, and category. Review the filtered total, then share externally by screenshot if needed.
+          </p>
+          <div className="mb-4 grid gap-3 md:grid-cols-3">
+            <select
+              aria-label="Expense report category"
+              value={expenseReportCategoryFilter}
+              onChange={(e) => setExpenseReportCategoryFilter(e.target.value)}
+              className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+            >
+              <option value="" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>All Expense Categories</option>
+              {EXPENSE_CATEGORY_OPTIONS.map((item) => (
+                <option key={`expense-report-category-${item.value}`} value={item.value} style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>{item.label}</option>
+              ))}
+            </select>
+            <select
+              aria-label="Expense report account"
+              value={expenseReportAccountFilter}
+              onChange={(e) => setExpenseReportAccountFilter(e.target.value)}
+              className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+            >
+              <option value="" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>All Accounts</option>
+              {financeAccounts.map((account) => (
+                <option key={`expense-report-account-${account.id}`} value={String(account.id)} style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>{account.account_label}</option>
+              ))}
+            </select>
+            <input
+              aria-label="Expense report search"
+              value={expenseReportSearch}
+              onChange={(e) => setExpenseReportSearch(e.target.value)}
+              placeholder="Search remarks, support, or approval"
+              className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+            />
+            <input
+              aria-label="Expense report payee filter"
+              value={expenseReportPayeeFilter}
+              onChange={(e) => setExpenseReportPayeeFilter(e.target.value)}
+              placeholder="Payee contains..."
+              className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+            />
+            <input
+              aria-label="Expense report from date"
+              type="date"
+              value={expenseReportDateFrom}
+              onChange={(e) => setExpenseReportDateFrom(e.target.value)}
+              className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+            />
+            <input
+              aria-label="Expense report to date"
+              type="date"
+              value={expenseReportDateTo}
+              onChange={(e) => setExpenseReportDateTo(e.target.value)}
+              className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+            />
+            <div className="md:col-span-3 flex gap-2">
+              <button type="button" onClick={() => void fetchExpenseReportPreview(1)} className="btn-secondary">Generate View</button>
+              <button
+                type="button"
+                onClick={() => {
+                  setExpenseReportCategoryFilter("");
+                  setExpenseReportAccountFilter("");
+                  setExpenseReportSearch("");
+                  setExpenseReportPayeeFilter("");
+                  setExpenseReportDateFrom("");
+                  setExpenseReportDateTo("");
+                  setExpenseReportLoaded(false);
+                }}
+                className="rounded-md border border-white/30 px-3 py-2 text-sm text-offwhite/90 transition hover:bg-white/10"
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+
+          {error && errorContext === "expense-report" && (
+            <p className="mb-4 rounded-md border border-red-300/30 bg-red-400/10 px-4 py-2 text-sm text-red-200">{error}</p>
+          )}
+
+          {!expenseReportLoaded ? (
+            <div className="rounded-md border border-white/20 bg-white/5 px-4 py-8 text-center text-sm text-mist/80">
+              Click Generate View to load a screenshot-ready expense summary.
+            </div>
+          ) : (
+            <>
+              <div className="mb-4 grid gap-3 md:grid-cols-3">
+                <div className="rounded-lg border border-gold/20 bg-gold/10 p-4">
+                  <p className="text-xs uppercase tracking-[0.2em] text-gold-soft">Expense Total</p>
+                  <p className="mt-2 text-lg font-semibold text-offwhite">{money(expenseReportTotal)}</p>
+                </div>
+                <div className="rounded-lg border border-gold/20 bg-gold/10 p-4">
+                  <p className="text-xs uppercase tracking-[0.2em] text-gold-soft">Records</p>
+                  <p className="mt-2 text-lg font-semibold text-offwhite">{expenseReportCount}</p>
+                </div>
+                <div className="rounded-lg border border-gold/20 bg-gold/10 p-4">
+                  <p className="text-xs uppercase tracking-[0.2em] text-gold-soft">Primary Account</p>
+                  <p className="mt-2 text-lg font-semibold text-offwhite">
+                    {financeAccounts.find((account) => String(account.id) === expenseReportAccountFilter)?.account_label ?? "Mixed"}
+                  </p>
+                </div>
+              </div>
+              <div className="mb-4 rounded-lg border border-white/20 bg-white/5 p-4">
+                <p className="mb-3 text-xs uppercase tracking-[0.2em] text-gold-soft">Top Payees By Filtered Total</p>
+                <VerticalBarChart items={expenseReportGraph} valueFormatter={(value) => money(value)} emptyText="No expense data to graph for current filters." />
+              </div>
+              <div className="overflow-x-auto rounded-lg border border-white/20">
+                <table className="min-w-full text-sm text-offwhite">
+                  <thead className="bg-navy/70 text-gold-soft">
+                    <tr>
+                      <th className="px-4 py-3 text-left">Date</th>
+                      <th className="px-4 py-3 text-left">Category</th>
+                      <th className="px-4 py-3 text-left">Account</th>
+                      <th className="px-4 py-3 text-left">Payee</th>
+                      <th className="px-4 py-3 text-left">Amount</th>
+                      <th className="px-4 py-3 text-left">Support</th>
+                      <th className="px-4 py-3 text-left">Approval</th>
+                      <th className="px-4 py-3 text-left">Remarks</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {expenseReportRows.map((row) => (
+                      <tr key={`expense-report-${row.id}`} className="border-b border-white/15">
+                        <td className="px-4 py-3">{row.expense_date}</td>
+                        <td className="px-4 py-3">{row.category_label}</td>
+                        <td className="px-4 py-3">{row.finance_account?.account_label ?? "-"}</td>
+                        <td className="px-4 py-3">{row.payee_name ?? "-"}</td>
+                        <td className={`px-4 py-3 ${row.amount < 0 ? "text-emerald-200" : "text-red-200"}`}>{money(row.amount)}</td>
+                        <td className="px-4 py-3">{row.support_reference ?? "-"}</td>
+                        <td className="px-4 py-3">{row.approval_reference ?? "-"}</td>
+                        <td className="px-4 py-3">{row.note ?? "-"}</td>
+                      </tr>
+                    ))}
+                    {expenseReportRows.length === 0 && (
+                      <tr><td colSpan={8} className="px-4 py-6 text-center text-mist/80">No expense rows match the current report filters.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <div className="mt-4 flex items-center justify-between text-xs text-mist/80">
+                <span>Page {expenseReportPage} of {expenseReportLastPage} | Total {expenseReportCount}</span>
+                <div className="flex gap-2">
+                  <button type="button" className="btn-secondary" disabled={expenseReportPage <= 1 || loading} onClick={() => void fetchExpenseReportPreview(Math.max(1, expenseReportPage - 1))}>Prev</button>
+                  <button type="button" className="btn-secondary" disabled={expenseReportPage >= expenseReportLastPage || loading} onClick={() => void fetchExpenseReportPreview(Math.min(expenseReportLastPage, expenseReportPage + 1))}>Next</button>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
       {activeTab === "selected-member" && canViewFinance && selectedMember && (
         <div className="mb-6 rounded-xl border border-white/20 bg-white/10 p-4">
           <h2 className="mb-2 font-heading text-2xl text-offwhite">Selected: {nameOf(selectedMember)}</h2>
           <p className="mb-4 text-sm text-mist/85">
             Total Contributions: <span className="font-semibold text-gold-soft">{money(totalAmount)}</span>
           </p>
+          {canInputFinance && (
+            <div className="mb-4 rounded-lg border border-gold/20 bg-gold/10 p-4 text-sm text-mist/90">
+              Treasurer cue: once saved, a contribution stays in the ledger. If a value was encoded incorrectly, use <span className="font-semibold text-gold-soft">Reverse Entry</span> with required remarks so the original row stays visible while the total is offset.
+            </div>
+          )}
           <div className="mb-4 grid gap-3 md:grid-cols-3">
             <select
               aria-label="Filter selected member contributions by type"
@@ -924,10 +3051,38 @@ export default function Contributions() {
               <option value="" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>All Months</option>
               {MONTH_OPTIONS.map((month) => (
                 <option key={`sel-month-${month.value}`} value={month.value} style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>
-                  {month.label}
+                {month.label}
                 </option>
               ))}
             </select>
+            <input
+              aria-label="Filter selected member project contributions by project name"
+              value={selectedProjectFilter}
+              onChange={(e) => setSelectedProjectFilter(e.target.value)}
+              placeholder="Project name contains..."
+              className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+            />
+            <input
+              aria-label="Filter selected member alalayang contributions by recipient"
+              value={selectedRecipientFilter}
+              onChange={(e) => setSelectedRecipientFilter(e.target.value)}
+              placeholder="Alalayang recipient contains..."
+              className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+            />
+            <input
+              aria-label="Filter selected member contributions from date"
+              type="date"
+              value={selectedDateFromFilter}
+              onChange={(e) => setSelectedDateFromFilter(e.target.value)}
+              className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+            />
+            <input
+              aria-label="Filter selected member contributions to date"
+              type="date"
+              value={selectedDateToFilter}
+              onChange={(e) => setSelectedDateToFilter(e.target.value)}
+              className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+            />
           </div>
           <p className="mb-4 text-sm text-mist/85">
             Filtered Total: <span className="font-semibold text-gold-soft">{money(filteredSelectedTotal)}</span>
@@ -975,6 +3130,19 @@ export default function Contributions() {
                 step="0.01"
                 className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
               />
+              <select
+                aria-label="Contribution account"
+                value={contributionAccountId}
+                onChange={(e) => setContributionAccountId(e.target.value)}
+                className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+              >
+                <option value="" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Select Treasury Account</option>
+                {financeAccounts.map((account) => (
+                  <option key={`contribution-account-${account.id}`} value={String(account.id)} style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>
+                    {account.account_label}
+                  </option>
+                ))}
+              </select>
               <input
                 aria-label="Contribution recipient indicator"
                 value={recipientIndicatorInput}
@@ -982,11 +3150,14 @@ export default function Contributions() {
                 placeholder="Recipient indicator (required for Alalayang Agila)"
                 className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
               />
+              <div className="rounded-md border border-white/15 bg-white/5 px-3 py-2 text-xs text-mist/80">
+                {contributionRemarksHint}
+              </div>
               <input
-                aria-label="Contribution note"
+                aria-label="Contribution remarks"
                 value={noteInput}
                 onChange={(e) => setNoteInput(e.target.value)}
-                placeholder="Note (optional)"
+                placeholder={contributionRemarksLabel}
                 className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite md:col-span-2"
               />
               <div className="md:col-span-2 flex gap-2">
@@ -1009,35 +3180,53 @@ export default function Contributions() {
                   <th className="px-4 py-3 text-left">Date</th>
                   <th className="px-4 py-3 text-left">Category</th>
                   <th className="px-4 py-3 text-left">Amount</th>
+                  <th className="px-4 py-3 text-left">Account</th>
                   <th className="px-4 py-3 text-left">Recipient</th>
-                  <th className="px-4 py-3 text-left">Note</th>
+                  <th className="px-4 py-3 text-left">Remarks</th>
                   <th className="px-4 py-3 text-left">Encoded By</th>
-                  {canRequestEdit && <th className="px-4 py-3 text-left">Edit Request</th>}
+                  {canInputFinance && <th className="px-4 py-3 text-left">Action</th>}
                 </tr>
               </thead>
               <tbody>
                 {pagedSelectedRows.map((row) => (
                   <tr key={row.id} className="border-b border-white/15">
                     <td className="px-4 py-3">{row.contribution_date}</td>
-                    <td className="px-4 py-3">{row.category_label}</td>
-                    <td className="px-4 py-3">{money(row.amount)}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span>{row.category_label}</span>
+                        {row.is_reversal && <span className="rounded-full border border-red-300/40 px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] text-red-200">Reversal</span>}
+                        {row.reversed_by_entry_id && <span className="rounded-full border border-amber-300/40 px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] text-amber-200">Offset</span>}
+                      </div>
+                    </td>
+                    <td className={`px-4 py-3 ${Number(row.amount) < 0 ? "text-red-200" : ""}`}>{money(row.amount)}</td>
+                    <td className="px-4 py-3">{row.finance_account?.account_label ?? "-"}</td>
                     <td className="px-4 py-3">{row.recipient_indicator ?? "-"}</td>
                     <td className="px-4 py-3">{row.note ?? "-"}</td>
                     <td className="px-4 py-3">{row.encoded_by?.name ?? "System"}</td>
-                    {canRequestEdit && (
+                    {canInputFinance && (
                       <td className="px-4 py-3">
-                        <button
-                          className="rounded-md border border-gold/50 px-3 py-1 text-xs text-gold hover:bg-gold/10"
-                          onClick={() => setSelectedContributionId(row.id)}
-                        >
-                          Request Edit
-                        </button>
+                        {row.is_reversal ? (
+                          <span className="text-xs text-mist/70">Locked reversal</span>
+                        ) : row.reversed_by_entry_id ? (
+                          <span className="text-xs text-mist/70">Already offset</span>
+                        ) : (
+                          <button
+                            className="rounded-md border border-gold/50 px-3 py-1 text-xs text-gold hover:bg-gold/10"
+                            onClick={() => {
+                              setReverseContributionId(row.id);
+                              setReverseRemarks("");
+                              setReverseDate("");
+                            }}
+                          >
+                            Reverse Entry
+                          </button>
+                        )}
                       </td>
                     )}
                   </tr>
                 ))}
                 {filteredSelectedRows.length === 0 && (
-                  <tr><td colSpan={canRequestEdit ? 7 : 6} className="px-4 py-6 text-center text-mist/80">No contributions yet.</td></tr>
+                  <tr><td colSpan={canInputFinance ? 8 : 7} className="px-4 py-6 text-center text-mist/80">No contributions yet.</td></tr>
                 )}
               </tbody>
             </table>
@@ -1050,33 +3239,30 @@ export default function Contributions() {
             </div>
           </div>
 
-          {canRequestEdit && selectedContributionId && (
-            <div className="mt-4 grid gap-3 rounded-lg border border-white/20 bg-white/10 p-4 md:grid-cols-[180px_1fr_auto]">
+          {canInputFinance && reverseContributionId && (
+            <div className="mt-4 grid gap-3 rounded-lg border border-white/20 bg-white/10 p-4 md:grid-cols-[220px_1fr_auto]">
               <input
-                aria-label="Requested contribution amount"
-                value={requestAmount}
-                onChange={(e) => setRequestAmount(e.target.value)}
-                placeholder="Requested amount"
-                type="number"
-                min="0"
-                step="0.01"
+                aria-label="Reversal date"
+                value={reverseDate}
+                onChange={(e) => setReverseDate(e.target.value)}
+                type="date"
                 className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
               />
               <input
-                aria-label="Edit request reason"
-                value={requestReason}
-                onChange={(e) => setRequestReason(e.target.value)}
-                placeholder="Reason for edit"
+                aria-label="Reversal remarks"
+                value={reverseRemarks}
+                onChange={(e) => setReverseRemarks(e.target.value)}
+                placeholder="Required remarks for the reversal"
                 className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
               />
               <div className="flex gap-2">
-                <button className="btn-secondary" onClick={() => void submitEditRequest()}>Submit</button>
+                <button className="btn-secondary" onClick={() => void submitReversal()}>Save Reversal</button>
                 <button
                   type="button"
                   onClick={() => {
-                    setSelectedContributionId(null);
-                    setRequestAmount("");
-                    setRequestReason("");
+                    setReverseContributionId(null);
+                    setReverseRemarks("");
+                    setReverseDate("");
                   }}
                   className="rounded-md border border-white/30 px-3 py-2 text-sm text-offwhite/90 transition hover:bg-white/10"
                 >
@@ -1091,69 +3277,6 @@ export default function Contributions() {
       {activeTab === "selected-member" && canViewFinance && !selectedMember && (
         <div className="mb-6 rounded-xl border border-white/20 bg-white/10 px-4 py-8 text-center text-sm text-mist/80">
           Select a member from the Member Search tab first.
-        </div>
-      )}
-
-      {activeTab === "edit-requests" && canApproveEdits && (
-        <div className="rounded-xl border border-white/20 bg-white/10 p-4">
-          <h2 className="mb-3 font-heading text-2xl text-offwhite">Pending Edit Requests (Auditor)</h2>
-          <div className="mb-3">
-            <button type="button" onClick={() => void fetchEditRequests()} className="btn-secondary">Search</button>
-          </div>
-          {error && errorContext === "edit-requests" && (
-            <p className="mb-3 rounded-md border border-red-300/30 bg-red-400/10 px-4 py-2 text-sm text-red-200">{error}</p>
-          )}
-          {!editRequestsLoaded ? (
-            <div className="rounded-md border border-white/20 bg-white/5 px-4 py-8 text-center text-sm text-mist/80">
-              Click Search to load pending edit requests.
-            </div>
-          ) : (
-          <div className="overflow-x-auto rounded-lg border border-white/20">
-            <table className="min-w-full text-sm text-offwhite">
-              <thead className="bg-navy/70 text-gold-soft">
-                <tr>
-                  <th className="px-4 py-3 text-left">Member</th>
-                  <th className="px-4 py-3 text-left">Current Amount</th>
-                  <th className="px-4 py-3 text-left">Requested Amount</th>
-                  <th className="px-4 py-3 text-left">Reason</th>
-                  <th className="px-4 py-3 text-left">Requested By</th>
-                  <th className="px-4 py-3 text-left">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pagedEditRequests.map((row) => (
-                  <tr key={row.id} className="border-b border-white/15">
-                    <td className="px-4 py-3">{nameOf(row.contribution.member)}</td>
-                    <td className="px-4 py-3">{money(row.contribution.amount)}</td>
-                    <td className="px-4 py-3">{money(row.requested_amount)}</td>
-                    <td className="px-4 py-3">{row.reason}</td>
-                    <td className="px-4 py-3">{row.requested_by?.name ?? "Unknown"}</td>
-                    <td className="px-4 py-3 space-x-2">
-                      <button className="rounded-md border border-green-400/50 px-3 py-1 text-xs text-green-300 hover:bg-green-500/10" onClick={() => void approveRequest(row.id)}>
-                        Approve
-                      </button>
-                      <button className="rounded-md border border-red-400/50 px-3 py-1 text-xs text-red-300 hover:bg-red-500/10" onClick={() => void rejectRequest(row.id)}>
-                        Reject
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-                {editRequests.length === 0 && (
-                  <tr><td colSpan={6} className="px-4 py-6 text-center text-mist/80">No pending edit requests.</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-          )}
-          {editRequestsLoaded && (
-            <div className="mt-4 flex items-center justify-between text-xs text-mist/80">
-              <span>Page {editRequestsPage} of {editRequestsLastPage} | Total {editRequests.length}</span>
-              <div className="flex gap-2">
-                <button type="button" className="btn-secondary" disabled={editRequestsPage <= 1} onClick={() => setEditRequestsPage((current) => Math.max(1, current - 1))}>Prev</button>
-                <button type="button" className="btn-secondary" disabled={editRequestsPage >= editRequestsLastPage} onClick={() => setEditRequestsPage((current) => Math.min(editRequestsLastPage, current + 1))}>Next</button>
-              </div>
-            </div>
-          )}
         </div>
       )}
     </section>

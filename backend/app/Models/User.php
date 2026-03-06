@@ -111,7 +111,27 @@ class User extends Authenticatable
             return true;
         }
 
+        if ($this->hasFinancePermission($permission)) {
+            return true;
+        }
+
         return false;
+    }
+
+    private function hasFinancePermission(string $permission): bool
+    {
+        $financeRole = $this->finance_role;
+        if (!$financeRole) {
+            return false;
+        }
+
+        $permissions = match ($financeRole) {
+            RoleHierarchy::FINANCE_TREASURER => RoleHierarchy::treasurerPermissions(),
+            RoleHierarchy::FINANCE_AUDITOR => RoleHierarchy::auditorPermissions(),
+            default => [],
+        };
+
+        return in_array($permission, $permissions, true);
     }
 
     private function hasForumPermission(string $permission): bool

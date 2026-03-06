@@ -21,9 +21,7 @@ class RoleSeeder extends Seeder
             'members.delete' => 'Delete members',
             'roles.delegate' => 'Delegate roles to members/users',
             'finance.view' => 'View finance records',
-            'finance.input' => 'Input contribution records',
-            'finance.request_edit' => 'Request edits to locked contribution records',
-            'finance.approve_edits' => 'Approve/reject contribution edit requests',
+            'finance.input' => 'Create and reverse contribution, expense, and opening-balance ledger entries',
             'forum.view' => 'View forum threads and posts',
             'forum.create_thread' => 'Create forum threads',
             'forum.reply' => 'Reply to forum threads',
@@ -71,12 +69,12 @@ class RoleSeeder extends Seeder
 
         $treasurer = Role::query()->updateOrCreate(
             ['name' => 'treasurer'],
-            ['description' => 'Can input finance data and request edits']
+            ['description' => 'Can encode finance data and create reversal entries']
         );
 
         $auditor = Role::query()->updateOrCreate(
             ['name' => 'auditor'],
-            ['description' => 'Can approve/reject finance edit requests']
+            ['description' => 'Can review finance records and compliance reports']
         );
 
         $applicant = Role::query()->updateOrCreate(
@@ -149,7 +147,6 @@ class RoleSeeder extends Seeder
         $treasurer->permissions()->sync([
             $permissionIds['finance.view'],
             $permissionIds['finance.input'],
-            $permissionIds['finance.request_edit'],
             $permissionIds['members.view'],
             $permissionIds['forum.view'],
             $permissionIds['forum.create_thread'],
@@ -158,7 +155,6 @@ class RoleSeeder extends Seeder
 
         $auditor->permissions()->sync([
             $permissionIds['finance.view'],
-            $permissionIds['finance.approve_edits'],
             $permissionIds['members.view'],
             $permissionIds['forum.view'],
             $permissionIds['forum.create_thread'],

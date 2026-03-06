@@ -184,6 +184,24 @@ invariants:
     - no_secret_material_in_code
     - env_secret_management
     - portal_session_security_default(inactivity_logout_30m+single_active_session+forced_logout_notice)
+  finance:
+    - finance_accounts_first_class(bank+gcash+cash_on_hand)
+    - opening_balances_first_class(bank+gcash+cash_on_hand)
+    - contributions_immutable_after_save
+    - expenses_immutable_after_save
+    - opening_balances_immutable_after_save
+    - future_dated_opening_balances_do_not_affect_current_balance
+    - corrections_via_reversal_entries_only
+    - opening_balance_effective_date_required
+    - remarks_required_on_all_finance_writes
+    - expense_support_reference_tracking
+    - expense_approval_reference_tracking
+    - admin_finance_default_view_only
+    - treasurer_finance_input_and_reversal(contributions+expenses)
+    - auditor_finance_read_compliance_only(contributions+expenses+findings)
+    - treasurer_reporting_preview_display_only
+    - auditor_note_findings_visible_to_treasurer
+    - live_finance_reporting_covers_income_expenses_accounts
 
 execution_protocol:
   preflight:

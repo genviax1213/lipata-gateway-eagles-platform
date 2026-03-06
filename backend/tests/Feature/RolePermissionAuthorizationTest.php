@@ -6,6 +6,7 @@ use App\Models\Post;
 use App\Models\Role;
 use App\Models\Member;
 use App\Models\Contribution;
+use App\Models\FinanceAccount;
 use App\Models\User;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -21,6 +22,11 @@ class RolePermissionAuthorizationTest extends TestCase
         parent::setUp();
 
         $this->seed(RoleSeeder::class);
+    }
+
+    private function financeAccount(string $code = 'gcash'): FinanceAccount
+    {
+        return FinanceAccount::query()->where('code', $code)->firstOrFail();
     }
 
     public function test_member_cannot_create_post(): void
@@ -327,6 +333,7 @@ class RolePermissionAuthorizationTest extends TestCase
             'role_id' => $adminRole->id,
             'finance_role' => null,
         ]);
+        $account = $this->financeAccount();
         $target = Member::query()->create([
             'member_number' => 'M-ADM-VIEW-001',
             'first_name' => 'View',
@@ -342,8 +349,10 @@ class RolePermissionAuthorizationTest extends TestCase
             'member_id' => $target->id,
             'member_email' => $target->email,
             'amount' => 500,
+            'note' => 'Admin without finance role should be blocked.',
             'category' => 'monthly_contribution',
             'contribution_date' => now()->toDateString(),
+            'finance_account_id' => $account->id,
         ]);
 
         $response->assertStatus(403);
@@ -363,6 +372,7 @@ class RolePermissionAuthorizationTest extends TestCase
             'user_id' => $memberUser->id,
             'membership_status' => 'active',
         ]);
+        $account = $this->financeAccount();
 
         Contribution::query()->create([
             'member_id' => $member->id,
@@ -370,6 +380,7 @@ class RolePermissionAuthorizationTest extends TestCase
             'contribution_date' => now()->toDateString(),
             'amount' => 500,
             'note' => 'Monthly due',
+            'finance_account_id' => $account->id,
             'encoded_by_user_id' => $memberUser->id,
             'encoded_at' => now(),
         ]);
@@ -405,6 +416,7 @@ class RolePermissionAuthorizationTest extends TestCase
             'user_id' => $adminUser->id,
             'membership_status' => 'active',
         ]);
+        $account = $this->financeAccount();
 
         Contribution::query()->create([
             'member_id' => $member->id,
@@ -412,6 +424,7 @@ class RolePermissionAuthorizationTest extends TestCase
             'contribution_date' => now()->toDateString(),
             'amount' => 1000,
             'note' => 'Project support',
+            'finance_account_id' => $account->id,
             'encoded_by_user_id' => $adminUser->id,
             'encoded_at' => now(),
         ]);
@@ -431,12 +444,43 @@ class RolePermissionAuthorizationTest extends TestCase
             'role_id' => $adminRole->id,
             'finance_role' => 'treasurer',
         ]);
+        $account = $this->financeAccount('bank');
 
         Sanctum::actingAs($admin);
 
         $response = $this->getJson('/api/v1/finance/members');
 
         $response->assertStatus(200);
+
+        $target = Member::query()->create([
+            'member_number' => 'M-FIN-001',
+            'first_name' => 'Finance',
+            'middle_name' => null,
+            'last_name' => 'Target',
+            'email' => 'finance-target@example.com',
+            'membership_status' => 'active',
+        ]);
+
+        $this->postJson('/api/v1/finance/contributions', [
+            'member_id' => $target->id,
+            'member_email' => $target->email,
+            'amount' => 500,
+            'note' => 'Secondary treasurer contribution',
+            'category' => 'monthly_contribution',
+            'contribution_date' => now()->toDateString(),
+            'finance_account_id' => $account->id,
+        ])->assertCreated();
+
+        $this->postJson('/api/v1/finance/expenses', [
+            'category' => 'administrative_expense',
+            'expense_date' => now()->toDateString(),
+            'amount' => 200,
+            'note' => 'Printer ink',
+            'payee_name' => 'Office Hub',
+            'finance_account_id' => $account->id,
+        ])->assertCreated();
+
+        $this->getJson('/api/v1/finance/account-balances')->assertOk();
     }
 
     public function test_member_primary_role_cannot_receive_secondary_finance_role(): void

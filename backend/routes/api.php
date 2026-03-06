@@ -8,6 +8,9 @@ use App\Http\Controllers\MemberController;
 use App\Http\Controllers\AdminUserController;
 use App\Http\Controllers\MemberApplicationController;
 use App\Http\Controllers\FinanceController;
+use App\Http\Controllers\FinanceAuditController;
+use App\Http\Controllers\ExpenseAuditController;
+use App\Http\Controllers\FinanceExpenseController;
 use App\Http\Controllers\ForumController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\LogManagementController;
@@ -49,9 +52,10 @@ Route::prefix('v1')->group(function () {
         Route::delete('/admin/logs/archives/{archive}', [LogManagementController::class, 'deleteArchive'])->middleware('portal.permission:members.delete');
         Route::get('/dashboard/me', [DashboardController::class, 'me']);
 
-        Route::get('/cms/posts', [PostController::class, 'index'])->middleware('portal.permission:posts.create');
-        Route::get('/cms/posts/available-images', [PostController::class, 'availableImages'])->middleware('portal.permission:posts.create');
-        Route::get('/cms/posts/image-library', [PostController::class, 'imageLibrary'])->middleware('portal.permission:posts.create');
+        Route::get('/cms/posts', [PostController::class, 'index'])->middleware('portal.permission:posts.create,posts.update,posts.delete');
+        Route::get('/cms/posts/available-images', [PostController::class, 'availableImages'])->middleware('portal.permission:posts.create,posts.update,posts.delete');
+        Route::get('/cms/posts/image-library', [PostController::class, 'imageLibrary'])->middleware('portal.permission:posts.create,posts.update,posts.delete');
+        Route::delete('/cms/posts/image-library', [PostController::class, 'deleteLibraryImage'])->middleware('portal.permission:posts.delete');
         Route::post('/cms/posts', [PostController::class, 'store'])->middleware('portal.permission:posts.create');
         Route::post('/cms/uploads/inline-image', [PostController::class, 'uploadInlineImage'])->middleware('portal.permission:posts.create');
         Route::post('/cms/posts/{post}', [PostController::class, 'update'])->middleware('portal.permission:posts.update');
@@ -90,13 +94,24 @@ Route::prefix('v1')->group(function () {
 
         Route::get('/finance/members', [FinanceController::class, 'searchMembers'])->middleware('portal.permission:finance.view');
         Route::get('/finance/compliance', [FinanceController::class, 'complianceReport'])->middleware('portal.permission:finance.view');
+        Route::get('/finance/accounts', [FinanceExpenseController::class, 'accounts'])->middleware('portal.permission:finance.view');
+        Route::get('/finance/account-balances', [FinanceExpenseController::class, 'accountBalances'])->middleware('portal.permission:finance.view');
+        Route::get('/finance/opening-balances', [FinanceExpenseController::class, 'openingBalances'])->middleware('portal.permission:finance.view');
+        Route::post('/finance/opening-balances', [FinanceExpenseController::class, 'storeOpeningBalance'])->middleware('portal.permission:finance.input');
+        Route::post('/finance/opening-balances/{openingBalance}/reverse', [FinanceExpenseController::class, 'reverseOpeningBalance'])->middleware('portal.permission:finance.input');
+        Route::get('/finance/audit-findings', [FinanceAuditController::class, 'report'])->middleware('portal.permission:finance.view');
+        Route::post('/finance/audit-notes', [FinanceAuditController::class, 'storeNote'])->middleware('portal.permission:finance.view');
+        Route::get('/finance/expense-audit-findings', [ExpenseAuditController::class, 'report'])->middleware('portal.permission:finance.view');
+        Route::post('/finance/expense-audit-notes', [ExpenseAuditController::class, 'storeNote'])->middleware('portal.permission:finance.view');
         Route::get('/finance/my-contributions', [FinanceController::class, 'myContributions']);
         Route::get('/finance/members/{member}/contributions', [FinanceController::class, 'memberContributions'])->middleware('portal.permission:finance.view');
+        Route::get('/finance/report-preview', [FinanceController::class, 'reportPreview'])->middleware('portal.permission:finance.input');
         Route::post('/finance/contributions', [FinanceController::class, 'storeContribution'])->middleware('portal.permission:finance.input');
-        Route::post('/finance/contributions/{contribution}/edit-requests', [FinanceController::class, 'requestContributionEdit'])->middleware('portal.permission:finance.request_edit');
-        Route::get('/finance/edit-requests', [FinanceController::class, 'editRequests'])->middleware('portal.permission:finance.approve_edits');
-        Route::post('/finance/edit-requests/{contributionEditRequest}/approve', [FinanceController::class, 'approveEditRequest'])->middleware('portal.permission:finance.approve_edits');
-        Route::post('/finance/edit-requests/{contributionEditRequest}/reject', [FinanceController::class, 'rejectEditRequest'])->middleware('portal.permission:finance.approve_edits');
+        Route::post('/finance/contributions/{contribution}/reverse', [FinanceController::class, 'reverseContribution'])->middleware('portal.permission:finance.input');
+        Route::get('/finance/expenses', [FinanceExpenseController::class, 'expenses'])->middleware('portal.permission:finance.view');
+        Route::get('/finance/expense-report-preview', [FinanceExpenseController::class, 'reportPreview'])->middleware('portal.permission:finance.input');
+        Route::post('/finance/expenses', [FinanceExpenseController::class, 'storeExpense'])->middleware('portal.permission:finance.input');
+        Route::post('/finance/expenses/{expense}/reverse', [FinanceExpenseController::class, 'reverseExpense'])->middleware('portal.permission:finance.input');
 
         Route::get('/forum/threads', [ForumController::class, 'index'])->middleware('forum.permission:forum.view');
         Route::post('/forum/threads', [ForumController::class, 'storeThread'])->middleware('forum.permission:forum.create_thread');

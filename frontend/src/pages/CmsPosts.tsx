@@ -294,7 +294,10 @@ async function optimizeCroppedImageForUpload(
 
 export default function CmsPosts() {
   const { user } = useAuth();
-  const canManageCmsPosts = hasPermission(user, "posts.create");
+  const canManageCmsPosts =
+    hasPermission(user, "posts.create")
+    || hasPermission(user, "posts.update")
+    || hasPermission(user, "posts.delete");
   const canCreatePosts = hasPermission(user, "posts.create");
   const canUpdatePosts = hasPermission(user, "posts.update");
   const canDeletePosts = hasPermission(user, "posts.delete");
@@ -372,6 +375,14 @@ export default function CmsPosts() {
     return validationMessage || data?.message || `Request failed (${err.response?.status ?? "unknown"})`;
   }
 
+  function draftReferencesImage(image: AvailableCmsImage): boolean {
+    if (form.selected_image_path === image.path) {
+      return true;
+    }
+
+    return form.content.includes(image.url) || form.content.includes(image.path);
+  }
+
   async function fetchPosts(page = 1, overrides?: { q?: string; section?: string }) {
     const params = {
       page,
@@ -409,19 +420,89 @@ export default function CmsPosts() {
   }
 
   async function pickExistingInlineImage(): Promise<string | null> {
-    if (!form.selected_image_path) {
-      window.alert("Select and check an image from the image library panel first.");
-      return null;
+    setActiveTab("images");
+    setError("");
+    setMessage("Open Image Library and use 'Insert into article' on the image you want to reuse.");
+    if (!imagesLoaded) {
+      await runImageSearch();
+    }
+    return null;
+  }
+
+  function selectLibraryImageAsCover(image: AvailableCmsImage) {
+    setForm((prev) => ({
+      ...prev,
+      selected_image_path: image.path,
+      image: null,
+    }));
+    setProcessedImageMeta(null);
+    setSourceImage(null);
+    setCrop({ x: 0, y: 0, zoom: 1 });
+    setMessage(`Selected ${image.name} as the post cover image.`);
+    setError("");
+    setActiveTab("editor");
+  }
+
+  function insertLibraryImageIntoContent(image: AvailableCmsImage) {
+    const escapedName = image.name
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#39;");
+
+    setForm((prev) => ({
+      ...prev,
+      content: `${prev.content}${prev.content.trim() ? "<p></p>" : ""}<p><img src="${image.url}" alt="${escapedName}" /></p>`,
+    }));
+    setMessage(`Inserted ${image.name} into the article content.`);
+    setError("");
+    setActiveTab("editor");
+  }
+
+  async function deleteLibraryImage(image: AvailableCmsImage) {
+    if (!canDeletePosts) {
+      setError("You do not have permission to delete CMS images.");
+      return;
     }
 
-    const selected = availableImages.find((image) => image.path === form.selected_image_path);
-    if (!selected) {
-      window.alert("Selected library image is no longer available. Refreshing library.");
-      await fetchAvailableImages();
-      return null;
+    if (draftReferencesImage(image)) {
+      setError("This image is referenced in the current draft. Remove it from the draft before deleting it from the library.");
+      return;
     }
 
-    return selected.url;
+    const confirmed = window.confirm(`Delete ${image.name} from the image library?`);
+    if (!confirmed) return;
+
+    setError("");
+    setMessage("");
+
+    try {
+      await api.delete("/cms/posts/image-library", {
+        data: { path: image.path },
+      });
+
+      if (form.selected_image_path === image.path) {
+        setForm((prev) => ({ ...prev, selected_image_path: "" }));
+      }
+
+      setMessage(`${image.name} deleted from the image library.`);
+      if (imagesLoaded) {
+        await runImageSearch(imagesMeta.current_page);
+      }
+    } catch (err: unknown) {
+      setError(getApiErrorMessage(err));
+    }
+  }
+
+  async function copyImageUrl(image: AvailableCmsImage) {
+    try {
+      await navigator.clipboard.writeText(image.url);
+      setError("");
+      setMessage(`${image.name} URL copied.`);
+    } catch {
+      setError("Unable to copy image URL in this browser.");
+    }
   }
 
   async function runPostSearch(page = 1) {
@@ -479,12 +560,6 @@ export default function CmsPosts() {
       setError("Unable to load image library.");
     }
   }
-
-  useEffect(() => {
-    if (!canManageCmsPosts) {
-      return;
-    }
-  }, [canManageCmsPosts]);
 
   useEffect(() => {
     if (!form.image) {
@@ -878,19 +953,52 @@ export default function CmsPosts() {
             <span className="ml-2 text-gold-soft">(Rich text enabled: headings, links, lists, inline images)</span>
           </p>
 
-          <input
-            aria-label="Post image upload"
-            type="file"
-            accept="image/*"
-            onChange={(e) => {
-              const file = e.target.files?.[0] ?? null;
-              if (file) {
-                setForm((prev) => ({ ...prev, selected_image_path: "" }));
-              }
-              void handleImageChange(file);
-            }}
-            className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite md:col-span-2"
-          />
+          <label className="md:col-span-2 text-sm text-offwhite">
+            <span className="mb-2 block font-medium">Upload Cover Image</span>
+            <span className="mb-3 block text-xs text-mist/75">
+              This image is used as the post card/header image. Inline article images should be inserted from the rich text editor toolbar.
+            </span>
+            <input
+              aria-label="Post cover image upload"
+              type="file"
+              accept="image/*"
+              onChange={(e) => {
+                const file = e.target.files?.[0] ?? null;
+                if (file) {
+                  setForm((prev) => ({ ...prev, selected_image_path: "" }));
+                }
+                void handleImageChange(file);
+              }}
+              className="w-full rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+            />
+          </label>
+          {selectedLibraryImage && (
+            <div className="md:col-span-2 rounded-lg border border-gold/30 bg-gold/10 p-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <img
+                  src={selectedLibraryImage.url}
+                  alt={selectedLibraryImage.name}
+                  className="h-16 w-28 rounded border border-white/20 object-cover"
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm text-offwhite">
+                    {editingId ? "Selected replacement cover image" : "Selected library cover image"}: {selectedLibraryImage.name}
+                  </p>
+                  <p className="text-xs text-mist/80">
+                    {selectedLibraryImage.is_linked ? "Reusable linked image" : "Reusable library image"}
+                    {editingId ? " · Current saved cover remains active until you save this replacement." : ""}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setForm((prev) => ({ ...prev, selected_image_path: "" }))}
+                  className="rounded-md border border-white/30 px-3 py-1.5 text-xs text-offwhite"
+                >
+                  {editingId ? "Clear replacement" : "Clear"}
+                </button>
+              </div>
+            </div>
+          )}
           {sourceImage && sourceImageUrl && (
             <div className="md:col-span-2 rounded-lg border border-white/20 bg-white/5 p-3">
               <p className="mb-2 text-xs text-mist/80">
@@ -1046,6 +1154,9 @@ export default function CmsPosts() {
             <p className="text-sm text-mist/80">No images found for the current search.</p>
           ) : (
             <>
+              <div className="mb-4 rounded-lg border border-white/20 bg-white/5 p-3 text-sm text-mist/80">
+                Use the library to reuse uploaded images across posts. Cover images can be attached directly. Inline images can be inserted into the article content. Only unlinked images can be deleted.
+              </div>
               <div className="grid gap-3 md:grid-cols-2">
                 {availableImages.map((image) => (
                   <label
@@ -1054,21 +1165,10 @@ export default function CmsPosts() {
                   >
                     <div className="flex items-start gap-3">
                       <input
-                        type="checkbox"
+                        type="radio"
+                        name="selected-library-cover-image"
                         checked={form.selected_image_path === image.path}
-                        onChange={(e) => {
-                          const checked = e.target.checked;
-                          setForm((prev) => ({
-                            ...prev,
-                            selected_image_path: checked ? image.path : "",
-                            image: checked ? null : prev.image,
-                          }));
-                          if (checked) {
-                            setProcessedImageMeta(null);
-                            setSourceImage(null);
-                            setCrop({ x: 0, y: 0, zoom: 1 });
-                          }
-                        }}
+                        onChange={() => selectLibraryImageAsCover(image)}
                         className="mt-1"
                       />
                       <img
@@ -1092,6 +1192,40 @@ export default function CmsPosts() {
                         ) : (
                           <p className="mt-1 text-[11px] text-mist/65">No current link.</p>
                         )}
+                        {draftReferencesImage(image) && (
+                          <p className="mt-1 text-[11px] text-gold-soft">Used in the current draft.</p>
+                        )}
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => selectLibraryImageAsCover(image)}
+                            className="rounded-md border border-gold/40 px-2.5 py-1 text-[11px] text-gold-soft"
+                          >
+                            Use as cover image
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => insertLibraryImageIntoContent(image)}
+                            className="rounded-md border border-white/30 px-2.5 py-1 text-[11px] text-offwhite"
+                          >
+                            Insert into article
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void copyImageUrl(image)}
+                            className="rounded-md border border-white/30 px-2.5 py-1 text-[11px] text-offwhite"
+                          >
+                            Copy URL
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void deleteLibraryImage(image)}
+                            disabled={image.is_linked || !canDeletePosts || draftReferencesImage(image)}
+                            className="rounded-md border border-red-400/40 px-2.5 py-1 text-[11px] text-red-200 disabled:cursor-not-allowed disabled:opacity-45"
+                          >
+                            Delete
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </label>

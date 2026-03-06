@@ -37,7 +37,6 @@ class RoleHierarchy
         return [
             Permissions::FINANCE_VIEW,
             Permissions::FINANCE_INPUT,
-            Permissions::FINANCE_REQUEST_EDIT,
         ];
     }
 
@@ -48,7 +47,6 @@ class RoleHierarchy
     {
         return [
             Permissions::FINANCE_VIEW,
-            Permissions::FINANCE_APPROVE_EDITS,
         ];
     }
 

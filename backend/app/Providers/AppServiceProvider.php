@@ -4,7 +4,6 @@ namespace App\Providers;
 
 use App\Models\ApplicationDocument;
 use App\Models\Contribution;
-use App\Models\ContributionEditRequest;
 use App\Models\ForumPost;
 use App\Models\ForumThread;
 use App\Models\Member;
@@ -13,7 +12,6 @@ use App\Models\Post;
 use App\Models\User;
 use App\Policies\AdminUserPolicy;
 use App\Policies\ApplicationDocumentPolicy;
-use App\Policies\ContributionEditRequestPolicy;
 use App\Policies\ContributionPolicy;
 use App\Policies\ForumPostPolicy;
 use App\Policies\ForumThreadPolicy;
@@ -48,7 +46,6 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(User::class, AdminUserPolicy::class);
         Gate::policy(Post::class, PostPolicy::class);
         Gate::policy(Contribution::class, ContributionPolicy::class);
-        Gate::policy(ContributionEditRequest::class, ContributionEditRequestPolicy::class);
         Gate::policy(ForumThread::class, ForumThreadPolicy::class);
         Gate::policy(ForumPost::class, ForumPostPolicy::class);
 

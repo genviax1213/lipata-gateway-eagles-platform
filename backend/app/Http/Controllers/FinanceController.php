@@ -3,7 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Contribution;
-use App\Models\ContributionEditRequest;
+use App\Models\FinanceAccount;
 use App\Models\Member;
 use App\Models\Post;
 use App\Models\User;
@@ -22,6 +22,15 @@ class FinanceController extends Controller
         'alalayang_agila_contribution' => 'Alalayang Agila Contribution',
         'project_contribution' => 'Project Contribution',
         'extra_contribution' => 'Extra Contribution',
+    ];
+
+    private const EXPENSE_CATEGORY_LABELS = [
+        'administrative_expense' => 'Administrative Expense',
+        'event_expense' => 'Event Expense',
+        'project_expense' => 'Project Expense',
+        'aid_expense' => 'Aid Expense',
+        'reimbursement_expense' => 'Reimbursement Expense',
+        'misc_expense' => 'Miscellaneous Expense',
     ];
 
     private function resolveActorMember(User $user): ?Member
@@ -58,6 +67,26 @@ class FinanceController extends Controller
         return self::CATEGORY_LABELS;
     }
 
+    private function expenseCategoryLabels(): array
+    {
+        return self::EXPENSE_CATEGORY_LABELS;
+    }
+
+    private function serializeFinanceAccount(?FinanceAccount $account): ?array
+    {
+        if (!$account) {
+            return null;
+        }
+
+        return [
+            'id' => $account->id,
+            'code' => $account->code,
+            'name' => $account->name,
+            'account_type' => $account->account_type,
+            'account_label' => $account->name,
+        ];
+    }
+
     private function canViewComplianceForAllMembers(User $user): bool
     {
         $user->loadMissing('role:id,name');
@@ -80,6 +109,8 @@ class FinanceController extends Controller
             ->with([
                 'encodedBy:id,name',
                 'beneficiaryMember:id,first_name,middle_name,last_name',
+                'financeAccount:id,code,name,account_type',
+                'reversals:id,reversal_of_contribution_id',
             ])
             ->latest('contribution_date')
             ->latest('encoded_at')
@@ -154,6 +185,10 @@ class FinanceController extends Controller
                 'beneficiary_member_id' => $row->beneficiary_member_id,
                 'recipient_name' => $row->recipient_name,
                 'recipient_indicator' => $beneficiaryName,
+                'finance_account' => $this->serializeFinanceAccount($row->financeAccount),
+                'is_reversal' => $row->reversal_of_contribution_id !== null,
+                'reversal_of_contribution_id' => $row->reversal_of_contribution_id,
+                'reversed_by_entry_id' => $row->reversals->first()?->id,
                 'encoded_at' => optional($row->encoded_at)?->toISOString(),
                 'encoded_by' => $row->encodedBy ? ['id' => $row->encodedBy->id, 'name' => $row->encodedBy->name] : null,
             ];
@@ -386,6 +421,153 @@ class FinanceController extends Controller
         ]);
     }
 
+    public function reportPreview(Request $request)
+    {
+        $validated = $request->validate([
+            'category' => 'required|in:monthly_contribution,alalayang_agila_contribution,project_contribution,extra_contribution',
+            'finance_account_id' => 'nullable|integer|exists:finance_accounts,id',
+            'search' => 'nullable|string|max:80',
+            'year' => 'nullable|integer|min:2000|max:2100',
+            'month' => 'nullable|digits:2|in:01,02,03,04,05,06,07,08,09,10,11,12',
+            'date_from' => 'nullable|date',
+            'date_to' => 'nullable|date',
+            'project_query' => 'nullable|string|max:80',
+            'recipient_query' => 'nullable|string|max:80',
+            'page' => 'nullable|integer|min:1',
+        ]);
+
+        $category = (string) $validated['category'];
+        $search = Str::of((string) ($validated['search'] ?? ''))->trim()->value();
+        $projectQuery = Str::of((string) ($validated['project_query'] ?? ''))->trim()->value();
+        $recipientQuery = Str::of((string) ($validated['recipient_query'] ?? ''))->trim()->value();
+
+        $query = Contribution::query()
+            ->where('category', $category)
+            ->with([
+                'member:id,member_number,first_name,middle_name,last_name,email',
+                'encodedBy:id,name',
+                'beneficiaryMember:id,first_name,middle_name,last_name',
+                'financeAccount:id,code,name,account_type',
+                'reversals:id,reversal_of_contribution_id',
+            ]);
+
+        if (isset($validated['finance_account_id'])) {
+            $query->where('finance_account_id', (int) $validated['finance_account_id']);
+        }
+
+        if ($search !== '') {
+            $query->where(function ($builder) use ($search): void {
+                $builder
+                    ->where('note', 'like', "%{$search}%")
+                    ->orWhere('recipient_name', 'like', "%{$search}%")
+                    ->orWhereHas('member', function ($memberQuery) use ($search): void {
+                        $memberQuery
+                            ->where('member_number', 'like', "%{$search}%")
+                            ->orWhere('first_name', 'like', "%{$search}%")
+                            ->orWhere('middle_name', 'like', "%{$search}%")
+                            ->orWhere('last_name', 'like', "%{$search}%")
+                            ->orWhere('email', 'like', "%{$search}%");
+                    });
+            });
+        }
+
+        if (isset($validated['year'])) {
+            $query->whereYear('contribution_date', (int) $validated['year']);
+        }
+
+        if (isset($validated['month'])) {
+            $query->whereMonth('contribution_date', (string) $validated['month']);
+        }
+
+        if (!empty($validated['date_from'])) {
+            $query->whereDate('contribution_date', '>=', (string) $validated['date_from']);
+        }
+
+        if (!empty($validated['date_to'])) {
+            $query->whereDate('contribution_date', '<=', (string) $validated['date_to']);
+        }
+
+        if ($category === 'project_contribution' && $projectQuery !== '') {
+            $query->where('note', 'like', "%{$projectQuery}%");
+        }
+
+        if ($category === 'alalayang_agila_contribution' && $recipientQuery !== '') {
+            $query->where(function ($builder) use ($recipientQuery): void {
+                $builder
+                    ->where('recipient_name', 'like', "%{$recipientQuery}%")
+                    ->orWhereHas('beneficiaryMember', function ($memberQuery) use ($recipientQuery): void {
+                        $memberQuery
+                            ->where('first_name', 'like', "%{$recipientQuery}%")
+                            ->orWhere('middle_name', 'like', "%{$recipientQuery}%")
+                            ->orWhere('last_name', 'like', "%{$recipientQuery}%");
+                    });
+            });
+        }
+
+        $totalAmount = (float) (clone $query)->sum('amount');
+        $totalRecords = (int) (clone $query)->count();
+
+        $rows = $query
+            ->latest('contribution_date')
+            ->latest('encoded_at')
+            ->latest('id')
+            ->paginate(10);
+
+        $labels = $this->categoryLabels();
+
+        $rows->setCollection(
+            $rows->getCollection()->map(function (Contribution $row) use ($labels) {
+                $member = $row->member;
+                $beneficiaryName = null;
+                if ($row->beneficiaryMember) {
+                    $beneficiaryName = $this->formatMemberName($row->beneficiaryMember);
+                } elseif ($row->recipient_name) {
+                    $beneficiaryName = $row->recipient_name;
+                }
+
+                return [
+                    'id' => $row->id,
+                    'member' => $member ? [
+                        'id' => $member->id,
+                        'member_number' => $member->member_number,
+                        'name' => $this->formatMemberName($member),
+                        'email' => $member->email,
+                    ] : null,
+                    'amount' => (float) $row->amount,
+                    'note' => $row->note,
+                    'category' => $row->category,
+                    'category_label' => $labels[$row->category] ?? $row->category,
+                    'contribution_date' => optional($row->contribution_date)?->toDateString() ?? (string) $row->contribution_date,
+                    'recipient_indicator' => $beneficiaryName,
+                    'finance_account' => $this->serializeFinanceAccount($row->financeAccount),
+                    'is_reversal' => $row->reversal_of_contribution_id !== null,
+                    'reversed_by_entry_id' => $row->reversals->first()?->id,
+                    'encoded_by' => $row->encodedBy ? ['id' => $row->encodedBy->id, 'name' => $row->encodedBy->name] : null,
+                ];
+            })
+        );
+
+        return response()->json([
+            'filters' => [
+                'category' => $category,
+                'finance_account_id' => isset($validated['finance_account_id']) ? (int) $validated['finance_account_id'] : null,
+                'search' => $search,
+                'year' => $validated['year'] ?? null,
+                'month' => $validated['month'] ?? null,
+                'date_from' => $validated['date_from'] ?? null,
+                'date_to' => $validated['date_to'] ?? null,
+                'project_query' => $projectQuery !== '' ? $projectQuery : null,
+                'recipient_query' => $recipientQuery !== '' ? $recipientQuery : null,
+            ],
+            'category_label' => $labels[$category] ?? $category,
+            'total_amount' => $totalAmount,
+            'total_records' => $totalRecords,
+            'data' => $rows->items(),
+            'current_page' => $rows->currentPage(),
+            'last_page' => $rows->lastPage(),
+        ]);
+    }
+
     public function memberContributions(Request $request, Member $member)
     {
         $this->authorize('viewFinancialContributions', $member);
@@ -414,12 +596,13 @@ class FinanceController extends Controller
             'member_id' => 'nullable|integer|exists:members,id|required_without:member_email',
             'member_email' => 'nullable|email|max:255|required_without:member_id',
             'amount' => 'required|numeric|min:0.01',
-            'note' => 'nullable|string|max:255',
+            'note' => 'required|string|max:255',
             'category' => 'required|in:monthly_contribution,alalayang_agila_contribution,project_contribution,extra_contribution',
             'contribution_date' => 'nullable|date',
             'beneficiary_member_id' => 'nullable|integer|exists:members,id',
             'beneficiary_member_email' => 'nullable|email|max:255',
             'recipient_name' => 'nullable|string|max:255',
+            'finance_account_id' => 'required|integer|exists:finance_accounts,id',
         ]);
 
         $member = $this->resolveMemberIdentity(
@@ -464,9 +647,10 @@ class FinanceController extends Controller
             'category' => $validated['category'],
             'contribution_date' => $validated['contribution_date'] ?? now()->toDateString(),
             'amount' => $validated['amount'],
-            'note' => isset($validated['note']) ? TextCase::title($validated['note']) : null,
+            'note' => TextCase::title($validated['note']),
             'beneficiary_member_id' => $beneficiary?->id,
             'recipient_name' => $recipientName,
+            'finance_account_id' => (int) $validated['finance_account_id'],
             'encoded_by_user_id' => $request->user()->id,
             'encoded_at' => now(),
         ]);
@@ -475,124 +659,63 @@ class FinanceController extends Controller
             $this->publishExtraContributionNews($created, $request->user());
         }
 
-        return response()->json($created->load(['encodedBy:id,name', 'beneficiaryMember:id,first_name,middle_name,last_name']), 201);
+        return response()->json($created->load(['encodedBy:id,name', 'beneficiaryMember:id,first_name,middle_name,last_name', 'financeAccount:id,code,name,account_type']), 201);
     }
 
-    public function requestContributionEdit(Request $request, Contribution $contribution)
+    public function reverseContribution(Request $request, Contribution $contribution)
     {
-        $this->authorize('requestEdit', $contribution);
+        $this->authorize('reverse', $contribution);
 
         $validated = $request->validate([
-            'requested_amount' => 'required|numeric|min:0.01',
-            'reason' => 'required|string|max:255',
+            'remarks' => 'required|string|max:255',
+            'contribution_date' => 'nullable|date',
+            'finance_account_id' => 'required|integer|exists:finance_accounts,id',
         ]);
 
-        $pending = ContributionEditRequest::query()
-            ->where('contribution_id', $contribution->id)
-            ->where('status', 'pending')
-            ->exists();
-
-        if ($pending) {
+        if ($contribution->reversal_of_contribution_id !== null) {
             return response()->json([
-                'message' => 'There is already a pending edit request for this contribution.',
+                'message' => 'A reversal entry cannot be reversed again.',
             ], 422);
         }
 
-        $created = ContributionEditRequest::query()->create([
-            'contribution_id' => $contribution->id,
-            'requested_amount' => $validated['requested_amount'],
-            'reason' => $validated['reason'],
-            'requested_by_user_id' => $request->user()->id,
-            'status' => 'pending',
+        $contribution->loadMissing('reversals:id,reversal_of_contribution_id');
+        if ($contribution->reversals->isNotEmpty()) {
+            return response()->json([
+                'message' => 'This contribution already has a reversal entry.',
+            ], 422);
+        }
+
+        if ($contribution->finance_account_id !== null && (int) $validated['finance_account_id'] !== (int) $contribution->finance_account_id) {
+            return response()->json([
+                'message' => 'Reversal must use the same finance account as the original contribution.',
+            ], 422);
+        }
+
+        $created = Contribution::query()->create([
+            'member_id' => $contribution->member_id,
+            'category' => $contribution->category,
+            'contribution_date' => $validated['contribution_date'] ?? now()->toDateString(),
+            'amount' => round(((float) $contribution->amount) * -1, 2),
+            'note' => TextCase::title($validated['remarks']),
+            'beneficiary_member_id' => $contribution->beneficiary_member_id,
+            'recipient_name' => $contribution->recipient_name,
+            'finance_account_id' => (int) $validated['finance_account_id'],
+            'reversal_of_contribution_id' => $contribution->id,
+            'encoded_by_user_id' => $request->user()->id,
+            'encoded_at' => now(),
         ]);
 
-        return response()->json($created, 201);
-    }
-
-    public function editRequests(Request $request)
-    {
-        $this->authorize('viewEditRequests', ContributionEditRequest::class);
-
-        $status = (string) $request->query('status', 'pending');
-        $allowed = ['pending', 'approved', 'rejected'];
-        if (!in_array($status, $allowed, true)) {
-            $status = 'pending';
-        }
-
-        $rows = ContributionEditRequest::query()
-            ->with([
-                'requestedBy:id,name',
-                'reviewedBy:id,name',
-                'contribution.member:id,member_number,first_name,middle_name,last_name',
-            ])
-            ->where('status', $status)
-            ->latest('id')
-            ->paginate(20);
-
-        return response()->json($rows);
-    }
-
-    public function approveEditRequest(Request $request, ContributionEditRequest $contributionEditRequest)
-    {
-        $this->authorize('approve', $contributionEditRequest);
-
-        if ($contributionEditRequest->status !== 'pending') {
-            return response()->json(['message' => 'Edit request is already reviewed.'], 422);
-        }
-
-        $contribution = $contributionEditRequest->contribution;
-        $contribution->amount = $contributionEditRequest->requested_amount;
-        $contribution->save();
-
-        $contributionEditRequest->status = 'approved';
-        $contributionEditRequest->reviewed_by_user_id = $request->user()->id;
-        $contributionEditRequest->reviewed_at = now();
-        $contributionEditRequest->review_notes = null;
-        $contributionEditRequest->save();
-
-        Log::info('finance.edit_request_approved', [
+        Log::info('finance.contribution_reversed', [
             'actor_user_id' => $request->user()->id,
-            'request_id' => $contributionEditRequest->id,
             'contribution_id' => $contribution->id,
+            'reversal_contribution_id' => $created->id,
+            'remarks' => $created->note,
             'ip' => $request->ip(),
         ]);
 
         return response()->json([
-            'message' => 'Contribution edit request approved.',
-            'request' => $contributionEditRequest->fresh(),
-            'contribution' => $contribution->fresh(),
-        ]);
-    }
-
-    public function rejectEditRequest(Request $request, ContributionEditRequest $contributionEditRequest)
-    {
-        $this->authorize('reject', $contributionEditRequest);
-
-        if ($contributionEditRequest->status !== 'pending') {
-            return response()->json(['message' => 'Edit request is already reviewed.'], 422);
-        }
-
-        $validated = $request->validate([
-            'review_notes' => 'nullable|string|max:255',
-        ]);
-
-        $contributionEditRequest->status = 'rejected';
-        $contributionEditRequest->reviewed_by_user_id = $request->user()->id;
-        $contributionEditRequest->reviewed_at = now();
-        $contributionEditRequest->review_notes = $validated['review_notes'] ?? null;
-        $contributionEditRequest->save();
-
-        Log::info('finance.edit_request_rejected', [
-            'actor_user_id' => $request->user()->id,
-            'request_id' => $contributionEditRequest->id,
-            'contribution_id' => $contributionEditRequest->contribution_id,
-            'review_notes' => $contributionEditRequest->review_notes,
-            'ip' => $request->ip(),
-        ]);
-
-        return response()->json([
-            'message' => 'Contribution edit request rejected.',
-            'request' => $contributionEditRequest->fresh(),
-        ]);
+            'message' => 'Reversal entry recorded. The original amount is now offset in totals.',
+            'contribution' => $created->load(['encodedBy:id,name', 'beneficiaryMember:id,first_name,middle_name,last_name', 'financeAccount:id,code,name,account_type']),
+        ], 201);
     }
 }

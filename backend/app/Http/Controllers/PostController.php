@@ -149,6 +149,41 @@ class PostController extends Controller
         ]);
     }
 
+    public function deleteLibraryImage(Request $request)
+    {
+        $this->authorize('viewCmsIndex', Post::class);
+
+        if (!$request->user()->hasPermission('posts.delete')) {
+            return response()->json([
+                'message' => 'You do not have permission to delete CMS images.',
+            ], 403);
+        }
+
+        $validated = $request->validate([
+            'path' => 'required|string|max:255',
+        ]);
+
+        $path = $this->normalizeStorageImagePath($validated['path']);
+        if (!$path || !Storage::disk('public')->exists($path)) {
+            return response()->json([
+                'message' => 'Selected image was not found in the library.',
+            ], 404);
+        }
+
+        $usageIndex = $this->collectPostImageUsageIndex();
+        if (!empty($usageIndex[$path] ?? [])) {
+            return response()->json([
+                'message' => 'Linked images cannot be deleted. Remove the image from linked posts first.',
+            ], 422);
+        }
+
+        Storage::disk('public')->delete($path);
+
+        return response()->json([
+            'message' => 'Image deleted from library.',
+        ]);
+    }
+
     public function store(Request $request)
     {
         if ($response = $this->rejectIfPayloadTooLarge($request)) {
@@ -227,9 +262,6 @@ class PostController extends Controller
         }
 
         if ($request->hasFile('image')) {
-            if ($post->image_path) {
-                Storage::disk('public')->delete($post->image_path);
-            }
             $validated['image_path'] = ImageUploadOptimizer::storeOptimizedOrOriginal(
                 $request->file('image'),
                 'posts',
@@ -259,10 +291,6 @@ class PostController extends Controller
 
     public function destroy(Request $request, Post $post)
     {
-        if ($post->image_path) {
-            Storage::disk('public')->delete($post->image_path);
-        }
-
         $post->delete();
 
         return response()->json(['message' => 'Post deleted']);

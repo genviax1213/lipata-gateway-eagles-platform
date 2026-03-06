@@ -10,8 +10,8 @@ export const roleGlossary: Array<{ role: string; meaning: string }> = [
   { role: "Officer", meaning: "Operational leadership role with elevated management tasks." },
   { role: "Admin", meaning: "Platform administrator with broad governance authority." },
   { role: "Membership Chairman", meaning: "Owns applicant lifecycle review, notices, and stage progression." },
-  { role: "Treasurer", meaning: "Manages applicant fee requirements and payment logging." },
-  { role: "Auditor", meaning: "Reviews and approves finance edit requests." },
+  { role: "Treasurer", meaning: "Records finance entries and uses reversal rows to correct ledger mistakes." },
+  { role: "Auditor", meaning: "Reviews finance records and compliance status without changing ledger entries." },
 ] as const;
 
 export const microcopy = {

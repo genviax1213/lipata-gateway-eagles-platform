@@ -20,7 +20,8 @@
   - Verification token is stored hashed at rest
 - Incident response logging:
   - API responses include `X-Request-Id`
-  - Structured audit events are available for auth, admin role/user changes, applicant decisions, and finance edit decisions
+  - Structured audit events are available for auth, admin role/user changes, applicant decisions, finance reversals, and finance audit-note creation
+  - Finance direction now covers both contribution and expense review activity, with account-aware visibility across bank, GCash, and cash on hand
   - Query playbook: `docs/incident-response-logging.md`
 
 ## Authorization Policy Map
@@ -40,16 +41,25 @@
   - `manageAdminUsers`: enforces capability checks plus admin-only restrictions for admin-account management.
   - `manageRoleAssignment`: enforces admin-assignment constraints and max-admin guardrails.
 - `ContributionPolicy`
-  - `requestEdit`: requires `finance.request_edit`.
-- `ContributionEditRequestPolicy`
-  - `viewEditRequests`: requires `finance.approve_edits`.
-  - `approve`/`reject`: requires `finance.approve_edits`.
+  - `reverse`: requires `finance.input`.
+- Finance route/policy baseline
+  - Finance read scope covers contribution ledgers, expense ledgers, discrepancy findings, account balances, and live report previews.
+  - Treasurer mutation scope covers immutable contribution entry/reversal, immutable expense entry/reversal, and immutable opening-balance entry/reversal.
+  - Auditor scope remains read/review-oriented with note-based follow-up rather than approval-state ownership.
+  - Expense review keeps support-reference and approval-reference fields visible for audit follow-up.
+  - Opening-balance review expects effective-date, remarks, and account traceability rather than editable static account values.
+- `FinanceAuditController`
+  - `report`: requires `finance.view`.
+  - `storeNote`: finance route requires `finance.view`, but controller enforces auditor-only note creation.
+- `ExpenseAuditController`
+  - `report`: requires `finance.view`.
+  - `storeNote`: finance route requires `finance.view`, but controller enforces auditor-only note creation.
 - `MemberPolicy`
   - `viewMemberDirectory`: requires `members.view`.
   - `viewFinanceDirectory`: requires `finance.view`.
   - `viewFinancialContributions`: requires `finance.view`.
 - `PostPolicy`
-  - `viewCmsIndex`: requires `posts.create`.
+  - `viewCmsIndex`: requires any of `posts.create`, `posts.update`, or `posts.delete`.
 
 ### Required env variables
 
@@ -59,11 +69,14 @@
 - `ADMIN_INITIAL_PASSWORD` (optional; if unset, seeder generates a random admin password)
 - `TEMP_LOGIN_PASSWORD` (required when running `TemporaryLoginSeeder`)
 - `ALLOW_MEMBER_HISTORY_SEEDER` (default `false`; set to `true` only when intentionally running member history seeding outside local/testing)
+- `ALLOW_FINANCE_WORKFLOW_DEMO_SEEDER` (default `false`; set to `true` only when intentionally running finance workflow demo seeding outside local/testing)
 
 Seeder note:
 - `AdminSeeder` sets initial admin password only when admin account does not yet exist.
 - Re-running seeders will not rotate an existing admin password.
 - `MemberContributionHistorySeeder` is restricted to `local`/`testing` by default and will throw outside those environments unless `ALLOW_MEMBER_HISTORY_SEEDER=true`.
+- `FinanceWorkflowDemoSeeder` is restricted to `local`/`testing` by default and seeds Treasurer/Auditor workflow examples, including opening balances, expenses, and follow-up notes.
+- Workflow reference: [docs/finance-workflows.md](/mnt/rll/projects/lipata-gateway-eagles-platform/docs/finance-workflows.md)
 
 ### Migration Release Note
 

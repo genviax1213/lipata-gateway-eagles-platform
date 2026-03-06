@@ -7,8 +7,8 @@ use App\Models\User;
 
 class ContributionPolicy
 {
-    public function requestEdit(User $user, Contribution $contribution): bool
+    public function reverse(User $user, Contribution $contribution): bool
     {
-        return $user->hasPermission('finance.request_edit');
+        return $user->hasPermission('finance.input');
     }
 }

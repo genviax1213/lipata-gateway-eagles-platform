@@ -118,7 +118,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen p-4 md:p-6">
       <div className="flex min-h-[calc(100vh-2rem)] gap-4 md:min-h-[calc(100vh-3rem)]">
-        <aside className={`${collapsed ? "w-16" : "w-72"} shrink-0 transition-all duration-300 glass-card ${collapsed ? "px-2 py-5" : "p-5"} text-offwhite`}>
+        <aside className={`${collapsed ? "w-[61px]" : "w-[285px]"} shrink-0 transition-all duration-300 glass-card ${collapsed ? "px-2 py-5" : "p-5"} text-offwhite`}>
           <div className="mb-8">
             <div className={`mb-3 flex items-center ${collapsed ? "flex-col justify-center gap-2" : "justify-center gap-4"}`}>
               <img

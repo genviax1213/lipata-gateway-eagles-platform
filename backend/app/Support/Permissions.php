@@ -8,6 +8,12 @@ namespace App\Support;
  */
 class Permissions
 {
+    // CMS Permissions
+    public const POSTS_VIEW = 'posts.view';
+    public const POSTS_CREATE = 'posts.create';
+    public const POSTS_UPDATE = 'posts.update';
+    public const POSTS_DELETE = 'posts.delete';
+
     // Member Management Permissions
     public const MEMBERS_VIEW = 'members.view';
     public const MEMBERS_CREATE = 'members.create';
@@ -17,23 +23,21 @@ class Permissions
     // Finance Permissions
     public const FINANCE_VIEW = 'finance.view';
     public const FINANCE_INPUT = 'finance.input';
-    public const FINANCE_REQUEST_EDIT = 'finance.request_edit';
-    public const FINANCE_APPROVE_EDITS = 'finance.approve_edits';
 
     // Applications & Fees Permissions
     public const APPLICATIONS_FEE_SET = 'applications.fee.set';
     public const APPLICATIONS_FEE_PAY = 'applications.fee.pay';
+    public const APPLICATIONS_REVIEW = 'applications.review';
+    public const APPLICATIONS_NOTICE_VIEW = 'applications.notice.view';
+    public const APPLICATIONS_NOTICE_SET = 'applications.notice.set';
+    public const APPLICATIONS_STAGE_SET = 'applications.stage.set';
     public const APPLICATIONS_DASHBOARD_VIEW = 'applications.dashboard.view';
     public const APPLICATIONS_DOCS_UPLOAD = 'applications.docs.upload';
     public const APPLICATIONS_DOCS_REVIEW = 'applications.docs.review';
 
-    // Posts (CMS) Permissions
-    public const POSTS_CREATE = 'posts.create';
-    public const POSTS_UPDATE = 'posts.update';
-    public const POSTS_DELETE = 'posts.delete';
-
     // Roles & Admin Permissions
     public const ROLES_DELEGATE = 'roles.delegate';
+    public const USERS_PASSWORD_RESET = 'users.password.reset';
 
     // Forum Permissions
     public const FORUM_VIEW = 'forum.view';
@@ -62,8 +66,6 @@ class Permissions
         return [
             self::FINANCE_VIEW,
             self::FINANCE_INPUT,
-            self::FINANCE_REQUEST_EDIT,
-            self::FINANCE_APPROVE_EDITS,
         ];
     }
 
@@ -86,21 +88,27 @@ class Permissions
     public static function all(): array
     {
         return [
+            'posts' => [
+                self::POSTS_VIEW,
+                self::POSTS_CREATE,
+                self::POSTS_UPDATE,
+                self::POSTS_DELETE,
+            ],
             'members' => self::memberManagement(),
             'finance' => self::finance(),
             'applications' => [
+                self::APPLICATIONS_REVIEW,
+                self::APPLICATIONS_NOTICE_VIEW,
+                self::APPLICATIONS_NOTICE_SET,
+                self::APPLICATIONS_STAGE_SET,
                 self::APPLICATIONS_FEE_SET,
                 self::APPLICATIONS_FEE_PAY,
                 self::APPLICATIONS_DASHBOARD_VIEW,
                 self::APPLICATIONS_DOCS_UPLOAD,
                 self::APPLICATIONS_DOCS_REVIEW,
             ],
-            'posts' => [
-                self::POSTS_CREATE,
-                self::POSTS_UPDATE,
-                self::POSTS_DELETE,
-            ],
             'roles' => [self::ROLES_DELEGATE],
+            'users' => [self::USERS_PASSWORD_RESET],
             'forum' => self::forum(),
         ];
     }
