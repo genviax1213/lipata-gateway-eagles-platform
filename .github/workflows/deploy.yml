@@ -84,6 +84,7 @@ jobs:
       SSH_HOST: ${{ secrets.SSH_HOST }}
       SSH_USER: ${{ secrets.SSH_USER }}
       SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      SSH_PRIVATE_KEY_B64: ${{ secrets.SSH_PRIVATE_KEY_B64 }}
       PUBLIC_BASE_URL: ${{ vars.PUBLIC_BASE_URL }}
       FRONTEND_REMOTE_DIR: ${{ secrets.FRONTEND_REMOTE_DIR }}
       REMOTE_APP_DIR: ${{ secrets.REMOTE_APP_DIR }}
@@ -105,7 +106,7 @@ jobs:
           set -e
           SSH_HOST="${SSH_HOST:-serverbyt.net}"
           [ -n "$SSH_USER" ] || (echo "Missing secret: SSH_USER" && exit 1)
-          [ -n "$SSH_PRIVATE_KEY" ] || (echo "Missing secret: SSH_PRIVATE_KEY" && exit 1)
+          [ -n "$SSH_PRIVATE_KEY_B64" ] || [ -n "$SSH_PRIVATE_KEY" ] || (echo "Missing secret: SSH_PRIVATE_KEY_B64 or SSH_PRIVATE_KEY" && exit 1)
           [ -n "$FRONTEND_REMOTE_DIR" ] || (echo "Missing secret: FRONTEND_REMOTE_DIR" && exit 1)
           [ -n "$REMOTE_APP_DIR" ] || (echo "Missing secret: REMOTE_APP_DIR" && exit 1)
 
@@ -114,7 +115,11 @@ jobs:
           set -e
           SSH_HOST="${SSH_HOST:-serverbyt.net}"
           mkdir -p ~/.ssh
-          printf "%s" "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          if [ -n "$SSH_PRIVATE_KEY_B64" ]; then
+            printf '%s' "$SSH_PRIVATE_KEY_B64" | base64 -d > ~/.ssh/id_ed25519
+          else
+            printf '%s' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          fi
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts
 
