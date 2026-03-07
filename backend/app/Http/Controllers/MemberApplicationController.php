@@ -415,6 +415,8 @@ class MemberApplicationController extends Controller
 
     public function setStage(Request $request, MemberApplication $memberApplication)
     {
+        $this->authorize('setStage', $memberApplication);
+
         $validated = $request->validate([
             'current_stage' => 'required|in:interview,introduction,indoctrination_initiation,incubation,induction',
         ]);
@@ -437,6 +439,8 @@ class MemberApplicationController extends Controller
 
     public function setNotice(Request $request, MemberApplication $memberApplication)
     {
+        $this->authorize('setNotice', $memberApplication);
+
         $validated = $request->validate([
             'notice_text' => 'required|string|min:3|max:3000',
         ]);
@@ -462,6 +466,8 @@ class MemberApplicationController extends Controller
 
     public function setFeeRequirement(Request $request, MemberApplication $memberApplication)
     {
+        $this->authorize('setFeeRequirement', $memberApplication);
+
         $validated = $request->validate([
             'category' => 'required|in:project,community_service,fellowship,five_i_activities',
             'required_amount' => 'required|numeric|min:0.01',
@@ -499,6 +505,8 @@ class MemberApplicationController extends Controller
 
     public function addFeePayment(Request $request, ApplicationFeeRequirement $applicationFeeRequirement)
     {
+        $this->authorize('recordFeePayment', $applicationFeeRequirement->memberApplication);
+
         $validated = $request->validate([
             'amount' => 'required|numeric|min:0.01',
             'payment_date' => 'nullable|date',
@@ -530,6 +538,8 @@ class MemberApplicationController extends Controller
 
     public function addCategoryFeePayment(Request $request, MemberApplication $memberApplication)
     {
+        $this->authorize('recordFeePayment', $memberApplication);
+
         $validated = $request->validate([
             'category' => 'required|in:project,community_service,fellowship,five_i_activities',
             'amount' => 'required|numeric|min:0.01',
@@ -575,6 +585,8 @@ class MemberApplicationController extends Controller
 
     public function approve(Request $request, MemberApplication $memberApplication)
     {
+        $this->authorize('reviewDecision', $memberApplication);
+
         if ($memberApplication->status !== 'pending_approval' || !$memberApplication->email_verified_at) {
             return response()->json([
                 'message' => 'Only verified applications pending approval can be approved.',
@@ -645,6 +657,8 @@ class MemberApplicationController extends Controller
 
     public function setProbation(Request $request, MemberApplication $memberApplication)
     {
+        $this->authorize('reviewDecision', $memberApplication);
+
         if (!in_array($memberApplication->status, ['pending_verification', 'pending_approval'], true)) {
             return response()->json([
                 'message' => 'Only pending applications can be moved to probation.',
@@ -672,6 +686,8 @@ class MemberApplicationController extends Controller
 
     public function reject(Request $request, MemberApplication $memberApplication)
     {
+        $this->authorize('reviewDecision', $memberApplication);
+
         if (!in_array($memberApplication->status, ['pending_approval', 'pending_verification'], true)) {
             return response()->json([
                 'message' => 'This application has already been reviewed.',

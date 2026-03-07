@@ -30,6 +30,7 @@ class AdminUserController extends Controller
 
     public function index(Request $request)
     {
+        $this->authorize('manageAdminUsers', [User::class, 'users.view']);
         $search = (string) $request->query('search', '');
 
         $users = User::query()
@@ -49,6 +50,7 @@ class AdminUserController extends Controller
 
     public function roles(Request $request)
     {
+        $this->authorize('manageAdminUsers', [User::class, 'users.view']);
         $roles = Role::query()
             ->with('permissions:id,name')
             ->select(['id', 'name', 'description'])
@@ -60,6 +62,7 @@ class AdminUserController extends Controller
 
     public function members(Request $request)
     {
+        $this->authorize('manageAdminUsers', [User::class, 'users.view']);
         $search = (string) $request->query('search', '');
         $query = Member::query()
             ->with(['user.role:id,name'])
@@ -223,7 +226,7 @@ class AdminUserController extends Controller
     {
         /** @var User $actor */
         $actor = $request->user();
-        $this->authorize('manageAdminUsers', [User::class, 'members.create']);
+        $this->authorize('manageAdminUsers', [User::class, 'users.manage']);
         $request->merge(['email' => $this->normalizeEmail((string) $request->input('email', ''))]);
 
         $validated = $request->validate([
@@ -257,7 +260,7 @@ class AdminUserController extends Controller
     {
         /** @var User $actor */
         $actor = $request->user();
-        $this->authorize('manageAdminUsers', [User::class, 'members.update']);
+        $this->authorize('manageAdminUsers', [User::class, 'users.manage']);
         $request->merge(['email' => $this->normalizeEmail((string) $request->input('email', ''))]);
 
         $validated = $request->validate([
@@ -308,7 +311,7 @@ class AdminUserController extends Controller
     {
         /** @var User $actor */
         $actor = $request->user();
-        $this->authorize('manageAdminUsers', [User::class, 'members.delete']);
+        $this->authorize('manageAdminUsers', [User::class, 'users.manage']);
         $this->authorize('manageRoleAssignment', [User::class, $user, null, 'delete']);
 
         $targetUserId = $user->id;
@@ -352,7 +355,7 @@ class AdminUserController extends Controller
     {
         /** @var User $actor */
         $actor = $request->user()->loadMissing('role:id,name');
-        $this->authorize('manageAdminUsers', [User::class, 'members.update']);
+        $this->authorize('manageAdminUsers', [User::class, 'users.manage']);
 
         if (!RoleHierarchy::canManageUsers((string) optional($actor->role)->name)) {
             return response()->json([

@@ -40,6 +40,8 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
+const LOGS_PAGE_SIZE = 10;
+
 export default function Logs() {
   const { user } = useAuth();
   const canViewLogs = isAdminUser(user) || hasPermission(user, "members.view");
@@ -47,10 +49,10 @@ export default function Logs() {
 
   const [activeTab, setActiveTab] = useState<LogsTab>("current");
   const [entries, setEntries] = useState<LogEntry[]>([]);
-  const [meta, setMeta] = useState<PaginationMeta>({ page: 1, per_page: 20, total: 0, last_page: 1 });
+  const [meta, setMeta] = useState<PaginationMeta>({ page: 1, per_page: LOGS_PAGE_SIZE, total: 0, last_page: 1 });
   const [archives, setArchives] = useState<ArchiveItem[]>([]);
   const [archiveEntries, setArchiveEntries] = useState<LogEntry[]>([]);
-  const [archiveMeta, setArchiveMeta] = useState<PaginationMeta>({ page: 1, per_page: 20, total: 0, last_page: 1 });
+  const [archiveMeta, setArchiveMeta] = useState<PaginationMeta>({ page: 1, per_page: LOGS_PAGE_SIZE, total: 0, last_page: 1 });
   const [selectedArchive, setSelectedArchive] = useState<string>("");
   const [currentLogsLoaded, setCurrentLogsLoaded] = useState(false);
   const [archivesLoaded, setArchivesLoaded] = useState(false);
@@ -71,7 +73,7 @@ export default function Logs() {
     setError("");
     try {
       const res = await api.get<{ data: LogEntry[]; meta: PaginationMeta }>("/admin/logs", {
-        params: { page: nextPage, per_page: 20, level: level || undefined, event: eventFilter || undefined, q: query || undefined, _t: Date.now() },
+        params: { page: nextPage, per_page: LOGS_PAGE_SIZE, level: level || undefined, event: eventFilter || undefined, q: query || undefined, _t: Date.now() },
       });
       setEntries(res.data.data);
       setMeta(res.data.meta);
@@ -106,7 +108,7 @@ export default function Logs() {
     try {
       const res = await api.get<{ data: LogEntry[]; meta: PaginationMeta }>(
         `/admin/logs/archives/${encodeURIComponent(selectedArchive)}/content`,
-        { params: { page: archivePage, per_page: 20 } },
+        { params: { page: archivePage, per_page: LOGS_PAGE_SIZE } },
       );
       setArchiveEntries(res.data.data);
       setArchiveMeta(res.data.meta);
@@ -117,6 +119,16 @@ export default function Logs() {
       setArchiveLoading(false);
     }
   }, [archivePage, selectedArchive]);
+
+  useEffect(() => {
+    if (!canViewLogs || currentLogsLoaded) return;
+    void loadLogs(1);
+  }, [canViewLogs, currentLogsLoaded, loadLogs]);
+
+  useEffect(() => {
+    if (!canViewLogs || activeTab !== "archives" || archivesLoaded) return;
+    void loadArchives();
+  }, [activeTab, archivesLoaded, canViewLogs, loadArchives]);
 
   useEffect(() => {
     if (!canViewLogs || !selectedArchive || !archivesLoaded) return;
@@ -288,7 +300,7 @@ export default function Logs() {
               }}
               className="btn-secondary"
             >
-              Search
+              Refresh
             </button>
           </div>
 
@@ -320,7 +332,7 @@ export default function Logs() {
 
           {!currentLogsLoaded ? (
             <div className="rounded-md border border-white/20 bg-white/5 px-4 py-8 text-center text-sm text-mist/80">
-              Click Search to load current logs.
+              Loading current logs...
             </div>
           ) : (
             <>
@@ -396,7 +408,7 @@ export default function Logs() {
               }}
               className="btn-secondary"
             >
-              Search
+              Refresh
             </button>
             {selectedArchive ? (
               <button
@@ -420,7 +432,7 @@ export default function Logs() {
 
           {!archivesLoaded ? (
             <div className="rounded-md border border-white/20 bg-white/5 px-4 py-8 text-center text-sm text-mist/80">
-              Click Search to load archives.
+              Loading archives...
             </div>
           ) : (
             <>

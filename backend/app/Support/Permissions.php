@@ -37,6 +37,8 @@ class Permissions
 
     // Roles & Admin Permissions
     public const ROLES_DELEGATE = 'roles.delegate';
+    public const USERS_VIEW = 'users.view';
+    public const USERS_MANAGE = 'users.manage';
     public const USERS_PASSWORD_RESET = 'users.password.reset';
 
     // Forum Permissions
@@ -108,7 +110,7 @@ class Permissions
                 self::APPLICATIONS_DOCS_REVIEW,
             ],
             'roles' => [self::ROLES_DELEGATE],
-            'users' => [self::USERS_PASSWORD_RESET],
+            'users' => [self::USERS_VIEW, self::USERS_MANAGE, self::USERS_PASSWORD_RESET],
             'forum' => self::forum(),
         ];
     }

@@ -1,6 +1,7 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import api from "../services/api";
+import { shouldUseLegacyTokenMode } from "../services/api";
 
 type SecurityTab = "password" | "policy" | "sessions";
 const SECURITY_PAGE_SIZE = 5;
@@ -81,7 +82,7 @@ export default function SecuritySettings() {
         new_password_confirmation: newPasswordConfirmation,
       });
 
-      if (typeof res.data?.token === "string" && res.data.token.length > 0) {
+      if (shouldUseLegacyTokenMode() && typeof res.data?.token === "string" && res.data.token.length > 0) {
         localStorage.setItem("auth_token", res.data.token);
       }
 
@@ -117,6 +118,11 @@ export default function SecuritySettings() {
     return sessions.tokens.slice(start, start + SECURITY_PAGE_SIZE);
   }, [sessions.tokens, sessionsPage]);
   const sessionsLastPage = Math.max(1, Math.ceil(sessions.tokens.length / SECURITY_PAGE_SIZE));
+
+  useEffect(() => {
+    if (activeTab !== "sessions" || sessionsLoaded || sessionsLoading) return;
+    void loadSessions();
+  }, [activeTab, loadSessions, sessionsLoaded, sessionsLoading]);
 
   return (
     <section className="space-y-6">
@@ -217,7 +223,7 @@ export default function SecuritySettings() {
             className="rounded-md border border-white/20 px-3 py-1.5 text-xs text-offwhite/90 transition hover:bg-white/10"
             disabled={sessionsLoading}
           >
-            {sessionsLoading ? "Refreshing..." : "Search"}
+            {sessionsLoading ? "Refreshing..." : "Refresh"}
           </button>
         </div>
 
@@ -225,14 +231,14 @@ export default function SecuritySettings() {
           <p className="mt-3 rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-100">{sessionsError}</p>
         ) : null}
 
-        {!sessionsLoaded ? (
+        {!sessionsLoaded && sessionsLoading ? (
           <div className="mt-4 rounded-md border border-white/20 bg-white/5 px-4 py-8 text-center text-sm text-mist/80">
-            Click Search to load active sessions.
+            Loading active sessions...
           </div>
         ) : (
         <div className="mt-4 space-y-3">
           {sessions.tokens.length === 0 ? (
-            <p className="text-sm text-mist/80">No token sessions found for this account.</p>
+            <p className="text-sm text-mist/80">No active sessions found for this account.</p>
           ) : (
             pagedSessions().map((token) => (
               <div key={token.id} className="rounded-md border border-white/15 bg-[#0b1222]/50 px-3 py-3">

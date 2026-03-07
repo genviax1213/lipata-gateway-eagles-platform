@@ -178,6 +178,11 @@ export default function Forum() {
   }, [canViewForum, fetchThreads]);
 
   useEffect(() => {
+    if (!canViewForum || threadsLoaded) return;
+    void fetchThreads(false, 1);
+  }, [canViewForum, fetchThreads, threadsLoaded]);
+
+  useEffect(() => {
     if (!threadsLoaded || !selectedThreadId) {
       setSelectedThread(null);
       return;
@@ -469,7 +474,7 @@ export default function Forum() {
 
           {!threadsLoaded ? (
             <div className="rounded-md border border-white/20 bg-white/5 px-4 py-8 text-center text-sm text-mist/75">
-              Click Search to load threads.
+              Loading threads...
             </div>
           ) : (
             <>

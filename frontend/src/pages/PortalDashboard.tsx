@@ -215,7 +215,7 @@ export default function PortalDashboard() {
     return toCustomForm(active);
   });
   const [themeNotice, setThemeNotice] = useState("");
-  const [contributionResultsVisible, setContributionResultsVisible] = useState(false);
+  const [contributionResultsVisible, setContributionResultsVisible] = useState(true);
   const [contributionsPage, setContributionsPage] = useState(1);
   const [applicationsPage, setApplicationsPage] = useState(1);
   const [noticesPage, setNoticesPage] = useState(1);
@@ -223,7 +223,7 @@ export default function PortalDashboard() {
   const [feesPage, setFeesPage] = useState(1);
   const [committeeDocumentsPage, setCommitteeDocumentsPage] = useState(1);
 
-  const parseError = (err: unknown, fallback: string): string => {
+  const parseError = useCallback((err: unknown, fallback: string): string => {
     if (!axios.isAxiosError(err)) return fallback;
     const message = (err.response?.data as { message?: string; errors?: Record<string, string[]> } | undefined)?.message;
     if (message) {
@@ -238,7 +238,7 @@ export default function PortalDashboard() {
       if (first) return first;
     }
     return fallback;
-  };
+  }, []);
 
   const loadDashboard = useCallback(async () => {
     setLoading(true);
@@ -284,7 +284,7 @@ export default function PortalDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [canChairmanLogContributionPayment, canChairmanReview, canChairmanSetContributionTarget, canViewApplicantDashboard]);
+  }, [canChairmanLogContributionPayment, canChairmanReview, canChairmanSetContributionTarget, canViewApplicantDashboard, parseError]);
 
   useEffect(() => {
     void loadDashboard();
@@ -466,7 +466,7 @@ export default function PortalDashboard() {
   }, [committeeDocumentsPage, selectedApplicationDetails?.documents]);
   const committeeDocumentsLastPage = Math.max(1, Math.ceil((selectedApplicationDetails?.documents?.length ?? 0) / PAGE_SIZE));
 
-  const loadCommitteeApplications = async () => {
+  const loadCommitteeApplications = useCallback(async () => {
     setError("");
     setNotice("");
     try {
@@ -477,7 +477,32 @@ export default function PortalDashboard() {
     } catch (err) {
       setError(parseError(err, "Failed to load application committee list."));
     }
-  };
+  }, [parseError]);
+
+  useEffect(() => {
+    if (
+      activeTab !== "committee"
+      || applicationsLoaded
+      || !(canChairmanReview || canChairmanSetContributionTarget || canChairmanLogContributionPayment || canChairmanSetNotice || canChairmanSetStage || canChairmanReviewDocs)
+    ) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      void loadCommitteeApplications();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [
+    activeTab,
+    applicationsLoaded,
+    canChairmanLogContributionPayment,
+    canChairmanReview,
+    canChairmanReviewDocs,
+    canChairmanSetContributionTarget,
+    canChairmanSetNotice,
+    canChairmanSetStage,
+    loadCommitteeApplications,
+  ]);
 
   const uploadDocument = async () => {
     if (!applicantDetails || !documentFile || !canUploadApplicantDocs) return;
@@ -927,11 +952,7 @@ export default function PortalDashboard() {
               </button>
             </div>
             <p className="mb-2 text-sm text-mist/85">Filtered Total: <span className="text-gold-soft">{money(totalFiltered)}</span></p>
-            {!contributionResultsVisible ? (
-              <div className="rounded-md border border-white/20 bg-white/5 px-4 py-8 text-center text-sm text-mist/80">
-                Click Search to load contribution results.
-              </div>
-            ) : (
+            {contributionResultsVisible && (
               <>
                 <div className="overflow-x-auto rounded-lg border border-white/20">
                   <table className="min-w-full text-sm text-offwhite">
@@ -975,7 +996,7 @@ export default function PortalDashboard() {
           </div>
           {!applicationsLoaded ? (
             <div className="rounded-md border border-white/20 bg-white/5 px-4 py-8 text-center text-sm text-mist/80">
-              Click Search to load committee applications.
+              Loading committee applications...
             </div>
           ) : (
             <>

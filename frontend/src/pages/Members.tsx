@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import api from "../services/api";
 import MemberModal from "../components/MemberModal";
@@ -51,6 +51,7 @@ export default function Members() {
     setMembers(res.data.data);
     setCurrentPage(res.data.current_page);
     setLastPage(res.data.last_page);
+    setMembersLoaded(true);
   }, [emailVerifiedFilter, passwordSetFilter, search]);
 
   const fetchApplications = useCallback(async (page = 1) => {
@@ -61,6 +62,22 @@ export default function Members() {
     setApplicationsLastPage(Number(res.data?.last_page ?? 1));
     setApplicationsLoaded(true);
   }, [canApproveApplications]);
+
+  useEffect(() => {
+    if (!canViewMembers || membersLoaded) return;
+    const timer = window.setTimeout(() => {
+      void fetchMembers(1);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [canViewMembers, fetchMembers, membersLoaded]);
+
+  useEffect(() => {
+    if (activeTab !== "applications" || !canApproveApplications || applicationsLoaded) return;
+    const timer = window.setTimeout(() => {
+      void fetchApplications(1);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [activeTab, applicationsLoaded, canApproveApplications, fetchApplications]);
 
   async function handleUpdate(id: number, form: MemberForm) {
     try {
@@ -203,7 +220,6 @@ export default function Members() {
             <button
               onClick={() => {
                 setCurrentPage(1);
-                setMembersLoaded(true);
                 void fetchMembers(1);
               }}
               className="btn-primary"
@@ -212,11 +228,12 @@ export default function Members() {
             </button>
           </div>
 
-          {!membersLoaded ? (
+          {!membersLoaded && (
             <div className="rounded-xl border border-white/20 bg-white/10 px-4 py-8 text-center text-sm text-mist/80">
-              Run a search to load members.
+              Loading members...
             </div>
-          ) : (
+          )}
+          {membersLoaded && (
             <>
               <div className="overflow-x-auto rounded-xl border border-white/20 bg-white/10 shadow-lg">
                 <table className="min-w-full text-sm text-offwhite">
@@ -306,15 +323,16 @@ export default function Members() {
               onClick={() => void fetchApplications(1)}
               className="btn-primary"
             >
-              Search
+              Refresh
             </button>
           </div>
 
-          {!applicationsLoaded ? (
+          {!applicationsLoaded && (
             <div className="rounded-xl border border-white/20 bg-white/10 px-4 py-8 text-center text-sm text-mist/80">
-              Click Search to load pending applications.
+              Loading pending applications...
             </div>
-          ) : (
+          )}
+          {applicationsLoaded && (
             <>
               <div className="overflow-x-auto rounded-xl border border-white/20 bg-white/10 shadow-lg">
                 <div className="border-b border-white/15 px-4 py-3">

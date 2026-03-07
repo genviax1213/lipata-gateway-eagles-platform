@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import axios from "axios";
 import api from "../services/api";
@@ -383,7 +383,7 @@ export default function CmsPosts() {
     return form.content.includes(image.url) || form.content.includes(image.path);
   }
 
-  async function fetchPosts(page = 1, overrides?: { q?: string; section?: string }) {
+  const fetchPosts = useCallback(async (page = 1, overrides?: { q?: string; section?: string }) => {
     const params = {
       page,
       per_page: 12,
@@ -399,9 +399,9 @@ export default function CmsPosts() {
       total: Number(res.data?.total ?? 0),
     });
     setPostsLoaded(true);
-  }
+  }, [appliedPostQuery, appliedPostSectionFilter]);
 
-  async function fetchAvailableImages(page = 1, overrides?: { q?: string; linkState?: "all" | "linked" | "unlinked" }) {
+  const fetchAvailableImages = useCallback(async (page = 1, overrides?: { q?: string; linkState?: "all" | "linked" | "unlinked" }) => {
     const params = {
       page,
       per_page: 8,
@@ -417,7 +417,7 @@ export default function CmsPosts() {
       total: Number(res.data?.total ?? 0),
     });
     setImagesLoaded(true);
-  }
+  }, [appliedImageFilter, appliedImageQuery]);
 
   async function pickExistingInlineImage(): Promise<string | null> {
     setActiveTab("images");
@@ -505,7 +505,7 @@ export default function CmsPosts() {
     }
   }
 
-  async function runPostSearch(page = 1) {
+  const runPostSearch = useCallback(async (page = 1) => {
     setError("");
     try {
       await fetchPosts(page, {
@@ -515,7 +515,7 @@ export default function CmsPosts() {
     } catch {
       setError("Unable to load CMS posts.");
     }
-  }
+  }, [appliedPostQuery, appliedPostSectionFilter, fetchPosts]);
 
   async function applyPostSearch() {
     const nextQuery = postQueryDraft.trim();
@@ -533,7 +533,7 @@ export default function CmsPosts() {
     }
   }
 
-  async function runImageSearch(page = 1) {
+  const runImageSearch = useCallback(async (page = 1) => {
     setError("");
     try {
       await fetchAvailableImages(page, {
@@ -543,7 +543,7 @@ export default function CmsPosts() {
     } catch {
       setError("Unable to load image library.");
     }
-  }
+  }, [appliedImageFilter, appliedImageQuery, fetchAvailableImages]);
 
   async function applyImageSearch() {
     const nextQuery = imageQueryDraft.trim();
@@ -560,6 +560,16 @@ export default function CmsPosts() {
       setError("Unable to load image library.");
     }
   }
+
+  useEffect(() => {
+    if (!canManageCmsPosts) return;
+    if (activeTab === "images" && !imagesLoaded) {
+      void runImageSearch(1);
+    }
+    if (activeTab === "posts" && !postsLoaded) {
+      void runPostSearch(1);
+    }
+  }, [activeTab, canManageCmsPosts, imagesLoaded, postsLoaded, runImageSearch, runPostSearch]);
 
   useEffect(() => {
     if (!form.image) {
@@ -1149,7 +1159,7 @@ export default function CmsPosts() {
           </div>
 
           {!imagesLoaded ? (
-            <p className="text-sm text-mist/80">Run a search to load image results.</p>
+            <p className="text-sm text-mist/80">Loading image results...</p>
           ) : availableImages.length === 0 ? (
             <p className="text-sm text-mist/80">No images found for the current search.</p>
           ) : (
@@ -1382,7 +1392,7 @@ export default function CmsPosts() {
           </div>
 
           {!postsLoaded ? (
-            <p className="text-sm text-mist/80">Run a search to load posts.</p>
+            <p className="text-sm text-mist/80">Loading posts...</p>
           ) : (
             <>
               <div className="overflow-hidden rounded-xl border border-white/20 bg-white/10">

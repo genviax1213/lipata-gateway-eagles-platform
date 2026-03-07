@@ -14,7 +14,7 @@ class AdminUserPolicy
         $actor->loadMissing('role:id,name');
         $actorRole = optional($actor->role)->name;
 
-        if (RoleHierarchy::canManageUsers((string) $actorRole)) {
+        if (RoleHierarchy::canManageUsers((string) $actorRole) && $actor->hasPermission($permission)) {
             return Response::allow();
         }
 

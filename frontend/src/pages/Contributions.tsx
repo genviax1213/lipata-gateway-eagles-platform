@@ -880,6 +880,57 @@ export default function Contributions() {
   }, [canViewFinance, fetchFinanceAccounts]);
 
   useEffect(() => {
+    if (!canViewFinance) return;
+
+    if (activeTab === "member-search" && !membersLoaded) {
+      void fetchMembers();
+    }
+    if (activeTab === "compliance" && !complianceLoaded) {
+      void fetchCompliance();
+    }
+    if (activeTab === "audit-findings" && !auditLoaded) {
+      void fetchAuditFindings(1);
+    }
+    if (activeTab === "expense-ledger" && !expenseLoaded) {
+      void fetchExpenseLedger(1);
+    }
+    if (activeTab === "expense-audit" && !expenseAuditLoaded) {
+      void fetchExpenseAuditFindings(1);
+    }
+  }, [
+    activeTab,
+    auditLoaded,
+    canViewFinance,
+    complianceLoaded,
+    expenseAuditLoaded,
+    expenseLoaded,
+    fetchAuditFindings,
+    fetchCompliance,
+    fetchExpenseAuditFindings,
+    fetchExpenseLedger,
+    fetchMembers,
+    membersLoaded,
+  ]);
+
+  useEffect(() => {
+    if (!canInputFinance) return;
+
+    if (activeTab === "report-preview" && !reportPreviewLoaded) {
+      void fetchReportPreview(1);
+    }
+    if (activeTab === "expense-report" && !expenseReportLoaded) {
+      void fetchExpenseReportPreview(1);
+    }
+  }, [
+    activeTab,
+    canInputFinance,
+    expenseReportLoaded,
+    fetchExpenseReportPreview,
+    fetchReportPreview,
+    reportPreviewLoaded,
+  ]);
+
+  useEffect(() => {
     if (!selectedMemberId || !canViewFinance) {
       setContributionRows([]);
       setTotalAmount(0);
@@ -1737,7 +1788,7 @@ export default function Contributions() {
 
             {!membersLoaded ? (
               <div className="mt-3 rounded-md border border-white/20 bg-white/5 px-4 py-8 text-center text-sm text-mist/80">
-                Click Search to load members.
+                Loading members...
               </div>
             ) : (
             <div className="mt-3 overflow-x-auto rounded-lg border border-white/20">

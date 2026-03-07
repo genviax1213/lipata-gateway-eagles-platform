@@ -53,7 +53,7 @@ return [
     |
     */
 
-    'expiration' => null,
+    'expiration' => env('SANCTUM_EXPIRATION', env('APP_ENV') === 'production' ? 120 : null),
 
     /*
     |--------------------------------------------------------------------------

@@ -27,6 +27,6 @@ class ApplicationDocumentPolicy
 
     public function review(User $user, ApplicationDocument $document): bool
     {
-        return (string) optional($user->role)->name === 'membership_chairman';
+        return $user->hasPermission('applications.docs.review');
     }
 }

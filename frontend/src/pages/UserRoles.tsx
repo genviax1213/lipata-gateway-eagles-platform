@@ -217,6 +217,23 @@ export default function UserRoles() {
   }, [canDelegateRoles]);
 
   useEffect(() => {
+    if (!canDelegateRoles || membersLoaded) return;
+    void fetchMembers(1);
+  }, [canDelegateRoles, fetchMembers, membersLoaded]);
+
+  useEffect(() => {
+    if (!canResetPasswords || activeTab !== "passwords" || usersLoaded) return;
+    void fetchUsers(1);
+  }, [activeTab, canResetPasswords, fetchUsers, usersLoaded]);
+
+  useEffect(() => {
+    if (!canDelegateRoles) return;
+    if ((activeTab === "assign" || activeTab === "roles") && !rolesLoaded) {
+      void fetchRoles();
+    }
+  }, [activeTab, canDelegateRoles, fetchRoles, rolesLoaded]);
+
+  useEffect(() => {
     if (!selectedMemberId) return;
     if (!members.some((item) => item.id === selectedMemberId)) {
       setSelectedMemberId(null);
@@ -412,7 +429,7 @@ export default function UserRoles() {
 
           {!membersLoaded ? (
             <div className="rounded-xl border border-white/20 bg-white/10 px-4 py-8 text-center text-sm text-mist/80">
-              Run a search to load members.
+              Loading members...
             </div>
           ) : (
             <>
@@ -505,7 +522,7 @@ export default function UserRoles() {
               className="btn-secondary"
               disabled={loadingRoles}
             >
-              {loadingRoles ? "Loading..." : rolesLoaded ? "Refresh Roles" : "Search"}
+              {loadingRoles ? "Loading..." : "Refresh Roles"}
             </button>
           </div>
 
@@ -515,7 +532,7 @@ export default function UserRoles() {
             </p>
           ) : !rolesLoaded ? (
             <p className="rounded-md border border-white/20 bg-white/5 px-4 py-3 text-sm text-mist/80">
-              Click Search to load assignable roles.
+              Loading assignable roles...
             </p>
           ) : (
             <div className="flex flex-wrap items-center gap-3">
@@ -595,7 +612,7 @@ export default function UserRoles() {
 
           {!usersLoaded ? (
             <div className="rounded-xl border border-white/20 bg-white/10 px-4 py-8 text-center text-sm text-mist/80">
-              Run a search to load user accounts.
+              Loading user accounts...
             </div>
           ) : (
             <>
@@ -746,13 +763,13 @@ export default function UserRoles() {
               className="btn-secondary"
               disabled={loadingRoles}
             >
-              {loadingRoles ? "Loading..." : rolesLoaded ? "Refresh Roles" : "Search"}
+              {loadingRoles ? "Loading..." : "Refresh Roles"}
             </button>
           </div>
 
           {!rolesLoaded ? (
             <div className="rounded-xl border border-white/20 bg-white/10 px-4 py-8 text-center text-sm text-mist/80">
-              Click Search to load roles.
+              Loading roles...
             </div>
           ) : (
             <>

@@ -148,6 +148,7 @@ class MemberController extends Controller
 
     public function destroy(Request $request, Member $member)
     {
+        $this->authorize('manageAdminUsers', [User::class, 'users.manage']);
         $member->delete();
 
         return response()->json(['message' => 'Member deleted']);

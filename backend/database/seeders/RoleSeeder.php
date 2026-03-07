@@ -35,6 +35,8 @@ class RoleSeeder extends Seeder
             'applications.dashboard.view' => 'View applicant dashboard',
             'applications.fee.set' => 'Set applicant journey contribution target payments',
             'applications.fee.pay' => 'Log applicant journey contribution partial/full payments',
+            'users.view' => 'View portal users, roles, and user-role mappings',
+            'users.manage' => 'Create, update, and delete portal users and destructive member records',
             'users.password.reset' => 'Reset passwords for other portal users within role policy limits',
         ];
 
@@ -104,6 +106,8 @@ class RoleSeeder extends Seeder
             $permissionIds['forum.moderate'],
             $permissionIds['applications.notice.view'],
             $permissionIds['applications.dashboard.view'],
+            $permissionIds['users.view'],
+            $permissionIds['users.manage'],
             $permissionIds['users.password.reset'],
         ]);
         $admin->permissions()->sync([
@@ -123,6 +127,8 @@ class RoleSeeder extends Seeder
             $permissionIds['forum.moderate'],
             $permissionIds['applications.notice.view'],
             $permissionIds['applications.dashboard.view'],
+            $permissionIds['users.view'],
+            $permissionIds['users.manage'],
             $permissionIds['users.password.reset'],
         ]);
         $officer->permissions()->sync([
@@ -132,7 +138,6 @@ class RoleSeeder extends Seeder
             $permissionIds['members.view'],
             $permissionIds['members.create'],
             $permissionIds['members.update'],
-            $permissionIds['members.delete'],
             $permissionIds['forum.view'],
             $permissionIds['forum.create_thread'],
             $permissionIds['forum.reply'],

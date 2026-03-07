@@ -19,4 +19,29 @@ class MemberApplicationPolicy
 
         return strtolower(trim((string) $memberApplication->email)) === strtolower(trim((string) $user->email));
     }
+
+    public function setStage(User $user, MemberApplication $memberApplication): bool
+    {
+        return $user->hasPermission('applications.stage.set');
+    }
+
+    public function setNotice(User $user, MemberApplication $memberApplication): bool
+    {
+        return $user->hasPermission('applications.notice.set');
+    }
+
+    public function setFeeRequirement(User $user, MemberApplication $memberApplication): bool
+    {
+        return $user->hasPermission('applications.fee.set');
+    }
+
+    public function recordFeePayment(User $user, MemberApplication $memberApplication): bool
+    {
+        return $user->hasPermission('applications.fee.pay');
+    }
+
+    public function reviewDecision(User $user, MemberApplication $memberApplication): bool
+    {
+        return $user->hasPermission('applications.review');
+    }
 }

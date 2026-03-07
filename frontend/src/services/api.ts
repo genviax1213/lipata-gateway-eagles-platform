@@ -2,8 +2,7 @@ import axios from "axios";
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000/api/v1";
 const configuredAuthMode = (import.meta.env.VITE_AUTH_MODE ?? "").toLowerCase();
-const runtimeHost = typeof window !== "undefined" ? window.location.hostname.toLowerCase() : "";
-const legacyTokenMode = configuredAuthMode === "token" || runtimeHost === "lgec.org";
+const legacyTokenMode = configuredAuthMode === "token";
 
 function resolveApiOrigin(url: string): string {
   try {
@@ -67,8 +66,8 @@ api.interceptors.request.use((config) => {
     config.headers["X-Auth-Mode"] = "token";
   }
 
-  // Keep backward compatibility for existing bearer-token sessions.
-  const token = localStorage.getItem("auth_token");
+  // Keep backward compatibility only when legacy token mode is explicitly enabled.
+  const token = legacyTokenMode ? localStorage.getItem("auth_token") : null;
   if (token && config.headers) {
     config.headers.Authorization = `Bearer ${token}`;
   }

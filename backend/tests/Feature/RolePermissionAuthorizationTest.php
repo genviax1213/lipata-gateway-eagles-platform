@@ -127,12 +127,24 @@ class RolePermissionAuthorizationTest extends TestCase
         $response->assertStatus(403);
     }
 
-    public function test_officer_can_access_admin_users_list(): void
+    public function test_officer_cannot_access_admin_users_list(): void
     {
         $officerRole = Role::query()->where('name', 'officer')->firstOrFail();
         $officer = User::factory()->create(['role_id' => $officerRole->id]);
 
         Sanctum::actingAs($officer);
+
+        $response = $this->getJson('/api/v1/admin/users');
+
+        $response->assertStatus(403);
+    }
+
+    public function test_admin_can_access_admin_users_list(): void
+    {
+        $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
+        $admin = User::factory()->create(['role_id' => $adminRole->id]);
+
+        Sanctum::actingAs($admin);
 
         $response = $this->getJson('/api/v1/admin/users');
 
@@ -209,7 +221,7 @@ class RolePermissionAuthorizationTest extends TestCase
         $response->assertStatus(403);
     }
 
-    public function test_officer_can_create_user_account(): void
+    public function test_officer_cannot_create_user_account(): void
     {
         $officerRole = Role::query()->where('name', 'officer')->firstOrFail();
         $memberRole = Role::query()->where('name', 'member')->firstOrFail();
@@ -224,8 +236,26 @@ class RolePermissionAuthorizationTest extends TestCase
             'role_id' => $memberRole->id,
         ]);
 
-        $response->assertStatus(201)
-            ->assertJsonPath('role.name', 'member');
+        $response->assertStatus(403);
+    }
+
+    public function test_officer_cannot_delete_member_record(): void
+    {
+        $officerRole = Role::query()->where('name', 'officer')->firstOrFail();
+        $officer = User::factory()->create(['role_id' => $officerRole->id]);
+        $member = Member::query()->create([
+            'member_number' => 'M-DEL-001',
+            'first_name' => 'Delete',
+            'middle_name' => 'Guard',
+            'last_name' => 'Target',
+            'email' => 'delete-guard@example.com',
+            'membership_status' => 'active',
+        ]);
+
+        Sanctum::actingAs($officer);
+
+        $this->deleteJson("/api/v1/members/{$member->id}")
+            ->assertStatus(403);
     }
 
     public function test_officer_cannot_update_fellow_officer_account(): void

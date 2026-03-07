@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import axios from "axios";
 import api, { ensureCsrfCookie, shouldUseLegacyTokenMode } from "../services/api";
@@ -15,11 +15,17 @@ function normalizeEmail(value: string): string {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
+  const legacyTokenMode = shouldUseLegacyTokenMode();
 
-  const syncUserSession = async (clearOnAuthFailure = true) => {
-    const token = localStorage.getItem("auth_token");
-    if (shouldUseLegacyTokenMode() && !token) {
-      localStorage.removeItem(AUTH_USER_CACHE_KEY);
+  const clearStoredAuthState = useCallback(() => {
+    localStorage.removeItem("auth_token");
+    localStorage.removeItem(AUTH_USER_CACHE_KEY);
+  }, []);
+
+  const syncUserSession = useCallback(async (clearOnAuthFailure = true) => {
+    const token = legacyTokenMode ? localStorage.getItem("auth_token") : null;
+    if (legacyTokenMode && !token) {
+      clearStoredAuthState();
       setUser(null);
       return;
     }
@@ -27,44 +33,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const res = await api.get("/user");
       setUser(res.data);
-      localStorage.setItem(AUTH_USER_CACHE_KEY, JSON.stringify(res.data));
+      if (legacyTokenMode) {
+        localStorage.setItem(AUTH_USER_CACHE_KEY, JSON.stringify(res.data));
+      } else {
+        localStorage.removeItem(AUTH_USER_CACHE_KEY);
+      }
     } catch (error) {
       const status = axios.isAxiosError(error) ? error.response?.status : null;
       const isAuthFailure = status === 401 || status === 419;
 
       if (isAuthFailure && clearOnAuthFailure) {
-        if (token) {
-          localStorage.removeItem("auth_token");
-        }
-        localStorage.removeItem(AUTH_USER_CACHE_KEY);
+        clearStoredAuthState();
         setUser(null);
       }
     }
-  };
+  }, [clearStoredAuthState, legacyTokenMode]);
 
   // Restore session on refresh
   useEffect(() => {
-    const token = localStorage.getItem("auth_token");
-    const cachedUserRaw = localStorage.getItem(AUTH_USER_CACHE_KEY);
-    if (token && cachedUserRaw) {
-      try {
-        const cachedUser = JSON.parse(cachedUserRaw) as Record<string, unknown>;
-        setUser(cachedUser);
-      } catch {
-        localStorage.removeItem(AUTH_USER_CACHE_KEY);
-      }
-    }
+    if (legacyTokenMode) {
+      const token = localStorage.getItem("auth_token");
+      const cachedUserRaw = localStorage.getItem(AUTH_USER_CACHE_KEY);
 
-    if (shouldUseLegacyTokenMode() && !token) {
-      setLoading(false);
-      return;
+      if (token && cachedUserRaw) {
+        try {
+          const cachedUser = JSON.parse(cachedUserRaw) as Record<string, unknown>;
+          setUser(cachedUser);
+        } catch {
+          localStorage.removeItem(AUTH_USER_CACHE_KEY);
+        }
+      }
+
+      if (!token) {
+        clearStoredAuthState();
+        setLoading(false);
+        return;
+      }
     }
 
     void (async () => {
       await syncUserSession();
       setLoading(false);
     })();
-  }, []);
+  }, [clearStoredAuthState, legacyTokenMode, syncUserSession]);
 
   useEffect(() => {
     if (!user) return;
@@ -76,11 +87,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       window.clearInterval(timer);
     };
-  }, [user]);
+  }, [syncUserSession, user]);
 
   useEffect(() => {
     const onStorage = (event: StorageEvent) => {
-      if (event.key === "auth_token") {
+      if (legacyTokenMode && event.key === "auth_token") {
         void syncUserSession();
       }
     };
@@ -90,24 +101,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       window.removeEventListener("storage", onStorage);
     };
-  }, []);
+  }, [legacyTokenMode, syncUserSession]);
 
   const login = async (email: string, password: string) => {
     try {
       await ensureCsrfCookie();
     } catch {
-      if (!shouldUseLegacyTokenMode()) {
+      if (!legacyTokenMode) {
         throw new Error("Unable to initialize CSRF cookie for session authentication.");
       }
     }
     const res = await api.post("/login", { email: normalizeEmail(email), password });
     const token = typeof res.data?.token === "string" ? res.data.token : null;
-    if (token && shouldUseLegacyTokenMode()) {
+    if (token && legacyTokenMode) {
       localStorage.setItem("auth_token", token);
     } else {
       localStorage.removeItem("auth_token");
     }
-    localStorage.setItem(AUTH_USER_CACHE_KEY, JSON.stringify(res.data.user));
+    if (legacyTokenMode) {
+      localStorage.setItem(AUTH_USER_CACHE_KEY, JSON.stringify(res.data.user));
+    } else {
+      localStorage.removeItem(AUTH_USER_CACHE_KEY);
+    }
     setUser(res.data.user);
   };
 
@@ -118,8 +133,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {
       // Keep client-side cleanup deterministic even if API logout fails.
     } finally {
-      localStorage.removeItem("auth_token");
-      localStorage.removeItem(AUTH_USER_CACHE_KEY);
+      clearStoredAuthState();
       setUser(null);
     }
   };
