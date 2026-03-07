@@ -131,11 +131,11 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 py-10">
-      <div className="w-full max-w-5xl">
-        <div className="grid items-center gap-6 md:grid-cols-2">
-          <aside className="p-2 md:p-4">
-            <div className="mb-5">
+    <div className="flex min-h-screen items-center justify-center px-4 py-6 md:py-10">
+      <div className="w-full max-w-4xl">
+        <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_26rem] lg:gap-8">
+          <aside className="p-1 md:p-3">
+            <div className="mb-4">
               <Link
                 to="/"
                 className="inline-flex items-center rounded-md border border-gold/50 px-4 py-2 text-sm font-semibold text-gold-soft transition hover:bg-gold/10 hover:text-gold"
@@ -143,37 +143,46 @@ export default function Login() {
                 Back to Home
               </Link>
             </div>
-            <p className="mb-3 text-xs uppercase tracking-[0.25em] text-gold-soft">Security Notice</p>
-            <h2 className="mb-4 font-heading text-4xl text-offwhite">Protected Member Access</h2>
-            <p className="text-sm leading-relaxed text-mist/85">
-              This portal is secured for verified members and authorized officers only. All access attempts and role-based actions are monitored to protect member data and administrative functions.
+            <p className="mb-2 text-xs uppercase tracking-[0.22em] text-gold-soft">Security Notice</p>
+            <h2 className="mb-3 font-heading text-3xl text-offwhite md:text-4xl">Protected Member Access</h2>
+            <p className="max-w-xl text-sm leading-relaxed text-mist/85">
+              This portal is for verified members and authorized officers only. Sign-in activity and role-based actions are monitored to protect member records and administrative operations.
             </p>
-            <div className="mt-6 rounded-md border border-white/20 bg-white/10 px-4 py-3 text-xs text-mist/85">
-              Password reset procedure:
-              <br />
-              1. Click Forgot Password and submit your account email.
-              <br />
-              2. Open the reset email and use the provided reset link.
-              <br />
-              3. Set a new password and return to login.
+            <div className="mt-5 rounded-md border border-white/20 bg-white/10 px-4 py-3 text-xs text-mist/85">
+              <p className="font-semibold text-offwhite">Password reset procedure</p>
+              <ol className="mt-2 space-y-1 pl-4">
+                <li>Use Forgot Password and submit your account email.</li>
+                <li>Open the reset email and follow the provided link.</li>
+                <li>Set a new password, then return to login.</li>
+              </ol>
             </div>
           </aside>
 
-          <div className="glass-card w-full max-w-md p-10 md:ml-auto">
-            <div className="mx-auto mb-4 flex w-fit items-center gap-5">
+          <div className="glass-card w-full max-w-md p-6 sm:p-8 md:ml-auto">
+            <div className="mx-auto mb-3 flex w-fit items-center gap-4">
               <img
                 src="/images/tfoe-logo.png"
                 alt="TFOE Logo"
-                className="h-[7.5rem] w-[7.5rem] object-contain"
+                width={76}
+                height={76}
+                loading="eager"
+                fetchPriority="high"
+                decoding="async"
+                className="h-16 w-16 object-contain sm:h-[4.5rem] sm:w-[4.5rem]"
               />
               <img
                 src="/images/lgec-logo.png"
                 alt="LGEC Logo"
-                className="h-[8.5rem] w-[8.5rem] object-contain"
+                width={84}
+                height={99}
+                loading="eager"
+                fetchPriority="high"
+                decoding="async"
+                className="h-[4.5rem] w-[4.5rem] object-contain sm:h-[5rem] sm:w-[5rem]"
               />
             </div>
             <h1 className="mb-2 text-center font-heading text-3xl text-gold">Member & Admin Portal</h1>
-            <p className="mb-8 text-center text-sm text-gray-300">
+            <p className="mb-5 text-center text-sm text-gray-300">
               {mode === "login" ? "Secure access for authorized members" : mode === "forgot" ? "Request password reset link" : "Reset your account password"}
             </p>
 
@@ -181,14 +190,14 @@ export default function Login() {
             {notice && <p className="mb-3 text-center text-sm text-gold-soft" role="status" aria-live="polite">{notice}</p>}
 
             <TaskHierarchyCard
-              className="mb-5"
+              className="mb-4"
               status={mode === "login" ? "Ready to authenticate with your account credentials." : mode === "forgot" ? "Ready to request a reset link." : "Ready to set a new password."}
               actions={mode === "login" ? "Sign in or switch to forgot password." : mode === "forgot" ? "Send reset link or proceed with existing token." : "Submit token and new password."}
               nextStep={microcopy.nextStep.login}
             />
 
             {mode === "login" && (
-              <form onSubmit={handleLogin} className="space-y-5">
+              <form onSubmit={handleLogin} className="space-y-4">
                 <div>
                   <label htmlFor="login-email" className="mb-1 block text-xs font-semibold text-mist/85">Email Address</label>
                   <input
@@ -197,6 +206,7 @@ export default function Login() {
                     placeholder="Email address"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
+                    autoComplete="email"
                     className="w-full rounded-lg border border-white/20 bg-white/10 px-4 py-3 text-offwhite placeholder:text-mist/70 outline-none focus:border-gold"
                   />
                 </div>
@@ -209,6 +219,7 @@ export default function Login() {
                     placeholder="Password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
+                    autoComplete="current-password"
                     className="w-full rounded-lg border border-white/20 bg-white/10 px-4 py-3 text-offwhite placeholder:text-mist/70 outline-none focus:border-gold"
                   />
                 </div>
@@ -247,6 +258,7 @@ export default function Login() {
                   placeholder="Account email"
                   value={forgotEmail}
                   onChange={(e) => setForgotEmail(e.target.value)}
+                  autoComplete="email"
                   className="w-full rounded-lg border border-white/20 bg-white/10 px-4 py-3 text-offwhite placeholder:text-mist/70 outline-none focus:border-gold"
                 />
                 <button
@@ -293,6 +305,7 @@ export default function Login() {
                   placeholder="Account email"
                   value={resetEmail}
                   onChange={(e) => setResetEmail(e.target.value)}
+                  autoComplete="email"
                   className="w-full rounded-lg border border-white/20 bg-white/10 px-4 py-3 text-offwhite placeholder:text-mist/70 outline-none focus:border-gold"
                 />
                 <label htmlFor="reset-token" className="mb-1 block text-xs font-semibold text-mist/85">Reset Token</label>
@@ -311,6 +324,7 @@ export default function Login() {
                   placeholder="New password"
                   value={resetPassword}
                   onChange={(e) => setResetPassword(e.target.value)}
+                  autoComplete="new-password"
                   className="w-full rounded-lg border border-white/20 bg-white/10 px-4 py-3 text-offwhite placeholder:text-mist/70 outline-none focus:border-gold"
                 />
                 <label htmlFor="reset-password-confirmation" className="mb-1 block text-xs font-semibold text-mist/85">Confirm New Password</label>
@@ -320,6 +334,7 @@ export default function Login() {
                   placeholder="Confirm new password"
                   value={resetPasswordConfirmation}
                   onChange={(e) => setResetPasswordConfirmation(e.target.value)}
+                  autoComplete="new-password"
                   className="w-full rounded-lg border border-white/20 bg-white/10 px-4 py-3 text-offwhite placeholder:text-mist/70 outline-none focus:border-gold"
                 />
                 <button
