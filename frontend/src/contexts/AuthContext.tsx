@@ -13,9 +13,22 @@ function normalizeEmail(value: string): string {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<Record<string, unknown> | null>(null);
-  const [loading, setLoading] = useState(true);
   const legacyTokenMode = shouldUseLegacyTokenMode();
+  const [user, setUser] = useState<Record<string, unknown> | null>(() => {
+    if (!legacyTokenMode) return null;
+
+    const token = localStorage.getItem("auth_token");
+    const cachedUserRaw = localStorage.getItem(AUTH_USER_CACHE_KEY);
+    if (!token || !cachedUserRaw) return null;
+
+    try {
+      return JSON.parse(cachedUserRaw) as Record<string, unknown>;
+    } catch {
+      localStorage.removeItem(AUTH_USER_CACHE_KEY);
+      return null;
+    }
+  });
+  const [loading, setLoading] = useState(() => !legacyTokenMode || localStorage.getItem("auth_token") !== null);
 
   const clearStoredAuthState = useCallback(() => {
     localStorage.removeItem("auth_token");
@@ -53,20 +66,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (legacyTokenMode) {
       const token = localStorage.getItem("auth_token");
-      const cachedUserRaw = localStorage.getItem(AUTH_USER_CACHE_KEY);
-
-      if (token && cachedUserRaw) {
-        try {
-          const cachedUser = JSON.parse(cachedUserRaw) as Record<string, unknown>;
-          setUser(cachedUser);
-        } catch {
-          localStorage.removeItem(AUTH_USER_CACHE_KEY);
-        }
-      }
 
       if (!token) {
         clearStoredAuthState();
-        setLoading(false);
         return;
       }
     }
@@ -128,13 +130,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     try {
-      await ensureCsrfCookie();
+      await ensureCsrfCookie(true);
       await api.post("/logout");
-    } catch {
-      // Keep client-side cleanup deterministic even if API logout fails.
-    } finally {
       clearStoredAuthState();
       setUser(null);
+    } catch (error) {
+      if (axios.isAxiosError(error) && [401, 419].includes(error.response?.status ?? 0)) {
+        clearStoredAuthState();
+        setUser(null);
+        return;
+      }
+
+      throw error;
     }
   };
 

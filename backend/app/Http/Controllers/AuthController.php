@@ -53,6 +53,10 @@ class AuthController extends Controller
 
         if ($application && ($application->decision_status === 'rejected' || $application->is_login_blocked)) {
             Auth::logout();
+            if ($request->hasSession()) {
+                $request->session()->invalidate();
+                $request->session()->regenerateToken();
+            }
             Log::warning('auth.login_blocked', [
                 'user_id' => $user->id,
                 'application_id' => $application->id,
@@ -151,7 +155,7 @@ class AuthController extends Controller
         $user = $request->user();
         if ($user) {
             $currentToken = $user->currentAccessToken();
-            if ($currentToken) {
+            if ($currentToken && !$currentToken instanceof TransientToken) {
                 $currentToken->delete();
             } else {
                 $user->tokens()->delete();

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
+import axios from "axios";
 import { useAuth } from "../../contexts/useAuth";
 import { hasPermission, isAdminUser } from "../../utils/auth";
 import { applyPortalTheme, readStoredPortalTheme, resolvePortalTheme } from "../../utils/portalTheme";
@@ -111,9 +112,16 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       : "block rounded-lg px-4 py-2.5 text-offwhite/90 transition hover:bg-white/10 hover:!text-offwhite";
   };
 
-  const handleLogout = () => {
-    navigate("/", { replace: true });
-    void logout();
+  const handleLogout = async () => {
+    try {
+      await logout();
+      navigate("/", { replace: true });
+    } catch (error) {
+      const message = axios.isAxiosError(error)
+        ? ((error.response?.data as { message?: string } | undefined)?.message ?? "Unable to log out right now. Please try again.")
+        : "Unable to log out right now. Please try again.";
+      window.alert(message);
+    }
   };
 
   return (
@@ -167,7 +175,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
           <div className="mt-10 border-t border-white/20 pt-6">
             <button
-              onClick={handleLogout}
+              onClick={() => void handleLogout()}
               className={`${collapsed ? "w-10 px-0 text-xs" : "px-3 text-sm"} rounded-md border border-gold/50 py-2 text-gold transition hover:bg-gold/10`}
               title="Logout"
               aria-label="Logout"

@@ -61,6 +61,28 @@ class AuthSessionTest extends TestCase
         $this->assertSame(0, $user->fresh()->tokens()->count());
     }
 
+    public function test_session_logout_invalidates_authenticated_browser_session(): void
+    {
+        $password = 'Password123';
+        $user = User::factory()->create([
+            'password' => $password,
+        ]);
+
+        $this->postJson('/api/v1/login', [
+            'email' => $user->email,
+            'password' => $password,
+        ])->assertOk();
+
+        $this->getJson('/api/v1/user')
+            ->assertOk()
+            ->assertJsonPath('id', $user->id);
+
+        $this->postJson('/api/v1/logout')->assertOk();
+
+        $this->assertNull($user->fresh()->active_session_id);
+        $this->assertNull($user->fresh()->active_token_id);
+    }
+
     public function test_login_revokes_previous_device_tokens_and_sets_new_active_token(): void
     {
         $password = 'Password123';
