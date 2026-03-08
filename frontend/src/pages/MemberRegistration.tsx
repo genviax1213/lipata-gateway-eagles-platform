@@ -2,6 +2,7 @@ import { useState } from "react";
 import axios from "axios";
 import api from "../services/api";
 import TaskHierarchyCard from "../components/TaskHierarchyCard";
+import { notifyPortalDataRefresh } from "../utils/portalRefresh";
 
 interface RegistrationForm {
   first_name: string;
@@ -103,6 +104,7 @@ export default function MemberRegistration() {
         last_name: form.last_name.trim(),
       };
       await api.post("/member-registrations", payload);
+      notifyPortalDataRefresh("members");
       setVerificationEmail(payload.email);
       setNotice("Member registration submitted. Continue with email verification.");
       setForm(initialForm);

@@ -3,6 +3,11 @@ import axios from "axios";
 import api from "../services/api";
 import { useAuth } from "../contexts/useAuth";
 import { hasPermission, isAdminUser } from "../utils/auth";
+import {
+  PORTAL_DATA_REFRESH_EVENT,
+  isPortalDataRefreshScope,
+  parsePortalDataRefresh,
+} from "../utils/portalRefresh";
 
 interface Role {
   id: number;
@@ -317,14 +322,27 @@ export default function UserRoles() {
   }, [refreshVisibleData]);
 
   useEffect(() => {
-    if (!isWindowVisible || saving) return;
-
-    const interval = window.setInterval(() => {
+    const handlePortalDataRefresh = (event: Event) => {
+      const detail = (event as CustomEvent).detail;
+      if (!isPortalDataRefreshScope(detail, ["members"])) return;
       refreshVisibleData();
-    }, 8000);
+    };
 
-    return () => window.clearInterval(interval);
-  }, [isWindowVisible, refreshVisibleData, saving]);
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key !== "lgec:portal-data-refresh") return;
+      const detail = parsePortalDataRefresh(event.newValue);
+      if (!isPortalDataRefreshScope(detail, ["members"])) return;
+      refreshVisibleData();
+    };
+
+    window.addEventListener(PORTAL_DATA_REFRESH_EVENT, handlePortalDataRefresh as EventListener);
+    window.addEventListener("storage", handleStorage);
+
+    return () => {
+      window.removeEventListener(PORTAL_DATA_REFRESH_EVENT, handlePortalDataRefresh as EventListener);
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, [refreshVisibleData]);
 
   const assignRole = async () => {
     if (!selectedMember || !selectedRoleId) return;

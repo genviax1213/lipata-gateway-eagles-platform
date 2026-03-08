@@ -3,6 +3,7 @@ import axios from "axios";
 import api from "../services/api";
 import { microcopy } from "../content/portalCopy";
 import TaskHierarchyCard from "../components/TaskHierarchyCard";
+import { notifyPortalDataRefresh } from "../utils/portalRefresh";
 
 interface ApplicationForm {
   first_name: string;
@@ -107,6 +108,7 @@ export default function ApplicantRegistration() {
         last_name: form.last_name.trim(),
       };
       await api.post("/applicant-registrations", payload);
+      notifyPortalDataRefresh("applicants");
       setVerificationEmail(payload.email);
       setNotice(microcopy.success.applicationSubmitted);
       setForm(initialForm);
@@ -172,6 +174,7 @@ export default function ApplicantRegistration() {
         password: reapplyPassword,
         password_confirmation: reapplyPasswordConfirmation,
       });
+      notifyPortalDataRefresh("applicants");
       setVerificationEmail(normalizedEmail);
       setNotice(microcopy.success.applicationReapplied);
       setReapplyPassword("");

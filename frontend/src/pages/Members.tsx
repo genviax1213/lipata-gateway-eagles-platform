@@ -6,6 +6,11 @@ import DeleteModal from "../components/DeleteModal";
 import type { Member, Applicant, MemberForm, ValidationErrors } from "../types/member";
 import { useAuth } from "../contexts/useAuth";
 import { hasPermission } from "../utils/auth";
+import {
+  PORTAL_DATA_REFRESH_EVENT,
+  isPortalDataRefreshScope,
+  parsePortalDataRefresh,
+} from "../utils/portalRefresh";
 
 type MembersTab = "members" | "applications";
 
@@ -136,14 +141,27 @@ export default function Members() {
   }, [refreshVisibleData]);
 
   useEffect(() => {
-    if (!isWindowVisible) return;
-
-    const interval = window.setInterval(() => {
+    const handlePortalDataRefresh = (event: Event) => {
+      const detail = (event as CustomEvent).detail;
+      if (!isPortalDataRefreshScope(detail, ["members", "applicants"])) return;
       refreshVisibleData();
-    }, 8000);
+    };
 
-    return () => window.clearInterval(interval);
-  }, [isWindowVisible, refreshVisibleData]);
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key !== "lgec:portal-data-refresh") return;
+      const detail = parsePortalDataRefresh(event.newValue);
+      if (!isPortalDataRefreshScope(detail, ["members", "applicants"])) return;
+      refreshVisibleData();
+    };
+
+    window.addEventListener(PORTAL_DATA_REFRESH_EVENT, handlePortalDataRefresh as EventListener);
+    window.addEventListener("storage", handleStorage);
+
+    return () => {
+      window.removeEventListener(PORTAL_DATA_REFRESH_EVENT, handlePortalDataRefresh as EventListener);
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, [refreshVisibleData]);
 
   async function handleUpdate(id: number, form: MemberForm) {
     try {
