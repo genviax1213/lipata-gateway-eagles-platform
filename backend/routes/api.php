@@ -88,6 +88,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/applicants/me/withdraw', [ApplicantController::class, 'withdraw']);
         Route::get('/applicants/archive/me', [ApplicantController::class, 'myArchive']);
         Route::get('/applicants/{applicant}', [ApplicantController::class, 'show']);
+        Route::delete('/applicants/{applicant}', [ApplicantController::class, 'destroy']);
         Route::post('/applicants/{applicant}/documents', [ApplicantController::class, 'uploadDocument'])->middleware('portal.permission:applications.docs.upload');
         Route::get('/applicants/documents/{document}/view', [ApplicantController::class, 'viewDocument']);
         Route::post('/applicants/documents/{document}/review', [ApplicantController::class, 'reviewDocument'])->middleware('portal.permission:applications.docs.review');

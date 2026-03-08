@@ -1,23 +1,27 @@
-import type { Member } from "../types/member";
-
 interface Props {
-  member: Member;
+  title?: string;
+  subject: string;
+  message?: string;
+  confirmLabel?: string;
   onCancel: () => void;
   onConfirm: () => void;
 }
 
 export default function DeleteModal({
-  member,
+  title = "Confirm Delete",
+  subject,
+  message,
+  confirmLabel = "Delete",
   onCancel,
   onConfirm,
 }: Props) {
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
       <div className="w-full max-w-md rounded-xl border border-red-200/20 bg-ink/95 p-8 text-offwhite shadow-2xl">
-        <h2 className="mb-4 font-heading text-3xl">Confirm Delete</h2>
+        <h2 className="mb-4 font-heading text-3xl">{title}</h2>
 
         <p className="mb-6 text-mist/90">
-          Delete <strong>{member.first_name} {member.last_name}</strong>?
+          {message ?? <>Delete <strong>{subject}</strong>?</>}
         </p>
 
         <div className="flex justify-end gap-4">
@@ -32,7 +36,7 @@ export default function DeleteModal({
             onClick={onConfirm}
             className="rounded-md bg-red-600 px-4 py-2 text-white hover:bg-red-500"
           >
-            Delete
+            {confirmLabel}
           </button>
         </div>
       </div>

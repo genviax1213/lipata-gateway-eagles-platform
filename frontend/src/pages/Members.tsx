@@ -19,6 +19,8 @@ export default function Members() {
   const canViewMembers = hasPermission(user, "members.view");
   const canViewApplications = hasPermission(user, "applications.view") || hasPermission(user, "applications.review");
   const canApproveApplications = hasPermission(user, "applications.review");
+  const actorRoleName = (user?.role as { name?: string } | undefined)?.name ?? null;
+  const canDeleteApplicants = actorRoleName === "superadmin";
   const canEditMembers = hasPermission(user, "members.update");
   const canDeleteMembers = hasPermission(user, "members.delete");
 
@@ -40,6 +42,7 @@ export default function Members() {
 
   const [editing, setEditing] = useState<Member | null>(null);
   const [deleting, setDeleting] = useState<Member | null>(null);
+  const [deletingApplicant, setDeletingApplicant] = useState<Applicant | null>(null);
 
   const [errors, setErrors] = useState<ValidationErrors>({});
   const [error, setError] = useState("");
@@ -82,7 +85,7 @@ export default function Members() {
       void fetchMembers(currentPage);
     }
 
-    if (effectiveActiveTab === "applications" && canViewApplications && applicationsLoaded) {
+    if (effectiveActiveTab === "applications" && canViewApplications && applicationsLoaded && !deletingApplicant) {
       void fetchApplications(applicationsPage);
     }
   }, [
@@ -92,6 +95,7 @@ export default function Members() {
     canViewMembers,
     currentPage,
     deleting,
+    deletingApplicant,
     editing,
     effectiveActiveTab,
     fetchApplications,
@@ -223,6 +227,22 @@ export default function Members() {
     } catch (err: unknown) {
       if (axios.isAxiosError(err)) {
         setError(((err.response?.data as { message?: string } | undefined)?.message) ?? "Failed to reject application.");
+      }
+    }
+  }
+
+  async function deleteApplicant(applicationId: number) {
+    try {
+      setError("");
+      await api.delete(`/applicants/${applicationId}`);
+      setDeletingApplicant(null);
+      setNotice("Applicant deleted.");
+      if (applicationsLoaded) {
+        await fetchApplications(applicationsPage);
+      }
+    } catch (err: unknown) {
+      if (axios.isAxiosError(err)) {
+        setError(((err.response?.data as { message?: string } | undefined)?.message) ?? "Failed to delete applicant.");
       }
     }
   }
@@ -462,7 +482,7 @@ export default function Members() {
                       <th className="px-4 py-3 text-left">Registered</th>
                       <th className="px-4 py-3 text-left">Stage</th>
                       <th className="px-4 py-3 text-left">Applicant Status</th>
-                      <th className="px-4 py-3 text-left">{canApproveApplications ? "Actions" : "Access"}</th>
+                      <th className="px-4 py-3 text-left">{canApproveApplications || canDeleteApplicants ? "Actions" : "Access"}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -475,20 +495,32 @@ export default function Members() {
                         <td className="px-4 py-3 capitalize">{(app.current_stage ?? "interview").replace(/_/g, " ")}</td>
                         <td className="px-4 py-3 capitalize">{app.status.replace(/_/g, " ")}</td>
                         <td className="px-4 py-3 space-x-3">
-                          {canApproveApplications ? (
+                          {canApproveApplications || canDeleteApplicants ? (
                             <>
-                              <button
-                                onClick={() => void approveApplication(app.id)}
-                                className="rounded-md border border-green-400/50 px-3 py-1.5 text-xs text-green-300 hover:bg-green-500/10"
-                              >
-                                Approve
-                              </button>
-                              <button
-                                onClick={() => void rejectApplication(app.id)}
-                                className="rounded-md border border-red-400/50 px-3 py-1.5 text-xs text-red-300 hover:bg-red-500/10"
-                              >
-                                Reject
-                              </button>
+                              {canApproveApplications && (
+                                <>
+                                  <button
+                                    onClick={() => void approveApplication(app.id)}
+                                    className="rounded-md border border-green-400/50 px-3 py-1.5 text-xs text-green-300 hover:bg-green-500/10"
+                                  >
+                                    Approve
+                                  </button>
+                                  <button
+                                    onClick={() => void rejectApplication(app.id)}
+                                    className="rounded-md border border-red-400/50 px-3 py-1.5 text-xs text-red-300 hover:bg-red-500/10"
+                                  >
+                                    Reject
+                                  </button>
+                                </>
+                              )}
+                              {canDeleteApplicants && (
+                                <button
+                                  onClick={() => setDeletingApplicant(app)}
+                                  className="rounded-md border border-red-400/50 px-3 py-1.5 text-xs text-red-300 hover:bg-red-500/10"
+                                >
+                                  Delete
+                                </button>
+                              )}
                             </>
                           ) : (
                             <span className="text-xs text-mist/80">List only</span>
@@ -538,9 +570,19 @@ export default function Members() {
 
       {deleting && canDeleteMembers && (
         <DeleteModal
-          member={deleting}
+          subject={`${deleting.first_name} ${deleting.last_name}`}
           onCancel={() => setDeleting(null)}
           onConfirm={() => void handleDelete(deleting.id)}
+        />
+      )}
+
+      {deletingApplicant && canDeleteApplicants && (
+        <DeleteModal
+          title="Delete Applicant"
+          subject={`${deletingApplicant.first_name} ${deletingApplicant.last_name}`}
+          message={`Delete applicant ${deletingApplicant.first_name} ${deletingApplicant.last_name}? This removes the applicant dossier and linked applicant-only account records.`}
+          onCancel={() => setDeletingApplicant(null)}
+          onConfirm={() => void deleteApplicant(deletingApplicant.id)}
         />
       )}
     </div>

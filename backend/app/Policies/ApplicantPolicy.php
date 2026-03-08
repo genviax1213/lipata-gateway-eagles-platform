@@ -5,6 +5,7 @@ namespace App\Policies;
 use App\Models\Applicant;
 use App\Models\User;
 use App\Support\Permissions;
+use App\Support\RoleHierarchy;
 
 class ApplicantPolicy
 {
@@ -51,5 +52,10 @@ class ApplicantPolicy
     public function reviewDecision(User $user, Applicant $applicant): bool
     {
         return $user->hasPermission('applications.review');
+    }
+
+    public function delete(User $user, Applicant $applicant): bool
+    {
+        return (string) optional($user->role)->name === RoleHierarchy::SUPERADMIN;
     }
 }

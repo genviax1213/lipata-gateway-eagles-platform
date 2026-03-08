@@ -234,6 +234,115 @@ class RolePermissionAuthorizationTest extends TestCase
             ->assertJsonPath('data.0.email', 'queued-superadmin-view@applicant.test');
     }
 
+    public function test_superadmin_can_delete_non_activated_applicant(): void
+    {
+        $superadminRole = Role::query()->where('name', 'superadmin')->firstOrFail();
+        $applicantRole = Role::query()->where('name', 'applicant')->firstOrFail();
+        $superadmin = User::factory()->create(['role_id' => $superadminRole->id]);
+        $linkedUser = User::factory()->create([
+            'role_id' => $applicantRole->id,
+            'email' => 'deleteable-applicant@test.local',
+        ]);
+
+        $application = Applicant::query()->create([
+            'user_id' => $linkedUser->id,
+            'first_name' => 'Deleteable',
+            'middle_name' => 'Applicant',
+            'last_name' => 'Queue',
+            'email' => 'deleteable-applicant@test.local',
+            'membership_status' => 'applicant',
+            'status' => 'under_review',
+            'decision_status' => 'pending',
+            'current_stage' => 'interview',
+            'is_login_blocked' => false,
+            'verification_token' => hash('sha256', 'deleteable-applicant-token'),
+            'email_verified_at' => now(),
+        ]);
+
+        \App\Models\MemberRegistration::query()->create([
+            'first_name' => 'Deleteable',
+            'middle_name' => 'Applicant',
+            'last_name' => 'Queue',
+            'email' => 'deleteable-applicant@test.local',
+            'password' => bcrypt('Password123!'),
+            'status' => 'pending_verification',
+            'verification_token' => hash('sha256', 'registration-token'),
+            'user_id' => $linkedUser->id,
+        ]);
+
+        Sanctum::actingAs($superadmin);
+
+        $this->deleteJson("/api/v1/applicants/{$application->id}")
+            ->assertOk()
+            ->assertJsonPath('message', 'Applicant deleted.');
+
+        $this->assertDatabaseMissing('applicants', ['id' => $application->id]);
+        $this->assertDatabaseMissing('users', ['id' => $linkedUser->id]);
+        $this->assertDatabaseMissing('member_registrations', ['email' => 'deleteable-applicant@test.local']);
+    }
+
+    public function test_admin_cannot_delete_applicant(): void
+    {
+        $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
+        $admin = User::factory()->create(['role_id' => $adminRole->id]);
+
+        $application = Applicant::query()->create([
+            'first_name' => 'Protected',
+            'middle_name' => 'Applicant',
+            'last_name' => 'Queue',
+            'email' => 'protected-applicant@test.local',
+            'membership_status' => 'applicant',
+            'status' => 'under_review',
+            'decision_status' => 'pending',
+            'current_stage' => 'interview',
+            'is_login_blocked' => false,
+            'verification_token' => hash('sha256', 'protected-applicant-token'),
+            'email_verified_at' => now(),
+        ]);
+
+        Sanctum::actingAs($admin);
+
+        $this->deleteJson("/api/v1/applicants/{$application->id}")
+            ->assertStatus(403);
+    }
+
+    public function test_superadmin_cannot_delete_activated_applicant_from_queue(): void
+    {
+        $superadminRole = Role::query()->where('name', 'superadmin')->firstOrFail();
+        $superadmin = User::factory()->create(['role_id' => $superadminRole->id]);
+        $member = Member::query()->create([
+            'member_number' => 'LGEC-TEST-99999',
+            'first_name' => 'Activated',
+            'middle_name' => 'Member',
+            'last_name' => 'Linked',
+            'email' => 'activated-member-linked@test.local',
+            'membership_status' => 'active',
+            'email_verified' => true,
+            'password_set' => true,
+        ]);
+
+        $application = Applicant::query()->create([
+            'member_id' => $member->id,
+            'first_name' => 'Activated',
+            'middle_name' => 'Applicant',
+            'last_name' => 'Queue',
+            'email' => 'activated-applicant@test.local',
+            'membership_status' => 'applicant',
+            'status' => Applicant::STATUS_ACTIVATED,
+            'decision_status' => 'approved',
+            'current_stage' => 'induction',
+            'is_login_blocked' => false,
+            'verification_token' => hash('sha256', 'activated-applicant-token'),
+            'email_verified_at' => now(),
+        ]);
+
+        Sanctum::actingAs($superadmin);
+
+        $this->deleteJson("/api/v1/applicants/{$application->id}")
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Activated applicants must be managed through the member workflow and cannot be deleted from the applicant queue.');
+    }
+
     public function test_officer_can_view_applicant_queue_but_not_dossier(): void
     {
         $officerRole = Role::query()->where('name', 'officer')->firstOrFail();

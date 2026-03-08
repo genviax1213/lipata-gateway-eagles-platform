@@ -496,6 +496,11 @@ Mapping summary:
 
 ## Progress Log
 
+### 2026-03-08 - Superadmin Applicant Queue Cleanup
+- Added superadmin-only applicant deletion from the applicant queue for test or erroneous applicant records.
+- Deletion is blocked for activated applicants; those must be managed through the member workflow instead.
+- Applicant deletion removes the applicant dossier, applicant-only linked user, and unattached member-registration records tied to the same applicant identity.
+
 ### 2026-03-08 - Google OAuth entry support
 
 - Added Google OAuth entry paths for:

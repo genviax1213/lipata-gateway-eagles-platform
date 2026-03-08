@@ -1096,6 +1096,81 @@ class ApplicantController extends Controller
         ]);
     }
 
+    public function destroy(Request $request, Applicant $applicant)
+    {
+        $this->authorize('delete', $applicant);
+
+        if ($applicant->status === Applicant::STATUS_ACTIVATED || $applicant->member_id) {
+            return response()->json([
+                'message' => 'Activated applicants must be managed through the member workflow and cannot be deleted from the applicant queue.',
+            ], 422);
+        }
+
+        $applicant->loadMissing(['documents', 'feeRequirements.payments', 'user.role:id,name']);
+
+        DB::transaction(function () use ($applicant): void {
+            $normalizedEmail = $this->normalizeEmail((string) $applicant->email);
+            $linkedUser = $applicant->user;
+
+            foreach ($applicant->documents as $document) {
+                $disk = $this->resolveDocumentDisk($document);
+                if (Storage::disk($disk)->exists($document->file_path)) {
+                    Storage::disk($disk)->delete($document->file_path);
+                }
+            }
+
+            ApplicantNotice::query()->where('applicant_id', $applicant->id)->delete();
+            ApplicantDocument::query()->where('applicant_id', $applicant->id)->delete();
+
+            $requirementIds = ApplicantFeeRequirement::query()
+                ->where('applicant_id', $applicant->id)
+                ->pluck('id');
+
+            if ($requirementIds->isNotEmpty()) {
+                ApplicantFeePayment::query()
+                    ->whereIn('applicant_fee_requirement_id', $requirementIds)
+                    ->delete();
+            }
+
+            ApplicantFeeRequirement::query()->where('applicant_id', $applicant->id)->delete();
+
+            MemberRegistration::query()
+                ->where(function ($query) use ($linkedUser, $normalizedEmail): void {
+                    if ($linkedUser) {
+                        $query->where('user_id', $linkedUser->id);
+                    }
+
+                    if ($normalizedEmail !== '') {
+                        $method = $linkedUser ? 'orWhereRaw' : 'whereRaw';
+                        $query->{$method}('LOWER(TRIM(email)) = ?', [$normalizedEmail]);
+                    }
+                })
+                ->whereNull('member_id')
+                ->delete();
+
+            $applicant->delete();
+
+            if ($linkedUser
+                && (string) optional($linkedUser->role)->name === 'applicant'
+                && !Applicant::query()->where('user_id', $linkedUser->id)->exists()
+                && !Member::query()->where('user_id', $linkedUser->id)->exists()
+            ) {
+                $linkedUser->delete();
+            }
+        });
+
+        Log::info('application.deleted', [
+            'actor_user_id' => $request->user()->id,
+            'application_id' => $applicant->id,
+            'email' => $applicant->email,
+            'ip' => $request->ip(),
+        ]);
+
+        return response()->json([
+            'message' => 'Applicant deleted.',
+        ]);
+    }
+
     public function createBatch(Request $request)
     {
         $validated = $request->validate([
