@@ -107,6 +107,19 @@
   - `cd backend && php artisan optimize:clear`
   - `cd backend && php artisan config:cache`
 - Verification emails for both `member-registration` and `applicant-registration` now read the frontend base URL from `config('app.frontend_url')`, so production links will follow `FRONTEND_URL` consistently.
+- Google OAuth is supported for:
+  - `Portal Login` (existing registered email only)
+  - `member-registration` (Google-verified email skips manual token verification and activates immediately)
+  - `applicant-registration` (Google-verified email skips manual token verification and goes straight to `under_review`)
+- Required host env values for Google OAuth:
+  - `GOOGLE_CLIENT_ID`
+  - `GOOGLE_CLIENT_SECRET`
+  - `GOOGLE_REDIRECT_URI=https://lgec.org/oauth/google/callback`
+- Hidden/session-backed Google routes:
+  - `GET /oauth/google/redirect?intent=login|member_registration|applicant_registration`
+  - `GET /oauth/google/callback`
+  - `GET /api/v1/oauth/google/status`
+  - `GET /api/v1/oauth/google/claim?intent=member_registration|applicant_registration`
 
 Seeder note:
 - `AdminSeeder` sets initial admin password only when admin account does not yet exist.

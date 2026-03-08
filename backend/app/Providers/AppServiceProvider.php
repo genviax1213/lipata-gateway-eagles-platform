@@ -97,5 +97,10 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('members-write', function (Request $request) {
             return Limit::perMinute(20)->by($request->user()?->id ?: $request->ip());
         });
+
+        RateLimiter::for('google-oauth', function (Request $request) {
+            $intent = strtolower((string) $request->query('intent', ''));
+            return Limit::perMinute(10)->by($request->ip() . '|' . $intent);
+        });
     }
 }

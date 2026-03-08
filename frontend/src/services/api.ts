@@ -24,6 +24,7 @@ const api = axios.create({
 });
 
 const AUTH_NOTICE_KEY = "portal_auth_notice";
+export type GoogleOAuthIntent = "login" | "member_registration" | "applicant_registration";
 
 export async function ensureCsrfCookie(force = false): Promise<void> {
   if (csrfCookieLoaded && !force) return;
@@ -59,6 +60,19 @@ export async function ensureCsrfCookie(force = false): Promise<void> {
 
 export function shouldUseLegacyTokenMode(): boolean {
   return legacyTokenMode;
+}
+
+export async function googleOAuthStatus(): Promise<{ enabled: boolean }> {
+  const response = await api.get("/oauth/google/status");
+  return {
+    enabled: Boolean(response.data?.enabled),
+  };
+}
+
+export function buildGoogleOAuthUrl(intent: GoogleOAuthIntent): string {
+  const url = new URL(`${apiOrigin}/oauth/google/redirect`);
+  url.searchParams.set("intent", intent);
+  return url.toString();
 }
 
 api.interceptors.request.use((config) => {

@@ -15,6 +15,7 @@ use App\Models\Role;
 use App\Models\User;
 use App\Notifications\ApplicantVerificationToken;
 use App\Support\ImageUploadOptimizer;
+use App\Support\GoogleOAuthClaimStore;
 use App\Support\Permissions;
 use App\Support\TextCase;
 use App\Support\VerificationToken;
@@ -25,6 +26,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 class ApplicantController extends Controller
 {
@@ -33,7 +35,8 @@ class ApplicantController extends Controller
         string $firstName,
         string $middleName,
         string $lastName,
-        string $password
+        string $password,
+        bool $emailVerified = false
     ): array {
         $applicantRole = Role::query()->where('name', 'applicant')->first();
         $applicantUser = User::query()->updateOrCreate(
@@ -44,9 +47,9 @@ class ApplicantController extends Controller
                 'role_id' => $applicantRole?->id,
                 'finance_role' => null,
                 'forum_role' => null,
+                'email_verified_at' => $emailVerified ? now() : null,
             ]
         );
-
         $token = VerificationToken::generate();
 
         $application = Applicant::query()->create([
@@ -56,16 +59,42 @@ class ApplicantController extends Controller
             'last_name' => $lastName,
             'email' => $email,
             'membership_status' => 'applicant',
-            'status' => 'pending_verification',
+            'status' => $emailVerified ? Applicant::STATUS_UNDER_REVIEW : Applicant::STATUS_PENDING_VERIFICATION,
             'decision_status' => 'pending',
             'current_stage' => 'interview',
             'verification_token' => hash('sha256', $token),
+            'email_verified_at' => $emailVerified ? now() : null,
             'is_login_blocked' => false,
         ]);
 
-        $applicantUser->notify(new ApplicantVerificationToken($token, $email));
+        if (!$emailVerified) {
+            $applicantUser->notify(new ApplicantVerificationToken($token, $email));
+        }
 
         return [$applicantUser, $application];
+    }
+
+    private function consumeGoogleClaim(Request $request, string $email): ?array
+    {
+        if ($request->input('oauth_provider') !== 'google') {
+            return null;
+        }
+
+        $token = (string) $request->input('oauth_claim_token', '');
+        $claim = GoogleOAuthClaimStore::consume(GoogleOAuthClaimStore::INTENT_APPLICANT_REGISTRATION, $token);
+        if (!$claim) {
+            throw ValidationException::withMessages([
+                'oauth_provider' => ['Google registration session expired. Start Google registration again.'],
+            ]);
+        }
+
+        if ($this->normalizeEmail((string) $claim['email']) !== $email) {
+            throw ValidationException::withMessages([
+                'email' => ['Google verified email must match the application email.'],
+            ]);
+        }
+
+        return $claim;
     }
 
     private function resolveOwnedApplication(User $user): ?Applicant
@@ -426,9 +455,12 @@ class ApplicantController extends Controller
             'email' => 'required|email|max:255',
             'password' => 'required|string|min:8|confirmed',
             'membership_status' => 'nullable|in:applicant',
+            'oauth_provider' => 'nullable|in:google',
+            'oauth_claim_token' => 'nullable|string',
         ]);
 
         $normalizedEmail = $this->normalizeEmail($validated['email']);
+        $googleClaim = $this->consumeGoogleClaim($request, $normalizedEmail);
         $normalizedFirstName = (string) TextCase::title($validated['first_name']);
         $normalizedMiddleName = (string) TextCase::title($validated['middle_name']);
         $normalizedLastName = (string) TextCase::title($validated['last_name']);
@@ -495,11 +527,14 @@ class ApplicantController extends Controller
             $normalizedFirstName,
             $normalizedMiddleName,
             $normalizedLastName,
-            (string) $validated['password']
+            (string) $validated['password'],
+            $googleClaim !== null
         );
 
         return response()->json([
-            'message' => 'Application submitted. Verify your email to continue to review.',
+            'message' => $googleClaim
+                ? 'Google verified your email. Your application is now under review.'
+                : 'Application submitted. Verify your email to continue to review.',
             'application_id' => $application->id,
         ], 201);
     }

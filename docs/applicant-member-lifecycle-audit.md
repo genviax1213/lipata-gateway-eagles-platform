@@ -496,6 +496,17 @@ Mapping summary:
 
 ## Progress Log
 
+### 2026-03-08 - Google OAuth entry support
+
+- Added Google OAuth entry paths for:
+  - portal login
+  - member registration
+  - applicant registration
+- Login via Google succeeds only when the Google email already exists as a registered portal account.
+- Member registration via Google uses the Google-verified email as trusted verification and activates immediately after form completion.
+- Applicant registration via Google uses the Google-verified email as trusted verification and moves directly to `under_review` after form completion.
+- The Google registration callback stores only a short-lived session claim; it does not create a user or applicant record until the registration form is submitted.
+
 ### Slice 6: Applicant Queue Visibility Split
 - Added a dedicated read-only applicant queue permission for internal visibility.
 - Added a separate document/dossier visibility permission for `admin` and `superadmin`.

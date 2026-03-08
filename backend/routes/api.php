@@ -16,6 +16,7 @@ use App\Http\Controllers\ForumController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\LogManagementController;
 use App\Http\Controllers\BootstrapRecoveryController;
+use App\Http\Controllers\GoogleOAuthController;
 
 Route::prefix('v1')->group(function () {
     Route::get('/content/homepage-community', [PostController::class, 'publicHomepageCommunity']);
@@ -31,6 +32,8 @@ Route::prefix('v1')->group(function () {
         ->middleware('throttle:application-submit');
     Route::post('/member-registrations/verify', [MemberRegistrationController::class, 'verify'])
         ->middleware('throttle:application-verify');
+    Route::get('/oauth/google/status', [GoogleOAuthController::class, 'status']);
+    Route::get('/oauth/google/claim', [GoogleOAuthController::class, 'claim']);
     Route::post('/rll', [BootstrapRecoveryController::class, 'request'])
         ->middleware('throttle:bootstrap-recovery-request');
     Route::post('/rll/verify', [BootstrapRecoveryController::class, 'verify'])
