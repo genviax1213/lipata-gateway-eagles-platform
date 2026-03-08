@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
-import api, { buildGoogleOAuthUrl, googleOAuthStatus } from "../services/api";
+import api from "../services/api";
 import { microcopy } from "../content/portalCopy";
 import TaskHierarchyCard from "../components/TaskHierarchyCard";
 import { notifyPortalDataRefresh } from "../utils/portalRefresh";
@@ -46,7 +46,6 @@ export default function ApplicantRegistration() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState(false);
-  const [googleEnabled, setGoogleEnabled] = useState(false);
   const [googleClaimLoaded, setGoogleClaimLoaded] = useState(false);
   const googleClaimToken = searchParams.get("google_claim") ?? "";
 
@@ -61,12 +60,6 @@ export default function ApplicantRegistration() {
     }
     return fallback;
   };
-
-  useEffect(() => {
-    void googleOAuthStatus()
-      .then((status) => setGoogleEnabled(status.enabled))
-      .catch(() => setGoogleEnabled(false));
-  }, []);
 
   useEffect(() => {
     const oauthError = searchParams.get("oauth_error");
@@ -346,21 +339,6 @@ export default function ApplicantRegistration() {
           <p className="md:col-span-2 rounded-md border border-white/20 bg-white/10 px-3 py-2 text-xs text-mist/85">
             Applicant: a non-member seeking to join the fraternity. Once approved, your account remains in the official applicant workflow until committee requirements are fully completed.
           </p>
-          <div className="md:col-span-2">
-            <button
-              type="button"
-              disabled={!googleEnabled || saving}
-              onClick={() => {
-                window.location.href = buildGoogleOAuthUrl("applicant_registration");
-              }}
-              className="w-full rounded-md border border-white/25 bg-white/10 px-4 py-2 text-sm font-semibold text-offwhite transition hover:border-gold hover:text-gold disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Continue with Google
-            </button>
-            {!googleEnabled && (
-              <p className="mt-2 text-xs text-mist/80">Google registration is not configured yet on this environment.</p>
-            )}
-          </div>
           <div className="md:col-span-2">
             <button onClick={() => void submitApplication()} disabled={saving} className="btn-primary">
               {saving ? "Submitting..." : "Submit Application"}

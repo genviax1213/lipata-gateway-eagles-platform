@@ -769,3 +769,20 @@ Implemented behavior:
 Rationale:
 - verified registration email is now the source of truth for account identity and cross-record linkage
 - this removes drift between `users`, `members`, and applicant dossier records caused by later email edits
+
+### 2026-03-09 - Applicants directory and review separation
+
+Implemented behavior:
+- `Directory -> Applicants` is now read-only
+- approval, rejection, probation, activation, and other lifecycle actions are intentionally left to the dedicated application review workflow
+- the applicants directory now shows access context only, avoiding duplicate action buttons
+
+Data correction:
+- the applicant status enum is expanded to match the actual lifecycle values used by the application:
+  - `pending_verification`
+  - `under_review`
+  - `official_applicant`
+  - `eligible_for_activation`
+  - `activated`
+  - `rejected`
+  - `withdrawn`

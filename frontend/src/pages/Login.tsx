@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../contexts/useAuth";
-import api, { buildGoogleOAuthUrl, googleOAuthStatus } from "../services/api";
+import api from "../services/api";
 import { canonicalRoutes, microcopy } from "../content/portalCopy";
 import TaskHierarchyCard from "../components/TaskHierarchyCard";
 
@@ -22,7 +22,6 @@ export default function Login() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState(false);
-  const [googleEnabled, setGoogleEnabled] = useState(false);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -57,12 +56,6 @@ export default function Login() {
       setNotice(storedNotice);
       localStorage.removeItem("portal_auth_notice");
     }
-  }, []);
-
-  useEffect(() => {
-    void googleOAuthStatus()
-      .then((status) => setGoogleEnabled(status.enabled))
-      .catch(() => setGoogleEnabled(false));
   }, []);
 
   useEffect(() => {
@@ -247,17 +240,6 @@ export default function Login() {
                   {saving ? "Logging in..." : "Login"}
                 </button>
 
-                <button
-                  type="button"
-                  disabled={!googleEnabled || saving}
-                  onClick={() => {
-                    window.location.href = buildGoogleOAuthUrl("login");
-                  }}
-                  className="w-full rounded-lg border border-white/20 bg-white/10 py-3 font-semibold text-offwhite transition hover:border-gold hover:text-gold disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  Continue with Google
-                </button>
-
                 <div className="text-center">
                   <button
                     type="button"
@@ -272,12 +254,6 @@ export default function Login() {
                     Forgot password?
                   </button>
                 </div>
-
-                {!googleEnabled && (
-                  <p className="text-center text-xs text-mist/80">
-                    Google login is not configured yet on this environment.
-                  </p>
-                )}
               </form>
             )}
 
