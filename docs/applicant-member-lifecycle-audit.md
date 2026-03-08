@@ -485,6 +485,11 @@ Mapping summary:
 
 ## Progress Log
 
+### Slice 6: Applicant Queue Visibility Split
+- Added a dedicated read-only applicant visibility permission for `admin` and `superadmin`.
+- Kept applicant lifecycle decisions (`approve`, `activate`, `probation`, `reject`, batch assignment) under `applications.review`.
+- Membership chairman retains decision authority; `admin` and `superadmin` can now inspect applicant queue entries without inheriting chairman-only actions.
+
 ### 2026-03-08 - Local implementation slice 1
 
 Implemented locally:

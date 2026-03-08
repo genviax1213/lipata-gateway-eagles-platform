@@ -25,6 +25,7 @@ class Permissions
     public const FINANCE_INPUT = 'finance.input';
 
     // Applications & Fees Permissions
+    public const APPLICATIONS_VIEW = 'applications.view';
     public const APPLICATIONS_FEE_SET = 'applications.fee.set';
     public const APPLICATIONS_FEE_PAY = 'applications.fee.pay';
     public const APPLICATIONS_REVIEW = 'applications.review';
@@ -99,6 +100,7 @@ class Permissions
             'members' => self::memberManagement(),
             'finance' => self::finance(),
             'applications' => [
+                self::APPLICATIONS_VIEW,
                 self::APPLICATIONS_REVIEW,
                 self::APPLICATIONS_NOTICE_VIEW,
                 self::APPLICATIONS_NOTICE_SET,

@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Post;
 use App\Models\Role;
 use App\Models\Member;
+use App\Models\MemberApplication;
 use App\Models\Contribution;
 use App\Models\FinanceAccount;
 use App\Models\User;
@@ -150,6 +151,58 @@ class RolePermissionAuthorizationTest extends TestCase
         $response = $this->getJson('/api/v1/admin/users');
 
         $response->assertStatus(200);
+    }
+
+    public function test_admin_can_view_applicant_review_queue(): void
+    {
+        $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
+        $admin = User::factory()->create(['role_id' => $adminRole->id]);
+
+        MemberApplication::query()->create([
+            'first_name' => 'Queued',
+            'middle_name' => 'Applicant',
+            'last_name' => 'Admin View',
+            'email' => 'queued-admin-view@applicant.test',
+            'membership_status' => 'applicant',
+            'status' => 'under_review',
+            'decision_status' => 'pending',
+            'current_stage' => 'interview',
+            'is_login_blocked' => false,
+            'verification_token' => hash('sha256', 'queued-admin-view-token'),
+            'email_verified_at' => now(),
+        ]);
+
+        Sanctum::actingAs($admin);
+
+        $this->getJson('/api/v1/member-applications')
+            ->assertOk()
+            ->assertJsonPath('data.0.email', 'queued-admin-view@applicant.test');
+    }
+
+    public function test_superadmin_can_view_applicant_review_queue(): void
+    {
+        $superadminRole = Role::query()->where('name', 'superadmin')->firstOrFail();
+        $superadmin = User::factory()->create(['role_id' => $superadminRole->id]);
+
+        MemberApplication::query()->create([
+            'first_name' => 'Queued',
+            'middle_name' => 'Applicant',
+            'last_name' => 'Superadmin View',
+            'email' => 'queued-superadmin-view@applicant.test',
+            'membership_status' => 'applicant',
+            'status' => 'under_review',
+            'decision_status' => 'pending',
+            'current_stage' => 'interview',
+            'is_login_blocked' => false,
+            'verification_token' => hash('sha256', 'queued-superadmin-view-token'),
+            'email_verified_at' => now(),
+        ]);
+
+        Sanctum::actingAs($superadmin);
+
+        $this->getJson('/api/v1/member-applications')
+            ->assertOk()
+            ->assertJsonPath('data.0.email', 'queued-superadmin-view@applicant.test');
     }
 
     public function test_officer_can_view_cms_posts_list(): void

@@ -12,6 +12,7 @@ type MembersTab = "members" | "applications";
 export default function Members() {
   const { user } = useAuth();
   const canViewMembers = hasPermission(user, "members.view");
+  const canViewApplications = hasPermission(user, "applications.view") || hasPermission(user, "applications.review");
   const canApproveApplications = hasPermission(user, "applications.review");
   const canEditMembers = hasPermission(user, "members.update");
   const canDeleteMembers = hasPermission(user, "members.delete");
@@ -55,13 +56,13 @@ export default function Members() {
   }, [emailVerifiedFilter, passwordSetFilter, search]);
 
   const fetchApplications = useCallback(async (page = 1) => {
-    if (!canApproveApplications) return;
+    if (!canViewApplications) return;
     const res = await api.get("/member-applications", { params: { status: "under_review", page } });
     setApplications((res.data?.data ?? []) as MemberApplication[]);
     setApplicationsPage(Number(res.data?.current_page ?? 1));
     setApplicationsLastPage(Number(res.data?.last_page ?? 1));
     setApplicationsLoaded(true);
-  }, [canApproveApplications]);
+  }, [canViewApplications]);
 
   useEffect(() => {
     if (!canViewMembers || membersLoaded) return;
@@ -72,12 +73,12 @@ export default function Members() {
   }, [canViewMembers, fetchMembers, membersLoaded]);
 
   useEffect(() => {
-    if (activeTab !== "applications" || !canApproveApplications || applicationsLoaded) return;
+    if (activeTab !== "applications" || !canViewApplications || applicationsLoaded) return;
     const timer = window.setTimeout(() => {
       void fetchApplications(1);
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [activeTab, applicationsLoaded, canApproveApplications, fetchApplications]);
+  }, [activeTab, applicationsLoaded, canViewApplications, fetchApplications]);
 
   async function handleUpdate(id: number, form: MemberForm) {
     try {
@@ -176,7 +177,7 @@ export default function Members() {
         >
           Members
         </button>
-        {canApproveApplications && (
+        {canViewApplications && (
           <button
             type="button"
             onClick={() => setActiveTab("applications")}
@@ -315,7 +316,7 @@ export default function Members() {
         </>
       )}
 
-      {activeTab === "applications" && canApproveApplications && (
+      {activeTab === "applications" && canViewApplications && (
         <>
           <div className="mb-6 rounded-xl border border-white/20 bg-white/10 p-4">
             <button
@@ -337,6 +338,11 @@ export default function Members() {
               <div className="overflow-x-auto rounded-xl border border-white/20 bg-white/10 shadow-lg">
                 <div className="border-b border-white/15 px-4 py-3">
                   <h2 className="font-heading text-2xl text-offwhite">Applicants Under Review</h2>
+                  {!canApproveApplications && (
+                    <p className="mt-2 text-sm text-mist/80">
+                      Read-only queue. Decisions remain restricted to the membership committee review workflow.
+                    </p>
+                  )}
                 </div>
                 <table className="min-w-full text-sm text-offwhite">
                   <thead className="bg-navy/70 text-gold-soft">
@@ -344,7 +350,7 @@ export default function Members() {
                       <th className="px-4 py-3 text-left">Name</th>
                       <th className="px-4 py-3 text-left">Email</th>
                       <th className="px-4 py-3 text-left">Application Status</th>
-                      <th className="px-4 py-3 text-left">Actions</th>
+                      <th className="px-4 py-3 text-left">{canApproveApplications ? "Actions" : "Access"}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -354,18 +360,24 @@ export default function Members() {
                         <td className="px-4 py-3">{app.email}</td>
                         <td className="px-4 py-3 capitalize">{app.status.replace(/_/g, " ")}</td>
                         <td className="px-4 py-3 space-x-3">
-                          <button
-                            onClick={() => void approveApplication(app.id)}
-                            className="rounded-md border border-green-400/50 px-3 py-1.5 text-xs text-green-300 hover:bg-green-500/10"
-                          >
-                            Approve
-                          </button>
-                          <button
-                            onClick={() => void rejectApplication(app.id)}
-                            className="rounded-md border border-red-400/50 px-3 py-1.5 text-xs text-red-300 hover:bg-red-500/10"
-                          >
-                            Reject
-                          </button>
+                          {canApproveApplications ? (
+                            <>
+                              <button
+                                onClick={() => void approveApplication(app.id)}
+                                className="rounded-md border border-green-400/50 px-3 py-1.5 text-xs text-green-300 hover:bg-green-500/10"
+                              >
+                                Approve
+                              </button>
+                              <button
+                                onClick={() => void rejectApplication(app.id)}
+                                className="rounded-md border border-red-400/50 px-3 py-1.5 text-xs text-red-300 hover:bg-red-500/10"
+                              >
+                                Reject
+                              </button>
+                            </>
+                          ) : (
+                            <span className="text-xs text-mist/80">View only</span>
+                          )}
                         </td>
                       </tr>
                     ))}
