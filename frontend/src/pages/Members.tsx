@@ -36,6 +36,7 @@ export default function Members() {
   const [errors, setErrors] = useState<ValidationErrors>({});
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [isWindowVisible, setIsWindowVisible] = useState(() => typeof document === "undefined" || document.visibilityState === "visible");
 
   const fetchMembers = useCallback(async (page = 1, filters?: { search: string; email_verified: string; password_set: string }) => {
     setError("");
@@ -64,6 +65,31 @@ export default function Members() {
     setApplicationsLoaded(true);
   }, [canViewApplications]);
 
+  const refreshVisibleData = useCallback(() => {
+    if (!isWindowVisible) return;
+
+    if (activeTab === "members" && canViewMembers && membersLoaded && !editing && !deleting) {
+      void fetchMembers(currentPage);
+    }
+
+    if (activeTab === "applications" && canViewApplications && applicationsLoaded) {
+      void fetchApplications(applicationsPage);
+    }
+  }, [
+    activeTab,
+    applicationsLoaded,
+    applicationsPage,
+    canViewApplications,
+    canViewMembers,
+    currentPage,
+    deleting,
+    editing,
+    fetchApplications,
+    fetchMembers,
+    isWindowVisible,
+    membersLoaded,
+  ]);
+
   useEffect(() => {
     if (!canViewMembers || membersLoaded) return;
     const timer = window.setTimeout(() => {
@@ -79,6 +105,44 @@ export default function Members() {
     }, 0);
     return () => window.clearTimeout(timer);
   }, [activeTab, applicationsLoaded, canViewApplications, fetchApplications]);
+
+  useEffect(() => {
+    const handleFocus = () => {
+      setIsWindowVisible(true);
+      window.setTimeout(() => {
+        refreshVisibleData();
+      }, 0);
+    };
+
+    const handleVisibilityChange = () => {
+      const visible = document.visibilityState === "visible";
+      setIsWindowVisible(visible);
+
+      if (visible) {
+        window.setTimeout(() => {
+          refreshVisibleData();
+        }, 0);
+      }
+    };
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [refreshVisibleData]);
+
+  useEffect(() => {
+    if (!isWindowVisible) return;
+
+    const interval = window.setInterval(() => {
+      refreshVisibleData();
+    }, 8000);
+
+    return () => window.clearInterval(interval);
+  }, [isWindowVisible, refreshVisibleData]);
 
   async function handleUpdate(id: number, form: MemberForm) {
     try {

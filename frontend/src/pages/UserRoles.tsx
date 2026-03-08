@@ -115,6 +115,7 @@ export default function UserRoles() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [isWindowVisible, setIsWindowVisible] = useState(() => typeof document === "undefined" || document.visibilityState === "visible");
 
   const selectedMember = useMemo(
     () => members.find((item) => item.id === selectedMemberId) ?? null,
@@ -262,6 +263,68 @@ export default function UserRoles() {
     setSelectedRoleId(currentRoleId);
     setSelectedForumRole(selectedMember.user?.forum_role ?? "");
   }, [selectedMember]);
+
+  const refreshVisibleData = useCallback(() => {
+    if (!isWindowVisible || saving) return;
+
+    if (canDelegateRoles && membersLoaded) {
+      void fetchMembers(page);
+    }
+
+    if (canResetPasswords && activeTab === "passwords" && usersLoaded) {
+      void fetchUsers(usersPage);
+    }
+  }, [
+    activeTab,
+    canDelegateRoles,
+    canResetPasswords,
+    fetchMembers,
+    fetchUsers,
+    isWindowVisible,
+    membersLoaded,
+    page,
+    saving,
+    usersLoaded,
+    usersPage,
+  ]);
+
+  useEffect(() => {
+    const handleFocus = () => {
+      setIsWindowVisible(true);
+      window.setTimeout(() => {
+        refreshVisibleData();
+      }, 0);
+    };
+
+    const handleVisibilityChange = () => {
+      const visible = document.visibilityState === "visible";
+      setIsWindowVisible(visible);
+
+      if (visible) {
+        window.setTimeout(() => {
+          refreshVisibleData();
+        }, 0);
+      }
+    };
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [refreshVisibleData]);
+
+  useEffect(() => {
+    if (!isWindowVisible || saving) return;
+
+    const interval = window.setInterval(() => {
+      refreshVisibleData();
+    }, 8000);
+
+    return () => window.clearInterval(interval);
+  }, [isWindowVisible, refreshVisibleData, saving]);
 
   const assignRole = async () => {
     if (!selectedMember || !selectedRoleId) return;
