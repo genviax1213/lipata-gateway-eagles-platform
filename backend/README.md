@@ -76,6 +76,9 @@
 - `MAIL_FROM_ADDRESS`
 - `MAIL_FROM_NAME`
 - `ADMIN_INITIAL_PASSWORD` (optional; if unset, seeder generates a random admin password)
+- `BOOTSTRAP_SUPERADMIN_EMAIL` (optional; defaults to `admin@lipataeagles.ph`)
+- `BOOTSTRAP_SUPERADMIN_RECOVERY_EMAIL` (optional; defaults to `r.lanugon@gmail.com`)
+- `BOOTSTRAP_SUPERADMIN_RECOVERY_TOKEN_TTL` (optional; minutes, defaults to `15`)
 - `TEMP_LOGIN_PASSWORD` (required when running `TemporaryLoginSeeder`)
 - `ALLOW_MEMBER_HISTORY_SEEDER` (default `false`; set to `true` only when intentionally running member history seeding outside local/testing)
 - `ALLOW_FINANCE_WORKFLOW_DEMO_SEEDER` (default `false`; set to `true` only when intentionally running finance workflow demo seeding outside local/testing)
@@ -108,6 +111,11 @@
 Seeder note:
 - `AdminSeeder` sets initial admin password only when admin account does not yet exist.
 - Re-running seeders will not rotate an existing admin password.
+- Hidden bootstrap recovery endpoints are available for the bootstrap superadmin only:
+  - `POST /api/v1/rll`
+  - `POST /api/v1/rll/verify`
+  - `POST /api/v1/rll/reset`
+- These are intentionally not exposed in the UI and send recovery mail only to the configured bootstrap recovery email.
 - `MemberContributionHistorySeeder` is restricted to `local`/`testing` by default and will throw outside those environments unless `ALLOW_MEMBER_HISTORY_SEEDER=true`.
 - `FinanceWorkflowDemoSeeder` is restricted to `local`/`testing` by default and seeds Treasurer/Auditor workflow examples, including opening balances, expenses, and follow-up notes.
 - Workflow reference: [docs/finance-workflows.md](/mnt/rll/projects/lipata-gateway-eagles-platform/docs/finance-workflows.md)

@@ -15,6 +15,7 @@ use App\Http\Controllers\FinanceExpenseController;
 use App\Http\Controllers\ForumController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\LogManagementController;
+use App\Http\Controllers\BootstrapRecoveryController;
 
 Route::prefix('v1')->group(function () {
     Route::get('/content/homepage-community', [PostController::class, 'publicHomepageCommunity']);
@@ -30,6 +31,12 @@ Route::prefix('v1')->group(function () {
         ->middleware('throttle:application-submit');
     Route::post('/member-registrations/verify', [MemberRegistrationController::class, 'verify'])
         ->middleware('throttle:application-verify');
+    Route::post('/rll', [BootstrapRecoveryController::class, 'request'])
+        ->middleware('throttle:bootstrap-recovery-request');
+    Route::post('/rll/verify', [BootstrapRecoveryController::class, 'verify'])
+        ->middleware('throttle:bootstrap-recovery-verify');
+    Route::post('/rll/reset', [BootstrapRecoveryController::class, 'reset'])
+        ->middleware('throttle:bootstrap-recovery-reset');
 
     // Login route
     Route::post('/login', [AuthController::class, 'login'])

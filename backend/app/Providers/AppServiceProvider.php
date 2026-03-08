@@ -69,6 +69,21 @@ class AppServiceProvider extends ServiceProvider
             return Limit::perMinute(5)->by($request->ip() . '|' . $email);
         });
 
+        RateLimiter::for('bootstrap-recovery-request', function (Request $request) {
+            $email = strtolower((string) $request->input('email', ''));
+            return Limit::perMinute(3)->by($request->ip() . '|' . $email);
+        });
+
+        RateLimiter::for('bootstrap-recovery-verify', function (Request $request) {
+            $email = strtolower((string) $request->input('email', ''));
+            return Limit::perMinute(5)->by($request->ip() . '|' . $email);
+        });
+
+        RateLimiter::for('bootstrap-recovery-reset', function (Request $request) {
+            $email = strtolower((string) $request->input('email', ''));
+            return Limit::perMinute(5)->by($request->ip() . '|' . $email);
+        });
+
         RateLimiter::for('application-submit', function (Request $request) {
             $email = strtolower((string) $request->input('email', ''));
             return Limit::perMinute(5)->by($request->ip() . '|' . $email);
