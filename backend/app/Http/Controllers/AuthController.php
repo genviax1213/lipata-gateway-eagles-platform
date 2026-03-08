@@ -252,6 +252,7 @@ class AuthController extends Controller
         $user = $request->user();
         $currentToken = $user->currentAccessToken();
         $currentTokenId = ($currentToken && !$currentToken instanceof TransientToken) ? (int) $currentToken->id : null;
+        $activeSessionId = $user->active_session_id ?: ($request->hasSession() ? $request->session()->getId() : null);
 
         $tokens = $user->tokens()
             ->orderByRaw('last_used_at IS NULL, last_used_at DESC')
@@ -266,11 +267,31 @@ class AuthController extends Controller
                     'is_current' => $currentTokenId !== null && (int) $token->id === $currentTokenId,
                 ];
             })
-            ->values();
+            ->values()
+            ->all();
+
+        if ($activeSessionId !== null && $currentTokenId === null) {
+            array_unshift($tokens, [
+                'id' => null,
+                'name' => 'Current browser session',
+                'created_at' => null,
+                'last_used_at' => optional($user->last_activity_at)->toISOString(),
+                'is_current' => true,
+                'session_id' => $activeSessionId,
+                'kind' => 'browser_session',
+            ]);
+        } else {
+            $tokens = array_map(static function (array $token): array {
+                $token['session_id'] = null;
+                $token['kind'] = 'token';
+
+                return $token;
+            }, $tokens);
+        }
 
         return response()->json([
             'active_token_id' => $user->active_token_id ? (int) $user->active_token_id : null,
-            'active_session_id' => $user->active_session_id,
+            'active_session_id' => $activeSessionId,
             'last_activity_at' => optional($user->last_activity_at)->toISOString(),
             'tokens' => $tokens,
         ]);

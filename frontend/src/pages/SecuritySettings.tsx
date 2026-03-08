@@ -31,11 +31,13 @@ export default function SecuritySettings() {
     active_session_id: string | null;
     last_activity_at: string | null;
     tokens: Array<{
-      id: number;
+      id: number | null;
       name: string;
       created_at: string | null;
       last_used_at: string | null;
       is_current: boolean;
+      session_id: string | null;
+      kind: "token" | "browser_session";
     }>;
   }>({
     active_token_id: null,
@@ -53,11 +55,13 @@ export default function SecuritySettings() {
         active_session_id: string | null;
         last_activity_at: string | null;
         tokens: Array<{
-          id: number;
+          id: number | null;
           name: string;
           created_at: string | null;
           last_used_at: string | null;
           is_current: boolean;
+          session_id: string | null;
+          kind: "token" | "browser_session";
         }>;
       }>("/auth/sessions");
       setSessions(res.data);
@@ -241,7 +245,7 @@ export default function SecuritySettings() {
             <p className="text-sm text-mist/80">No active sessions found for this account.</p>
           ) : (
             pagedSessions().map((token) => (
-              <div key={token.id} className="rounded-md border border-white/15 bg-[#0b1222]/50 px-3 py-3">
+              <div key={token.id ?? token.session_id ?? token.name} className="rounded-md border border-white/15 bg-[#0b1222]/50 px-3 py-3">
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <p className="text-sm font-semibold text-offwhite">
@@ -252,18 +256,28 @@ export default function SecuritySettings() {
                     </p>
                     <p className="mt-1 text-xs text-mist/75">Created: {token.created_at ? new Date(token.created_at).toLocaleString() : "-"}</p>
                     <p className="text-xs text-mist/75">Last used: {token.last_used_at ? new Date(token.last_used_at).toLocaleString() : "Never"}</p>
-                    <p className="text-xs text-mist/75">Token ID: {token.id}</p>
+                    <p className="text-xs text-mist/75">
+                      {token.kind === "browser_session"
+                        ? `Session ID: ${token.session_id ?? "-"}`
+                        : `Token ID: ${token.id ?? "-"}`}
+                    </p>
                   </div>
-                  {!token.is_current ? (
+                  {!token.is_current && token.id !== null ? (
                     <button
                       type="button"
-                      onClick={() => void revokeSession(token.id)}
+                      onClick={() => {
+                        if (token.id !== null) {
+                          void revokeSession(token.id);
+                        }
+                      }}
                       disabled={revokingTokenId === token.id}
                       className="rounded-md border border-red-400/50 px-3 py-1.5 text-xs text-red-200 transition hover:bg-red-500/10 disabled:opacity-70"
                     >
                       {revokingTokenId === token.id ? "Revoking..." : "Revoke"}
                     </button>
-                  ) : null}
+                  ) : (
+                    <span className="text-xs text-mist/65">Current session cannot be revoked here</span>
+                  )}
                 </div>
               </div>
             ))

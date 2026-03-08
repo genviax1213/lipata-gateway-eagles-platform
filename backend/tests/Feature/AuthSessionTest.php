@@ -228,4 +228,22 @@ class AuthSessionTest extends TestCase
 
         $this->assertFalse($user->fresh()->tokens()->whereKey($other->accessToken->id)->exists());
     }
+
+    public function test_session_mode_lists_current_browser_session_when_no_tokens_exist(): void
+    {
+        $user = User::factory()->create();
+        $user->forceFill([
+            'active_session_id' => 'browser-session-123',
+            'last_activity_at' => now(),
+        ])->save();
+
+        $response = $this->actingAs($user)
+            ->getJson('/api/v1/auth/sessions')
+            ->assertOk();
+
+        $response->assertJsonPath('tokens.0.kind', 'browser_session');
+        $response->assertJsonPath('tokens.0.is_current', true);
+        $response->assertJsonPath('tokens.0.id', null);
+        $response->assertJsonPath('tokens.0.session_id', 'browser-session-123');
+    }
 }
