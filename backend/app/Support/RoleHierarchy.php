@@ -120,6 +120,30 @@ class RoleHierarchy
     }
 
     /**
+     * Roles governed by dedicated lifecycle workflows and therefore not assignable
+     * through generic admin role management.
+     */
+    public static function lifecycleManagedPrimaryRoles(): array
+    {
+        return [
+            self::APPLICANT,
+        ];
+    }
+
+    public static function isLifecycleManagedPrimaryRole(?string $roleName): bool
+    {
+        return $roleName !== null && in_array($roleName, self::lifecycleManagedPrimaryRoles(), true);
+    }
+
+    public static function manuallyAssignablePrimaryRoles(): array
+    {
+        return array_values(array_filter(
+            self::allPrimaryRoles(),
+            fn (string $roleName) => !self::isLifecycleManagedPrimaryRole($roleName)
+        ));
+    }
+
+    /**
      * Get all valid finance role names.
      */
     public static function allFinanceRoles(): array

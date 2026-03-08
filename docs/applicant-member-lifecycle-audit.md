@@ -689,3 +689,9 @@ Verification token refinement:
 - applicant and member registration verification now use fixed 10-character uppercase alphanumeric tokens
 - verification inputs normalize tokens to uppercase in the UI before submission
 - backend verification normalizes token case before hashing and matching
+
+Portal access and role-assignment guardrails:
+- the shared public login entry is now treated as `Portal Login`, not `Member Login`, because applicants, members, officers, and administrators all authenticate through the same portal page
+- the `applicant` role is lifecycle-managed and must not be manually assigned through generic admin/user role-management screens or endpoints
+- existing members must enter the applicant workflow only through `applicant-registration`, not by changing a member role to `applicant`
+- applicant dashboard features such as 5I tracking, notices, documents, requirements, and batch materials depend on a real applicant dossier, not on role reassignment alone

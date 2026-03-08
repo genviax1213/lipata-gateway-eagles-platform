@@ -91,7 +91,7 @@ export default function Navbar() {
               to={canonicalRoutes.login}
               className="ml-2 rounded-md border border-gold/50 px-3 py-2 text-sm font-semibold text-gold transition hover:bg-gold/10"
             >
-              Member Login
+              Portal Login
             </NavLink>
           )}
         </div>
@@ -131,7 +131,7 @@ export default function Navbar() {
                   onClick={() => setMobileOpen(false)}
                   className="mt-1 rounded-md border border-gold/50 px-3 py-2 text-sm font-semibold text-gold transition hover:bg-gold/10"
                 >
-                  Member Login
+                  Portal Login
                 </NavLink>
               )}
             </div>

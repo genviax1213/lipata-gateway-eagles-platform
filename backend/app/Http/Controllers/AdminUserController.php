@@ -28,6 +28,17 @@ class AdminUserController extends Controller
         return Str::of($value)->lower()->trim()->value();
     }
 
+    private function rejectLifecycleManagedRole(Role $role)
+    {
+        if (!RoleHierarchy::isLifecycleManagedPrimaryRole($role->name)) {
+            return null;
+        }
+
+        return response()->json([
+            'message' => 'Applicant role is lifecycle-managed and can only be created through applicant registration and activation workflows.',
+        ], 422);
+    }
+
     public function index(Request $request)
     {
         $this->authorize('manageAdminUsers', [User::class, 'users.view']);
@@ -94,6 +105,10 @@ class AdminUserController extends Controller
             ->select(['id', 'name'])
             ->findOrFail($validated['role_id']);
         $forumRole = $validated['forum_role'] ?? null;
+
+        if ($response = $this->rejectLifecycleManagedRole($selectedRole)) {
+            return $response;
+        }
 
         /** @var User $authUser */
         $authUser = $request->user()->loadMissing('role:id,name');
@@ -190,6 +205,10 @@ class AdminUserController extends Controller
             ->select(['id', 'name'])
             ->findOrFail($validated['role_id']);
 
+        if ($response = $this->rejectLifecycleManagedRole($selectedRole)) {
+            return $response;
+        }
+
         /** @var User $authUser */
         $authUser = $request->user()->loadMissing('role:id,name');
 
@@ -237,6 +256,10 @@ class AdminUserController extends Controller
         ]);
 
         $selectedRole = Role::query()->select(['id', 'name'])->findOrFail($validated['role_id']);
+
+        if ($response = $this->rejectLifecycleManagedRole($selectedRole)) {
+            return $response;
+        }
         $this->authorize('manageRoleAssignment', [User::class, null, $selectedRole, 'create']);
 
         $created = User::query()->create([
@@ -271,6 +294,10 @@ class AdminUserController extends Controller
         ]);
 
         $selectedRole = Role::query()->select(['id', 'name'])->findOrFail($validated['role_id']);
+
+        if ($response = $this->rejectLifecycleManagedRole($selectedRole)) {
+            return $response;
+        }
         $this->authorize('manageRoleAssignment', [User::class, $user, $selectedRole, 'update']);
 
         $previousRole = optional($user->role)->name;

@@ -144,9 +144,9 @@ export default function Login() {
               </Link>
             </div>
             <p className="mb-2 text-xs uppercase tracking-[0.22em] text-gold-soft">Security Notice</p>
-            <h2 className="mb-3 font-heading text-3xl text-offwhite md:text-4xl">Protected Member Access</h2>
+            <h2 className="mb-3 font-heading text-3xl text-offwhite md:text-4xl">Protected Portal Access</h2>
             <p className="max-w-xl text-sm leading-relaxed text-mist/85">
-              This portal is for verified members and authorized officers only. Sign-in activity and role-based actions are monitored to protect member records and administrative operations.
+              This portal is for authorized applicants, members, officers, and administrators. Sign-in activity and role-based actions are monitored to protect applicant dossiers, member records, and administrative operations.
             </p>
             <div className="mt-5 rounded-md border border-white/20 bg-white/10 px-4 py-3 text-xs text-mist/85">
               <p className="font-semibold text-offwhite">Password reset procedure</p>
@@ -181,9 +181,9 @@ export default function Login() {
                 className="h-[4.5rem] w-[4.5rem] object-contain sm:h-[5rem] sm:w-[5rem]"
               />
             </div>
-            <h1 className="mb-2 text-center font-heading text-3xl text-gold">Member & Admin Portal</h1>
+            <h1 className="mb-2 text-center font-heading text-3xl text-gold">Portal Login</h1>
             <p className="mb-5 text-center text-sm text-gray-300">
-              {mode === "login" ? "Secure access for authorized members" : mode === "forgot" ? "Request password reset link" : "Reset your account password"}
+              {mode === "login" ? "Shared access for applicants, members, and authorized administrators" : mode === "forgot" ? "Request password reset link" : "Reset your account password"}
             </p>
 
             {error && <p className="mb-3 text-center text-sm text-red-400" role="alert" aria-live="polite">{error}</p>}

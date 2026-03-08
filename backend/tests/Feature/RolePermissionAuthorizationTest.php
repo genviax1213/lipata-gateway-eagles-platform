@@ -203,6 +203,49 @@ class RolePermissionAuthorizationTest extends TestCase
         $response->assertStatus(403);
     }
 
+    public function test_admin_cannot_assign_applicant_role_to_existing_member(): void
+    {
+        $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
+        $applicantRole = Role::query()->where('name', 'applicant')->firstOrFail();
+        $admin = User::factory()->create(['role_id' => $adminRole->id]);
+
+        $candidate = Member::query()->create([
+            'member_number' => 'M-APP-001',
+            'first_name' => 'Existing',
+            'middle_name' => null,
+            'last_name' => 'Member',
+            'email' => 'existing-member@example.com',
+            'membership_status' => 'active',
+        ]);
+
+        Sanctum::actingAs($admin);
+
+        $response = $this->putJson("/api/v1/admin/members/{$candidate->id}/role", [
+            'role_id' => $applicantRole->id,
+        ]);
+
+        $response->assertStatus(422)
+            ->assertJsonPath('message', 'Applicant role is lifecycle-managed and can only be created through applicant registration and activation workflows.');
+    }
+
+    public function test_admin_cannot_update_user_role_to_applicant(): void
+    {
+        $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
+        $memberRole = Role::query()->where('name', 'member')->firstOrFail();
+        $applicantRole = Role::query()->where('name', 'applicant')->firstOrFail();
+        $admin = User::factory()->create(['role_id' => $adminRole->id]);
+        $target = User::factory()->create(['role_id' => $memberRole->id]);
+
+        Sanctum::actingAs($admin);
+
+        $response = $this->putJson("/api/v1/admin/users/{$target->id}/role", [
+            'role_id' => $applicantRole->id,
+        ]);
+
+        $response->assertStatus(422)
+            ->assertJsonPath('message', 'Applicant role is lifecycle-managed and can only be created through applicant registration and activation workflows.');
+    }
+
     public function test_member_cannot_create_admin_user_account(): void
     {
         $memberRole = Role::query()->where('name', 'member')->firstOrFail();

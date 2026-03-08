@@ -62,6 +62,10 @@ function labelCase(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1).replaceAll("_", " ");
 }
 
+function isManuallyAssignableRole(roleName: string): boolean {
+  return roleName !== "applicant";
+}
+
 function fullName(member: MemberRow): string {
   return `${member.first_name} ${member.middle_name ? `${member.middle_name} ` : ""}${member.last_name}`;
 }
@@ -124,10 +128,10 @@ export default function UserRoles() {
 
   const assignablePrimaryRoles = useMemo(() => {
     if (isSuperadmin) {
-      return roles;
+      return roles.filter((role) => isManuallyAssignableRole(role.name));
     }
 
-    return roles.filter((role) => role.name !== "superadmin" && role.name !== "admin");
+    return roles.filter((role) => role.name !== "superadmin" && role.name !== "admin" && isManuallyAssignableRole(role.name));
   }, [isSuperadmin, roles]);
 
   const pagedRoles = useMemo(() => {
