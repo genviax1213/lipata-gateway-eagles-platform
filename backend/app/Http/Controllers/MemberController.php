@@ -6,7 +6,6 @@ use App\Models\Member;
 use App\Models\Applicant;
 use App\Models\MemberRegistration;
 use App\Models\User;
-use App\Support\ProtectedEmailVisibility;
 use App\Support\RoleHierarchy;
 use App\Support\TextCase;
 use Illuminate\Database\QueryException;
@@ -38,6 +37,16 @@ class MemberController extends Controller
         $passwordSet = $request->query('password_set');
 
         $query = Member::query();
+        $query->whereRaw('LOWER(TRIM(COALESCE(email, ""))) <> ?', [$this->bootstrapEmail()]);
+
+        if (optional($viewer->role)->name !== RoleHierarchy::SUPERADMIN) {
+            $query->where(function ($builder) {
+                $builder->whereNull('user_id')
+                    ->orWhereDoesntHave('user.role', function ($roleQuery) {
+                        $roleQuery->where('name', RoleHierarchy::SUPERADMIN);
+                    });
+            });
+        }
 
         if ($search !== '') {
             $query->where(function ($q) use ($search) {
@@ -63,14 +72,7 @@ class MemberController extends Controller
             $query->where('password_set', filter_var($passwordSet, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? false);
         }
 
-        $members = $query->orderBy('last_name')->orderBy('first_name')->paginate(10);
-        $members->setCollection($members->getCollection()->map(function (Member $member) use ($viewer) {
-            $member->email = ProtectedEmailVisibility::forMember($viewer, $member);
-
-            return $member;
-        }));
-
-        return response()->json($members);
+        return response()->json($query->orderBy('last_name')->orderBy('first_name')->paginate(10));
     }
 
     public function store(Request $request)

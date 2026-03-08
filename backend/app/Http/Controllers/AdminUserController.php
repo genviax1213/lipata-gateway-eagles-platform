@@ -6,7 +6,6 @@ use App\Models\Member;
 use App\Models\Applicant;
 use App\Models\Role;
 use App\Models\User;
-use App\Support\ProtectedEmailVisibility;
 use App\Support\RoleHierarchy;
 use App\Support\TextCase;
 use Illuminate\Http\Request;
@@ -55,20 +54,20 @@ class AdminUserController extends Controller
         $users = User::query()
             ->with('role:id,name')
             ->select(['id', 'name', 'email', 'role_id', 'finance_role', 'forum_role', 'created_at'])
+            ->whereRaw('LOWER(TRIM(email)) <> ?', [$this->bootstrapEmail()])
             ->when($search !== '', function ($query) use ($search) {
                 $query->where(function ($inner) use ($search) {
                     $inner->where('name', 'like', "%{$search}%")
                         ->orWhere('email', 'like', "%{$search}%");
                 });
             })
+            ->when(optional($viewer->role)->name !== RoleHierarchy::SUPERADMIN, function ($query) {
+                $query->whereDoesntHave('role', function ($roleQuery) {
+                    $roleQuery->where('name', RoleHierarchy::SUPERADMIN);
+                });
+            })
             ->orderBy('name')
             ->paginate(20);
-
-        $users->setCollection($users->getCollection()->map(function (User $user) use ($viewer) {
-            $user->email = ProtectedEmailVisibility::forUser($viewer, $user, $user->email);
-
-            return $user;
-        }));
 
         return response()->json($users);
     }
@@ -94,6 +93,15 @@ class AdminUserController extends Controller
         $query = Member::query()
             ->with(['user.role:id,name'])
             ->select(['id', 'member_number', 'first_name', 'middle_name', 'last_name', 'email', 'membership_status', 'email_verified', 'password_set', 'user_id'])
+            ->whereRaw('LOWER(TRIM(COALESCE(email, ""))) <> ?', [$this->bootstrapEmail()])
+            ->when(optional($viewer->role)->name !== RoleHierarchy::SUPERADMIN, function ($builder) {
+                $builder->where(function ($query) {
+                    $query->whereNull('user_id')
+                        ->orWhereDoesntHave('user.role', function ($roleQuery) {
+                            $roleQuery->where('name', RoleHierarchy::SUPERADMIN);
+                        });
+                });
+            })
             ->orderBy('last_name')
             ->orderBy('first_name');
 
@@ -107,14 +115,7 @@ class AdminUserController extends Controller
             });
         }
 
-        $members = $query->paginate(20);
-        $members->setCollection($members->getCollection()->map(function (Member $member) use ($viewer) {
-            $member->email = ProtectedEmailVisibility::forMember($viewer, $member);
-
-            return $member;
-        }));
-
-        return response()->json($members);
+        return response()->json($query->paginate(20));
     }
 
     public function assignRoleToMember(Request $request, Member $member)

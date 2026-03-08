@@ -182,7 +182,7 @@ class RolePermissionAuthorizationTest extends TestCase
         $response->assertStatus(200);
     }
 
-    public function test_superadmin_user_list_hides_bootstrap_email_but_shows_other_superadmin_emails(): void
+    public function test_superadmin_user_list_hides_bootstrap_row_but_shows_other_superadmin_rows(): void
     {
         $superadminRole = Role::query()->where('name', 'superadmin')->firstOrFail();
 
@@ -206,11 +206,11 @@ class RolePermissionAuthorizationTest extends TestCase
 
         $rows = collect($response->json('data'));
 
-        $this->assertNull($rows->firstWhere('id', $bootstrap->id)['email'] ?? null);
+        $this->assertNull($rows->firstWhere('id', $bootstrap->id));
         $this->assertSame('managed-superadmin@test.local', $rows->firstWhere('id', $managed->id)['email'] ?? null);
     }
 
-    public function test_admin_user_list_hides_all_superadmin_emails(): void
+    public function test_admin_user_list_hides_all_superadmin_rows(): void
     {
         $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
         $superadminRole = Role::query()->where('name', 'superadmin')->firstOrFail();
@@ -232,11 +232,11 @@ class RolePermissionAuthorizationTest extends TestCase
 
         $rows = collect($response->json('data'));
 
-        $this->assertNull($rows->firstWhere('id', $bootstrap->id)['email'] ?? null);
-        $this->assertNull($rows->firstWhere('id', $managed->id)['email'] ?? null);
+        $this->assertNull($rows->firstWhere('id', $bootstrap->id));
+        $this->assertNull($rows->firstWhere('id', $managed->id));
     }
 
-    public function test_officer_member_directory_hides_bootstrap_and_superadmin_emails(): void
+    public function test_officer_member_directory_hides_bootstrap_and_superadmin_rows(): void
     {
         $officerRole = Role::query()->where('name', 'officer')->firstOrFail();
         $superadminRole = Role::query()->where('name', 'superadmin')->firstOrFail();
@@ -291,8 +291,8 @@ class RolePermissionAuthorizationTest extends TestCase
 
         $rows = collect($response->json('data'));
 
-        $this->assertNull($rows->firstWhere('id', $bootstrapMember->id)['email'] ?? null);
-        $this->assertNull($rows->firstWhere('id', $managedSuperadminMember->id)['email'] ?? null);
+        $this->assertNull($rows->firstWhere('id', $bootstrapMember->id));
+        $this->assertNull($rows->firstWhere('id', $managedSuperadminMember->id));
         $this->assertSame('visible-member@test.local', $rows->firstWhere('id', $normalMember->id)['email'] ?? null);
     }
 
