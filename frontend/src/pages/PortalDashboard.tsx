@@ -558,7 +558,9 @@ export default function PortalDashboard() {
       return "Review your archived application dossier for traceability while using your current member portal access.";
     }
     if (canChairmanReview || canChairmanSetContributionTarget || canChairmanLogContributionPayment || canBatchTreasurerManagePayments) {
-      return "Review official applicants, manage batch assignments, and complete contribution or activation actions for your scope.";
+      return canChairmanReview
+        ? "Review official applicants, manage batch assignments, and complete contribution or activation actions for your scope."
+        : "Support your assigned batch by encoding applicant journey contributions while the membership chairman manages batches and activation.";
     }
     return "Review your latest contribution records and check back for new notices.";
   }, [applicantDetails?.status, archiveDetails, canBatchTreasurerManagePayments, canChairmanLogContributionPayment, canChairmanReview, canChairmanSetContributionTarget, dashboard?.view]);

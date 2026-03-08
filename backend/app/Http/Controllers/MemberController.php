@@ -74,6 +74,9 @@ class MemberController extends Controller
 
     public function update(Request $request, Member $member)
     {
+        /** @var User $actor */
+        $actor = $request->user();
+
         if ($request->filled('email')) {
             $request->merge(['email' => $this->normalizeEmail((string) $request->input('email', ''))]);
         }
@@ -114,6 +117,15 @@ class MemberController extends Controller
         $validated['batch'] = isset($validated['batch']) && $validated['batch'] !== ''
             ? (string) TextCase::title($validated['batch'])
             : null;
+
+        $currentBatch = isset($member->batch) && $member->batch !== ''
+            ? (string) TextCase::title((string) $member->batch)
+            : null;
+        if (($validated['batch'] ?? null) !== $currentBatch && !$actor->hasPermission('applications.review')) {
+            return response()->json([
+                'message' => 'Batch assignment is managed by the membership chairman through the applicant batch workflow.',
+            ], 422);
+        }
 
         $currentEmail = $this->normalizeEmail((string) ($member->email ?? ''));
         $requestedEmail = $this->normalizeEmail((string) ($validated['email'] ?? ''));

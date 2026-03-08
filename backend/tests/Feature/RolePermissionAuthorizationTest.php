@@ -182,6 +182,105 @@ class RolePermissionAuthorizationTest extends TestCase
         $response->assertStatus(200);
     }
 
+    public function test_admin_cannot_change_member_batch_through_member_update(): void
+    {
+        $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
+        $admin = User::factory()->create(['role_id' => $adminRole->id]);
+
+        $member = Member::query()->create([
+            'member_number' => 'M-BATCH-001',
+            'first_name' => 'Batch',
+            'middle_name' => 'Target',
+            'last_name' => 'Member',
+            'membership_status' => 'active',
+            'batch' => 'Alpha Batch',
+            'email' => 'batch-target@test.local',
+        ]);
+
+        Sanctum::actingAs($admin);
+
+        $this->putJson("/api/v1/members/{$member->id}", [
+            'member_number' => $member->member_number,
+            'email' => $member->email,
+            'first_name' => $member->first_name,
+            'middle_name' => $member->middle_name,
+            'last_name' => $member->last_name,
+            'membership_status' => $member->membership_status,
+            'email_verified' => (bool) $member->email_verified,
+            'password_set' => (bool) $member->password_set,
+            'spouse_name' => $member->spouse_name,
+            'contact_number' => $member->contact_number,
+            'address' => $member->address,
+            'date_of_birth' => optional($member->date_of_birth)?->toDateString(),
+            'batch' => 'Beta Batch',
+            'induction_date' => optional($member->induction_date)?->toDateString(),
+        ])
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Batch assignment is managed by the membership chairman through the applicant batch workflow.');
+    }
+
+    public function test_membership_chairman_can_create_and_assign_applicant_batch(): void
+    {
+        $chairmanRole = Role::query()->where('name', 'membership_chairman')->firstOrFail();
+        $applicantRole = Role::query()->where('name', 'applicant')->firstOrFail();
+
+        $chairman = User::factory()->create(['role_id' => $chairmanRole->id]);
+        $treasurerCandidate = User::factory()->create(['role_id' => $applicantRole->id, 'email' => 'batch-treasurer@applicant.test']);
+
+        $applicant = Applicant::query()->create([
+            'first_name' => 'Batch',
+            'middle_name' => 'Official',
+            'last_name' => 'Applicant',
+            'email' => 'official@applicant.test',
+            'membership_status' => 'applicant',
+            'status' => Applicant::STATUS_OFFICIAL_APPLICANT,
+            'decision_status' => 'approved',
+            'current_stage' => 'introduction',
+            'is_login_blocked' => false,
+            'verification_token' => hash('sha256', 'official-applicant-token'),
+            'email_verified_at' => now(),
+        ]);
+
+        Applicant::query()->create([
+            'user_id' => $treasurerCandidate->id,
+            'first_name' => 'Treasurer',
+            'middle_name' => 'Candidate',
+            'last_name' => 'Applicant',
+            'email' => 'batch-treasurer@applicant.test',
+            'membership_status' => 'applicant',
+            'status' => Applicant::STATUS_OFFICIAL_APPLICANT,
+            'decision_status' => 'approved',
+            'current_stage' => 'introduction',
+            'is_login_blocked' => false,
+            'verification_token' => hash('sha256', 'batch-treasurer-token'),
+            'email_verified_at' => now(),
+        ]);
+
+        Sanctum::actingAs($chairman);
+
+        $batchResponse = $this->postJson('/api/v1/applicant-batches', [
+            'name' => 'Batch Mabini',
+            'batch_treasurer_user_id' => $treasurerCandidate->id,
+        ])->assertCreated();
+
+        $batchId = $batchResponse->json('batch.id');
+
+        $this->postJson("/api/v1/applicants/{$applicant->id}/assign-batch", [
+            'batch_id' => $batchId,
+        ])->assertOk();
+
+        $this->assertDatabaseHas('applicant_batches', [
+            'id' => $batchId,
+            'name' => 'Batch Mabini',
+            'batch_treasurer_user_id' => $treasurerCandidate->id,
+        ]);
+
+        $this->assertDatabaseHas('applicants', [
+            'id' => $applicant->id,
+            'batch_id' => $batchId,
+        ]);
+    }
+
     public function test_admin_can_view_applicant_review_queue(): void
     {
         $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
@@ -989,7 +1088,7 @@ class RolePermissionAuthorizationTest extends TestCase
         $this->assertSame('', (string) $response->json('user.finance_role'));
     }
 
-    public function test_admin_can_update_member_extended_profile_fields(): void
+    public function test_admin_can_update_member_extended_profile_fields_except_batch(): void
     {
         $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
         $admin = User::factory()->create([
@@ -1017,20 +1116,18 @@ class RolePermissionAuthorizationTest extends TestCase
             'contact_number' => '0917 123 4567',
             'address' => 'Purok 1, Surigao City',
             'date_of_birth' => '1988-06-10',
-            'batch' => 'marilag',
             'induction_date' => '2023-07-24',
         ]);
 
         $response->assertOk()
             ->assertJsonPath('member_number', 'M-EXT-001')
             ->assertJsonPath('spouse_name', 'Ana Maria Reyes')
-            ->assertJsonPath('contact_number', '09171234567')
-            ->assertJsonPath('batch', 'Marilag');
+            ->assertJsonPath('contact_number', '09171234567');
 
         $member->refresh();
         $this->assertSame('Ana Maria Reyes', $member->spouse_name);
         $this->assertSame('09171234567', $member->contact_number);
-        $this->assertSame('Marilag', $member->batch);
+        $this->assertNull($member->batch);
         $this->assertSame('1988-06-10', $member->date_of_birth);
         $this->assertSame('2023-07-24', $member->induction_date);
     }

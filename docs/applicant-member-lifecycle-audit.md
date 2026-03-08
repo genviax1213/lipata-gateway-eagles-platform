@@ -496,6 +496,11 @@ Mapping summary:
 
 ## Progress Log
 
+### 2026-03-08 - Batch Ownership Rule Clarified
+- Applicant batch creation and applicant-to-batch assignment remain membership-chairman controlled through the applicant workflow.
+- Member profile `batch` is derived from the chairman-managed applicant batch during activation and is not treated as a general free-text administrative field.
+- Batch treasurers support applicant journey contribution encoding for their assigned batch only; they do not own batch naming or batch assignment.
+
 ### 2026-03-08 - Superadmin Applicant Queue Cleanup
 - Added superadmin-only applicant deletion from the applicant queue for test or erroneous applicant records.
 - Deletion is blocked for activated applicants; those must be managed through the member workflow instead.

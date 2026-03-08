@@ -5,6 +5,7 @@ import type { Member, MemberForm, ValidationErrors } from "../types/member";
 interface Props {
   member?: Member;
   errors: ValidationErrors;
+  canEditBatch?: boolean;
   onClose: () => void;
   onSubmit: (data: MemberForm) => void;
 }
@@ -14,6 +15,7 @@ type MemberModalSection = "identity" | "account" | "membership";
 export default function MemberModal({
   member,
   errors,
+  canEditBatch = false,
   onClose,
   onSubmit,
 }: Props) {
@@ -250,8 +252,14 @@ export default function MemberModal({
                     name="batch"
                     value={form.batch}
                     onChange={handleChange}
+                    readOnly={!canEditBatch}
                     className="w-full rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite placeholder:text-mist/70 focus:border-gold focus:outline-none"
                   />
+                  <p className="mt-1 text-xs text-mist/70">
+                    {canEditBatch
+                      ? "Assigned by the membership chairman through the applicant batch workflow."
+                      : "Read-only. Batch assignment is managed by the membership chairman."}
+                  </p>
                   {errors.batch && <p className="text-sm text-red-300">{errors.batch[0]}</p>}
                 </div>
 

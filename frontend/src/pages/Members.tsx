@@ -23,6 +23,7 @@ export default function Members() {
   const canDeleteApplicants = actorRoleName === "superadmin";
   const canEditMembers = hasPermission(user, "members.update");
   const canDeleteMembers = hasPermission(user, "members.delete");
+  const canEditMemberBatch = hasPermission(user, "applications.review");
 
   const [activeTab, setActiveTab] = useState<MembersTab>(() => (canViewMembers ? "members" : "applications"));
   const effectiveActiveTab: MembersTab = !canViewMembers && canViewApplications ? "applications" : activeTab;
@@ -563,6 +564,7 @@ export default function Members() {
         <MemberModal
           member={editing}
           errors={errors}
+          canEditBatch={canEditMemberBatch}
           onClose={() => setEditing(null)}
           onSubmit={(data) => handleUpdate(editing.id, data)}
         />
