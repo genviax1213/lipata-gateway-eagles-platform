@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Member;
 use App\Models\MemberApplication;
 use App\Models\User;
+use App\Support\RoleHierarchy;
 use App\Support\TextCase;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
@@ -149,7 +150,30 @@ class MemberController extends Controller
     public function destroy(Request $request, Member $member)
     {
         $this->authorize('manageAdminUsers', [User::class, 'users.manage']);
-        $member->delete();
+
+        /** @var User $actor */
+        $actor = $request->user()->loadMissing('role:id,name');
+        $linkedUser = $member->user()->with('role:id,name')->first();
+
+        if ($linkedUser && $actor->id === $linkedUser->id) {
+            return response()->json([
+                'message' => 'Use user management for your own account lifecycle. Self-deletion is not allowed through the member directory.',
+            ], 422);
+        }
+
+        if ($linkedUser && in_array(optional($linkedUser->role)->name, [RoleHierarchy::SUPERADMIN, RoleHierarchy::ADMIN], true)) {
+            return response()->json([
+                'message' => 'Protected administrative accounts cannot be removed through the member directory.',
+            ], 422);
+        }
+
+        DB::transaction(function () use ($member, $linkedUser): void {
+            if ($linkedUser) {
+                $linkedUser->delete();
+            }
+
+            $member->delete();
+        });
 
         return response()->json(['message' => 'Member deleted']);
     }

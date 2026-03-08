@@ -10,6 +10,7 @@ use App\Models\FinanceAccount;
 use App\Models\User;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -299,6 +300,105 @@ class RolePermissionAuthorizationTest extends TestCase
 
         $this->deleteJson("/api/v1/members/{$member->id}")
             ->assertStatus(403);
+    }
+
+    public function test_admin_deleting_member_removes_linked_portal_user_and_sessions(): void
+    {
+        $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
+        $memberRole = Role::query()->where('name', 'member')->firstOrFail();
+        $admin = User::factory()->create(['role_id' => $adminRole->id]);
+        $target = User::factory()->create([
+            'role_id' => $memberRole->id,
+            'email' => 'orphan-cleanup@example.com',
+            'active_session_id' => 'session-cleanup-1',
+        ]);
+
+        DB::table('sessions')->insert([
+            'id' => 'session-cleanup-1',
+            'user_id' => $target->id,
+            'ip_address' => '127.0.0.1',
+            'user_agent' => 'PHPUnit',
+            'payload' => base64_encode('payload'),
+            'last_activity' => now()->timestamp,
+        ]);
+
+        $member = Member::query()->create([
+            'member_number' => 'M-DEL-USER-001',
+            'first_name' => 'Delete',
+            'middle_name' => 'Portal',
+            'last_name' => 'User',
+            'email' => $target->email,
+            'membership_status' => 'active',
+            'user_id' => $target->id,
+        ]);
+
+        Sanctum::actingAs($admin);
+
+        $this->deleteJson("/api/v1/members/{$member->id}")
+            ->assertOk()
+            ->assertJsonPath('message', 'Member deleted');
+
+        $this->assertDatabaseMissing('members', ['id' => $member->id]);
+        $this->assertDatabaseMissing('users', ['id' => $target->id]);
+        $this->assertDatabaseMissing('sessions', ['id' => 'session-cleanup-1']);
+    }
+
+    public function test_admin_cannot_delete_protected_admin_member_record_through_member_directory(): void
+    {
+        $superadminRole = Role::query()->where('name', 'superadmin')->firstOrFail();
+        $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
+        $actor = User::factory()->create(['role_id' => $adminRole->id]);
+        $protected = User::factory()->create([
+            'role_id' => $superadminRole->id,
+            'email' => 'protected-admin-member@example.com',
+        ]);
+
+        $member = Member::query()->create([
+            'member_number' => 'M-PROT-001',
+            'first_name' => 'Protected',
+            'middle_name' => 'Admin',
+            'last_name' => 'Member',
+            'email' => $protected->email,
+            'membership_status' => 'active',
+            'user_id' => $protected->id,
+        ]);
+
+        Sanctum::actingAs($actor);
+
+        $this->deleteJson("/api/v1/members/{$member->id}")
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Protected administrative accounts cannot be removed through the member directory.');
+
+        $this->assertDatabaseHas('members', ['id' => $member->id]);
+        $this->assertDatabaseHas('users', ['id' => $protected->id]);
+    }
+
+    public function test_admin_cannot_delete_own_member_record_through_member_directory(): void
+    {
+        $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
+        $actor = User::factory()->create([
+            'role_id' => $adminRole->id,
+            'email' => 'self-delete-guard@example.com',
+        ]);
+
+        $member = Member::query()->create([
+            'member_number' => 'M-SELF-001',
+            'first_name' => 'Self',
+            'middle_name' => 'Delete',
+            'last_name' => 'Guard',
+            'email' => $actor->email,
+            'membership_status' => 'active',
+            'user_id' => $actor->id,
+        ]);
+
+        Sanctum::actingAs($actor);
+
+        $this->deleteJson("/api/v1/members/{$member->id}")
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Use user management for your own account lifecycle. Self-deletion is not allowed through the member directory.');
+
+        $this->assertDatabaseHas('members', ['id' => $member->id]);
+        $this->assertDatabaseHas('users', ['id' => $actor->id]);
     }
 
     public function test_officer_cannot_update_fellow_officer_account(): void
