@@ -3,7 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Member;
-use App\Models\MemberApplication;
+use App\Models\Applicant;
 use App\Models\MemberRegistration;
 use App\Models\Role;
 use App\Models\User;
@@ -64,7 +64,7 @@ class MemberRegistrationController extends Controller
             return response()->json(['message' => 'A member record already exists for this email.'], 422);
         }
 
-        if (MemberApplication::query()->whereRaw('LOWER(TRIM(email)) = ?', [$normalizedEmail])->exists()) {
+        if (Applicant::query()->whereRaw('LOWER(TRIM(email)) = ?', [$normalizedEmail])->exists()) {
             return response()->json(['message' => 'This email is already in use by the applicant registration flow.'], 422);
         }
 

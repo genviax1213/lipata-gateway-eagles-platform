@@ -7,7 +7,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        DB::table('member_applications')
+        DB::table('applicants')
             ->select(['id', 'verification_token'])
             ->orderBy('id')
             ->chunkById(200, function ($rows) {
@@ -22,7 +22,7 @@ return new class extends Migration
                         continue;
                     }
 
-                    DB::table('member_applications')
+                    DB::table('applicants')
                         ->where('id', $row->id)
                         ->update([
                             'verification_token' => hash('sha256', $token),

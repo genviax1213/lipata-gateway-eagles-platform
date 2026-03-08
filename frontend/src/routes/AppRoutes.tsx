@@ -11,7 +11,7 @@ const History = lazy(() => import("../pages/History"));
 const Activities = lazy(() => import("../pages/Activities"));
 const News = lazy(() => import("../pages/News"));
 const Contact = lazy(() => import("../pages/Contact"));
-const MemberApplication = lazy(() => import("../pages/MemberApplication"));
+const ApplicantRegistration = lazy(() => import("../pages/ApplicantRegistration"));
 const MemberRegistration = lazy(() => import("../pages/MemberRegistration"));
 const PortalDashboard = lazy(() => import("../pages/PortalDashboard"));
 const Members = lazy(() => import("../pages/Members"));
@@ -43,7 +43,7 @@ export default function AppRoutes() {
             path="/applicant-registration"
             element={
               <GuestRoute>
-                <Layout><MemberApplication /></Layout>
+                <Layout><ApplicantRegistration /></Layout>
               </GuestRoute>
             }
           />

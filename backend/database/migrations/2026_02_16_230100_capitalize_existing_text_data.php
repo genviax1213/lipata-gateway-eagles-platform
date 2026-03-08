@@ -51,13 +51,13 @@ return new class extends Migration
                 });
         }
 
-        if (Schema::hasTable('member_applications')) {
-            DB::table('member_applications')
+        if (Schema::hasTable('applicants')) {
+            DB::table('applicants')
                 ->select(['id', 'first_name', 'middle_name', 'last_name'])
                 ->orderBy('id')
                 ->chunkById(200, function ($rows) use ($toTitle) {
                     foreach ($rows as $row) {
-                        DB::table('member_applications')->where('id', $row->id)->update([
+                        DB::table('applicants')->where('id', $row->id)->update([
                             'first_name' => $toTitle($row->first_name),
                             'middle_name' => $toTitle($row->middle_name),
                             'last_name' => $toTitle($row->last_name),

@@ -6,7 +6,7 @@ use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
-class MemberApplicationVerificationToken extends Notification
+class ApplicantVerificationToken extends Notification
 {
     use Queueable;
 

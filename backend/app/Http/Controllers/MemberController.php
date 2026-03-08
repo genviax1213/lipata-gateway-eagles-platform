@@ -3,7 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\Member;
-use App\Models\MemberApplication;
+use App\Models\Applicant;
+use App\Models\MemberRegistration;
 use App\Models\User;
 use App\Support\RoleHierarchy;
 use App\Support\TextCase;
@@ -127,7 +128,7 @@ class MemberController extends Controller
                 $member->password_set = (bool) ($validated['password_set'] ?? $member->password_set);
                 $member->save();
 
-                $applicationQuery = MemberApplication::query();
+                $applicationQuery = Applicant::query();
                 if ($member->user_id) {
                     $applicationQuery->where('user_id', $member->user_id);
                     if ($previousEmail !== '') {
@@ -168,6 +169,37 @@ class MemberController extends Controller
         }
 
         DB::transaction(function () use ($member, $linkedUser): void {
+            $memberEmail = strtolower(trim((string) $member->email));
+            $linkedUserId = $linkedUser?->id;
+
+            Applicant::query()
+                ->where(function ($query) use ($member, $linkedUserId, $memberEmail): void {
+                    $query->where('member_id', $member->id);
+
+                    if ($linkedUserId) {
+                        $query->orWhere('user_id', $linkedUserId);
+                    }
+
+                    if ($memberEmail !== '') {
+                        $query->orWhereRaw('LOWER(TRIM(email)) = ?', [$memberEmail]);
+                    }
+                })
+                ->delete();
+
+            MemberRegistration::query()
+                ->where(function ($query) use ($member, $linkedUserId, $memberEmail): void {
+                    $query->where('member_id', $member->id);
+
+                    if ($linkedUserId) {
+                        $query->orWhere('user_id', $linkedUserId);
+                    }
+
+                    if ($memberEmail !== '') {
+                        $query->orWhereRaw('LOWER(TRIM(email)) = ?', [$memberEmail]);
+                    }
+                })
+                ->delete();
+
             if ($linkedUser) {
                 $linkedUser->delete();
             }

@@ -98,7 +98,7 @@ class User extends Authenticatable
 
     public function applicationProfile()
     {
-        return $this->hasOne(MemberApplication::class);
+        return $this->hasOne(Applicant::class);
     }
 
     public function hasPermission(string $permission): bool

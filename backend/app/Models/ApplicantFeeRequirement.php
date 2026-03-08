@@ -5,7 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class ApplicationFeeRequirement extends Model
+class ApplicantFeeRequirement extends Model
 {
     use HasFactory;
 
@@ -22,7 +22,7 @@ class ApplicationFeeRequirement extends Model
     ];
 
     protected $fillable = [
-        'member_application_id',
+        'applicant_id',
         'category',
         'required_amount',
         'note',
@@ -33,9 +33,9 @@ class ApplicationFeeRequirement extends Model
         'required_amount' => 'decimal:2',
     ];
 
-    public function application()
+    public function applicant()
     {
-        return $this->belongsTo(MemberApplication::class, 'member_application_id');
+        return $this->belongsTo(Applicant::class, 'applicant_id');
     }
 
     public function setBy()
@@ -45,6 +45,6 @@ class ApplicationFeeRequirement extends Model
 
     public function payments()
     {
-        return $this->hasMany(ApplicationFeePayment::class, 'application_fee_requirement_id');
+        return $this->hasMany(ApplicantFeePayment::class, 'applicant_fee_requirement_id');
     }
 }

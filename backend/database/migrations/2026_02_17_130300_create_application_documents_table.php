@@ -8,9 +8,9 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('application_documents', function (Blueprint $table) {
+        Schema::create('applicant_documents', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('member_application_id')->constrained('member_applications')->cascadeOnDelete();
+            $table->foreignId('applicant_id')->constrained('applicants')->cascadeOnDelete();
             $table->string('file_path', 255);
             $table->string('original_name', 255);
             $table->enum('status', ['pending', 'approved', 'rejected'])->default('pending')->index();
@@ -23,6 +23,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('application_documents');
+        Schema::dropIfExists('applicant_documents');
     }
 };

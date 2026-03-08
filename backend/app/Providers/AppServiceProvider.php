@@ -2,21 +2,21 @@
 
 namespace App\Providers;
 
-use App\Models\ApplicationDocument;
+use App\Models\ApplicantDocument;
 use App\Models\Contribution;
 use App\Models\ForumPost;
 use App\Models\ForumThread;
 use App\Models\Member;
-use App\Models\MemberApplication;
+use App\Models\Applicant;
 use App\Models\Post;
 use App\Models\User;
 use App\Policies\AdminUserPolicy;
-use App\Policies\ApplicationDocumentPolicy;
+use App\Policies\ApplicantDocumentPolicy;
 use App\Policies\ContributionPolicy;
 use App\Policies\ForumPostPolicy;
 use App\Policies\ForumThreadPolicy;
 use App\Policies\MemberPolicy;
-use App\Policies\MemberApplicationPolicy;
+use App\Policies\ApplicantPolicy;
 use App\Policies\PostPolicy;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -40,8 +40,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        Gate::policy(MemberApplication::class, MemberApplicationPolicy::class);
-        Gate::policy(ApplicationDocument::class, ApplicationDocumentPolicy::class);
+        Gate::policy(Applicant::class, ApplicantPolicy::class);
+        Gate::policy(ApplicantDocument::class, ApplicantDocumentPolicy::class);
         Gate::policy(Member::class, MemberPolicy::class);
         Gate::policy(User::class, AdminUserPolicy::class);
         Gate::policy(Post::class, PostPolicy::class);

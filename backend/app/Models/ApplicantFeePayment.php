@@ -5,12 +5,12 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class ApplicationFeePayment extends Model
+class ApplicantFeePayment extends Model
 {
     use HasFactory;
 
     protected $fillable = [
-        'application_fee_requirement_id',
+        'applicant_fee_requirement_id',
         'amount',
         'payment_date',
         'note',
@@ -24,7 +24,7 @@ class ApplicationFeePayment extends Model
 
     public function requirement()
     {
-        return $this->belongsTo(ApplicationFeeRequirement::class, 'application_fee_requirement_id');
+        return $this->belongsTo(ApplicantFeeRequirement::class, 'applicant_fee_requirement_id');
     }
 
     public function encodedBy()

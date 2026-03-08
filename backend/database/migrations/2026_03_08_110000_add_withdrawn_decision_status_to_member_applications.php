@@ -11,7 +11,7 @@ return new class extends Migration
             return;
         }
 
-        DB::statement("ALTER TABLE member_applications MODIFY decision_status ENUM('pending','probation','approved','rejected','withdrawn') NOT NULL DEFAULT 'pending'");
+        DB::statement("ALTER TABLE applicants MODIFY decision_status ENUM('pending','probation','approved','rejected','withdrawn') NOT NULL DEFAULT 'pending'");
     }
 
     public function down(): void
@@ -20,10 +20,10 @@ return new class extends Migration
             return;
         }
 
-        DB::table('member_applications')
+        DB::table('applicants')
             ->where('decision_status', 'withdrawn')
             ->update(['decision_status' => 'pending']);
 
-        DB::statement("ALTER TABLE member_applications MODIFY decision_status ENUM('pending','probation','approved','rejected') NOT NULL DEFAULT 'pending'");
+        DB::statement("ALTER TABLE applicants MODIFY decision_status ENUM('pending','probation','approved','rejected') NOT NULL DEFAULT 'pending'");
     }
 };

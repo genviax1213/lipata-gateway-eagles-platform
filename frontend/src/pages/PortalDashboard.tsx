@@ -4,7 +4,7 @@ import api from "../services/api";
 import { useAuth } from "../contexts/useAuth";
 import { hasPermission, isAdminUser } from "../utils/auth";
 import { roleGlossary } from "../content/portalCopy";
-import type { MemberApplicationDecisionStatus, MemberApplicationStatus } from "../types/member";
+import type { ApplicantDecisionStatus, ApplicantStatus } from "../types/member";
 import TaskHierarchyCard from "../components/TaskHierarchyCard";
 import FileSelectionPreview from "../components/FileSelectionPreview";
 import {
@@ -25,7 +25,7 @@ interface DashboardPayload {
   can_manage_batch_applicant_contributions?: boolean;
 }
 
-interface ApplicationNotice {
+interface ApplicantNotice {
   id: number;
   notice_text: string;
   visibility?: "applicant" | "internal";
@@ -39,7 +39,7 @@ interface ApplicantTimelineEvent {
   occurred_at: string | null;
 }
 
-interface ApplicationDocument {
+interface ApplicantDocument {
   id: number;
   original_name: string;
   status: "pending" | "approved" | "rejected";
@@ -78,7 +78,7 @@ interface BatchTreasurerCandidate {
   user_id: number;
   full_name: string;
   email: string;
-  status: MemberApplicationStatus;
+  status: ApplicantStatus;
 }
 
 interface ActivationReadiness {
@@ -92,7 +92,7 @@ interface ActivationReadiness {
   };
 }
 
-interface ApplicationFeeRequirement {
+interface ApplicantFeeRequirement {
   id: number | null;
   category: "project" | "community_service" | "fellowship" | "five_i_activities";
   category_label: string;
@@ -116,8 +116,8 @@ interface ApplicantDetails {
   member_id?: number | null;
   full_name: string;
   email: string;
-  status: MemberApplicationStatus;
-  decision_status: MemberApplicationDecisionStatus;
+  status: ApplicantStatus;
+  decision_status: ApplicantDecisionStatus;
   current_stage: string | null;
   current_stage_label: string;
   activation_eligible?: boolean;
@@ -125,15 +125,15 @@ interface ApplicantDetails {
   activated_by?: { id: number; name: string } | null;
   batch?: ApplicantBatchSummary | null;
   timeline: ApplicantTimelineEvent[];
-  notices: ApplicationNotice[];
-  documents: ApplicationDocument[];
+  notices: ApplicantNotice[];
+  documents: ApplicantDocument[];
   fees: {
     required_total: number;
     paid_total: number;
     balance: number;
     variance_total?: number;
     category_labels?: Record<string, string>;
-    requirements: ApplicationFeeRequirement[];
+    requirements: ApplicantFeeRequirement[];
   };
 }
 
@@ -152,8 +152,8 @@ interface ApplicationRow {
   middle_name: string | null;
   last_name: string;
   email: string;
-  status: MemberApplicationStatus;
-  decision_status: MemberApplicationDecisionStatus;
+  status: ApplicantStatus;
+  decision_status: ApplicantDecisionStatus;
   current_stage: string | null;
   batch?: { id: number; name: string } | null;
 }
@@ -331,7 +331,7 @@ export default function PortalDashboard() {
       setArchiveError("");
 
       if (dashRes.data.view === "applicant" && canViewApplicantDashboard) {
-        const appRes = await api.get<ApplicantDetails>("/member-applications/me");
+        const appRes = await api.get<ApplicantDetails>("/applicants/me");
         setApplicantDetails(appRes.data);
         setArchiveDetails(null);
         setArchiveError("");
@@ -339,7 +339,7 @@ export default function PortalDashboard() {
         setApplicantDetails(null);
         if (dashRes.data.application_archive_available) {
           try {
-            const archiveRes = await api.get<ApplicantDetails>("/member-applications/archive/me");
+            const archiveRes = await api.get<ApplicantDetails>("/applicants/archive/me");
             setArchiveDetails(archiveRes.data);
             setArchiveError("");
           } catch (err) {
@@ -394,7 +394,7 @@ export default function PortalDashboard() {
 
     void (async () => {
       try {
-        const res = await api.get<ApplicantDetails>(`/member-applications/${selectedApplicationId}`);
+        const res = await api.get<ApplicantDetails>(`/applicants/${selectedApplicationId}`);
         setSelectedApplicationDetails(res.data);
       } catch {
         setSelectedApplicationDetails(null);
@@ -579,7 +579,7 @@ export default function PortalDashboard() {
     setError("");
     setNotice("");
     try {
-      const rows = await api.get<{ data: ApplicationRow[] }>("/member-applications", {
+      const rows = await api.get<{ data: ApplicationRow[] }>("/applicants", {
         params: {
           status: canChairmanReview ? "all" : "official_applicant",
         },
@@ -645,7 +645,7 @@ export default function PortalDashboard() {
     try {
       const payload = new FormData();
       payload.append("document", documentFile);
-      await api.post(`/member-applications/${applicantDetails.id}/documents`, payload, {
+      await api.post(`/applicants/${applicantDetails.id}/documents`, payload, {
         headers: { "Content-Type": "multipart/form-data" },
       });
       setNotice("Document uploaded.");
@@ -668,7 +668,7 @@ export default function PortalDashboard() {
     setNotice("");
 
     try {
-      const res = await api.post<{ message?: string }>("/member-applications/me/withdraw");
+      const res = await api.post<{ message?: string }>("/applicants/me/withdraw");
       setNotice(res.data?.message ?? "Application withdrawn.");
       await loadDashboard();
     } catch (err) {
@@ -682,7 +682,7 @@ export default function PortalDashboard() {
     setNotice("");
 
     try {
-      await api.post(`/member-applications/${selectedApplication.id}/${path}`, payload ?? {});
+      await api.post(`/applicants/${selectedApplication.id}/${path}`, payload ?? {});
       setNotice("Application decision updated.");
       await loadDashboard();
     } catch (err) {
@@ -696,7 +696,7 @@ export default function PortalDashboard() {
     setNotice("");
 
     try {
-      await api.post(`/member-applications/${selectedApplication.id}/notice`, {
+      await api.post(`/applicants/${selectedApplication.id}/notice`, {
         notice_text: noticeText.trim(),
         visibility: noticeVisibility,
       });
@@ -715,7 +715,7 @@ export default function PortalDashboard() {
     setNotice("");
 
     try {
-      await api.post(`/member-applications/${selectedApplication.id}/stage`, {
+      await api.post(`/applicants/${selectedApplication.id}/stage`, {
         current_stage: stageValue,
       });
       setNotice("Applicant stage updated.");
@@ -731,7 +731,7 @@ export default function PortalDashboard() {
     setError("");
     setNotice("");
     try {
-      await api.post(`/member-applications/${selectedApplication.id}/fee-requirements`, {
+      await api.post(`/applicants/${selectedApplication.id}/fee-requirements`, {
         category: selectedContributionCategory,
         required_amount: Number(requiredAmount),
         note: "Membership chairman target contribution",
@@ -750,7 +750,7 @@ export default function PortalDashboard() {
     setError("");
     setNotice("");
     try {
-      await api.post(`/member-applications/${selectedApplication.id}/fee-payments`, {
+      await api.post(`/applicants/${selectedApplication.id}/fee-payments`, {
         category: selectedContributionCategory,
         amount: Number(paymentAmount),
       });
@@ -795,7 +795,7 @@ export default function PortalDashboard() {
     setError("");
     setNotice("");
     try {
-      await api.post(`/member-applications/${selectedApplication.id}/assign-batch`, {
+      await api.post(`/applicants/${selectedApplication.id}/assign-batch`, {
         batch_id: Number(batchIdToAssign),
       });
       setNotice("Applicant batch assigned.");
@@ -820,7 +820,7 @@ export default function PortalDashboard() {
       setNotice("Batch document uploaded.");
       setBatchDocumentFile(null);
       if (selectedApplicationId) {
-        const res = await api.get<ApplicantDetails>(`/member-applications/${selectedApplicationId}`);
+        const res = await api.get<ApplicantDetails>(`/applicants/${selectedApplicationId}`);
         setSelectedApplicationDetails(res.data);
       }
       await loadDashboard();
@@ -834,7 +834,7 @@ export default function PortalDashboard() {
     setError("");
     setNotice("");
     try {
-      const res = await api.post<{ message?: string }>(`/member-applications/${selectedApplication.id}/activate`);
+      const res = await api.post<{ message?: string }>(`/applicants/${selectedApplication.id}/activate`);
       setNotice(res.data?.message ?? "Official applicant activated as member.");
       await loadDashboard();
     } catch (err) {
@@ -846,10 +846,10 @@ export default function PortalDashboard() {
     setError("");
     setNotice("");
     try {
-      await api.post(`/member-applications/documents/${documentId}/review`, { status });
+      await api.post(`/applicants/documents/${documentId}/review`, { status });
       setNotice(`Document ${status}.`);
       if (selectedApplicationId) {
-        const res = await api.get<ApplicantDetails>(`/member-applications/${selectedApplicationId}`);
+        const res = await api.get<ApplicantDetails>(`/applicants/${selectedApplicationId}`);
         setSelectedApplicationDetails(res.data);
       }
     } catch (err) {
@@ -875,7 +875,7 @@ export default function PortalDashboard() {
   const viewDocument = async (documentId: number, originalName: string) => {
     setError("");
     try {
-      const response = await api.get(`/member-applications/documents/${documentId}/view`, {
+      const response = await api.get(`/applicants/documents/${documentId}/view`, {
         responseType: "blob",
       });
       const blobUrl = window.URL.createObjectURL(response.data as Blob);

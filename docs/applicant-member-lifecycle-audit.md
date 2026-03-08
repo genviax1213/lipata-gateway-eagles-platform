@@ -17,8 +17,8 @@ Update rule: Append future changes and follow-up implementation notes to this fi
 Current code allows `applicant`, `active`, and `inactive` as values on the public application form.
 
 Relevant code:
-- [frontend/src/pages/MemberApplication.tsx](/mnt/rll/projects/lipata-gateway-eagles-platform/frontend/src/pages/MemberApplication.tsx#L14)
-- [backend/app/Http/Controllers/MemberApplicationController.php](/mnt/rll/projects/lipata-gateway-eagles-platform/backend/app/Http/Controllers/MemberApplicationController.php#L254)
+- [frontend/src/pages/ApplicantRegistration.tsx](/mnt/rll/projects/lipata-gateway-eagles-platform/frontend/src/pages/ApplicantRegistration.tsx#L14)
+- [backend/app/Http/Controllers/ApplicantController.php](/mnt/rll/projects/lipata-gateway-eagles-platform/backend/app/Http/Controllers/ApplicantController.php#L254)
 
 Problem:
 - This conflicts with the intended business rule that an applicant is not yet a club member.
@@ -41,31 +41,30 @@ Current behavior:
 
 This is good and should remain unless a separate admin-only intake workflow is intentionally added later.
 
-### 3. Approval does automatically create the member record
-When an applicant is approved, the system creates a new member record and changes the linked user role from `applicant` to `member`.
+### 3. Approval now creates an official applicant, not a member
+Approval no longer converts the applicant directly into a member. Approval now promotes the dossier into the long-running official-applicant workflow.
 
 Relevant code:
-- [backend/app/Http/Controllers/MemberApplicationController.php](/mnt/rll/projects/lipata-gateway-eagles-platform/backend/app/Http/Controllers/MemberApplicationController.php#L586)
-- [backend/app/Http/Controllers/MemberApplicationController.php](/mnt/rll/projects/lipata-gateway-eagles-platform/backend/app/Http/Controllers/MemberApplicationController.php#L619)
-- [backend/app/Http/Controllers/MemberApplicationController.php](/mnt/rll/projects/lipata-gateway-eagles-platform/backend/app/Http/Controllers/MemberApplicationController.php#L633)
+- [backend/app/Http/Controllers/ApplicantController.php](/mnt/rll/projects/lipata-gateway-eagles-platform/backend/app/Http/Controllers/ApplicantController.php#L927)
+- [backend/app/Http/Controllers/ApplicantController.php](/mnt/rll/projects/lipata-gateway-eagles-platform/backend/app/Http/Controllers/ApplicantController.php#L1225)
 
 Current approval result:
-- new `members` row is created
-- member number is generated automatically
-- `membership_status` is set to `active`
-- linked portal user role is changed to `member`
-- application is marked `approved`
+- applicant remains in the `applicants` dossier
+- `status` moves to `official_applicant` or later `eligible_for_activation`
+- linked portal user keeps the `applicant` role
+- no `members` row is created yet
+- the chairman must later activate the eligible official applicant into a member
 
 Answer to the business question:
-- Yes, the successful applicant is automatically registered in the member list.
-- Yes, the portal account status effectively changes from applicant account to member account through role change.
+- No, approval does not automatically register the applicant into the member list anymore.
+- A separate activation step now creates the member record and changes the portal role only when the official applicant has completed the required process.
 
 ### 4. Applicant data is preserved, but not unified under the member dossier
 The current system keeps the application record and supporting workflow data after approval.
 
 Relevant code:
-- [backend/app/Http/Controllers/MemberApplicationController.php](/mnt/rll/projects/lipata-gateway-eagles-platform/backend/app/Http/Controllers/MemberApplicationController.php#L636)
-- [backend/app/Models/MemberApplication.php](/mnt/rll/projects/lipata-gateway-eagles-platform/backend/app/Models/MemberApplication.php#L12)
+- [backend/app/Http/Controllers/ApplicantController.php](/mnt/rll/projects/lipata-gateway-eagles-platform/backend/app/Http/Controllers/ApplicantController.php#L636)
+- [backend/app/Models/Applicant.php](/mnt/rll/projects/lipata-gateway-eagles-platform/backend/app/Models/Applicant.php#L12)
 
 What is preserved:
 - application identity data
@@ -85,8 +84,8 @@ Conclusion:
 - Data remains in the application subsystem.
 - The approved member record is created, but the historical dossier remains separate.
 
-### 5. After approval, the former applicant stops using the applicant dashboard
-The dashboard logic gives applicant view only when the user still has applicant dashboard permission.
+### 5. After approval, the official applicant stays in the applicant dashboard until activation
+The dashboard keeps approved official applicants inside the applicant workflow until the chairman activates them into the member side.
 
 Relevant code:
 - [backend/app/Http/Controllers/DashboardController.php](/mnt/rll/projects/lipata-gateway-eagles-platform/backend/app/Http/Controllers/DashboardController.php#L20)
@@ -94,13 +93,14 @@ Relevant code:
 
 Current behavior:
 - applicant users have `applications.dashboard.view`
-- approved users are moved to role `member`
-- `member` role does not have `applications.dashboard.view`
-- approved users therefore stop seeing the applicant dashboard and enter the member dashboard path
+- approval moves them into `official_applicant`
+- official applicants keep applicant dashboard access
+- activation later changes the role to `member`
+- only after activation do they leave the applicant dashboard path
 
 Implication:
-- application history still exists for admins/committee
-- the newly approved member no longer has applicant-side visibility into the application dashboard by default
+- application history remains available during official-applicant tracking
+- the applicant can continue to see 5I progress, notices, documents, requirements, and batch context until activation
 
 ### 6. Review ownership is labeled and gated inconsistently
 The applications review tab in member management is currently tied to `members.create` instead of the more accurate applicant-review permission.
@@ -122,7 +122,7 @@ Preferred rule:
 Any user with `members.view` can currently view applicant documents.
 
 Relevant code:
-- [backend/app/Policies/ApplicationDocumentPolicy.php](/mnt/rll/projects/lipata-gateway-eagles-platform/backend/app/Policies/ApplicationDocumentPolicy.php#L24)
+- [backend/app/Policies/ApplicantDocumentPolicy.php](/mnt/rll/projects/lipata-gateway-eagles-platform/backend/app/Policies/ApplicantDocumentPolicy.php#L24)
 
 Problem:
 - Applicant documents are usually more sensitive than general member-directory access.
@@ -141,18 +141,20 @@ Current risk:
 2. User submits name, email, password, and current misleading `membership_status` choice.
 3. System creates:
    - a `users` record with role `applicant`
-   - a `member_applications` record with `status = pending_verification`
+   - a `applicants` record with `status = pending_verification`
 4. System sends an email verification token.
 5. User verifies the application email.
-6. Application becomes `pending_approval`.
+6. Application becomes `under_review`.
 
 ### Applicant Portal Flow
 1. Applicant logs in using the created portal account.
 2. Applicant dashboard can show:
    - application status
+   - 5I progress
    - notices
    - uploaded documents
    - applicant fee targets and payments
+   - batch context and batch materials when assigned
 3. Applicant can upload required documents while still in the applicant lifecycle.
 
 ### Membership Chairman Flow
@@ -171,17 +173,25 @@ Current risk:
    - set fee requirements
    - record payments
    - approve
+   - activate eligible official applicants into members
    - move to probation
    - reject
 
 ### Approval Flow
 1. Application must be verified and pending approval.
 2. System checks for duplicate member by name and email.
+3. System marks the dossier as an approved `official_applicant`.
+4. Official applicant continues tracking stages, notices, documents, requirements, payments, and batch progress.
+5. No member record is created yet.
+
+### Activation Flow
+1. Official applicant must be `eligible_for_activation`.
+2. Membership chairman triggers activation.
 3. System creates a member record.
 4. System generates a member number.
 5. System links the new member to the same portal user.
 6. System changes the user role to `member`.
-7. System marks the application as approved.
+7. System marks the applicant dossier as `activated` and keeps it archived for traceability.
 
 ### Rejection Flow
 1. Application is marked `rejected`.
@@ -192,12 +202,12 @@ Current risk:
 ## Data Handling After Approval
 
 ### What happens today
-- Applicant account is reused as the member account.
-- New member record is created automatically.
-- Approved application record remains in `member_applications`.
-- Application documents remain attached to the application record.
-- Notices remain attached to the application record.
-- Applicant fee data remains attached to the application record.
+- Applicant account remains an applicant account after approval.
+- Official-applicant tracking continues in `applicants`.
+- Application documents remain attached to the applicant dossier.
+- Notices remain attached to the applicant dossier.
+- Applicant fee data remains attached to the applicant dossier.
+- Member record is created only at activation time.
 
 ### What does not happen today
 - No explicit application-to-member archive link
@@ -288,10 +298,10 @@ The intended business rule should be treated as:
 
 ## Web Interface / UX Review Notes
 
-### [frontend/src/pages/MemberApplication.tsx](/mnt/rll/projects/lipata-gateway-eagles-platform/frontend/src/pages/MemberApplication.tsx)
-- `frontend/src/pages/MemberApplication.tsx:14` - applicant form model includes `active` and `inactive`; lifecycle concept is ambiguous
-- `frontend/src/pages/MemberApplication.tsx:42` - explanatory copy correctly defines applicant, but the form still offers conflicting member-status choices
-- `frontend/src/pages/MemberApplication.tsx:171` - tab labels are acceptable, but the page title should be more explicit about membership intake
+### [frontend/src/pages/ApplicantRegistration.tsx](/mnt/rll/projects/lipata-gateway-eagles-platform/frontend/src/pages/ApplicantRegistration.tsx)
+- `frontend/src/pages/ApplicantRegistration.tsx:14` - applicant registration form must stay applicant-only, never member-status driven
+- `frontend/src/pages/ApplicantRegistration.tsx:42` - explanatory copy should keep outsider/applicant language distinct from member onboarding
+- `frontend/src/pages/ApplicantRegistration.tsx:171` - tab labels should continue to distinguish `Apply`, `Reapply`, and `Verify Email`
 
 ### [frontend/src/pages/Members.tsx](/mnt/rll/projects/lipata-gateway-eagles-platform/frontend/src/pages/Members.tsx)
 - `frontend/src/pages/Members.tsx:15` - applications review access tied to `members.create` instead of `applications.review`
@@ -317,6 +327,7 @@ Append future implementation notes below this section.
 ### Progress Log
 - 2026-03-07: Baseline applicant/member lifecycle audit created from current repo behavior and UI review.
 - 2026-03-08: Added industry-standard workflow recommendations, target lifecycle model, and principle-to-implementation mapping.
+- 2026-03-08: Rebased the applicant-domain implementation onto `applicants` and split public intake to `applicant-registration` and `member-registration`; legacy `member-application` intake paths were removed.
 
 ## Industry-Standard Workflow Recommendations
 
@@ -382,7 +393,7 @@ Industry-standard handling of submitted data and documents:
 - link the approved application to the created member profile
 
 Recommended data model direction:
-- `member_applications.member_id` should be nullable and filled on approval
+- `applicants.member_id` should be nullable and filled on approval
 - application documents should remain attached to the application dossier
 - member profile may expose a read-only `Admission Record` or `Application Archive`
 - internal committee notes should remain internal unless explicitly designed otherwise
@@ -513,8 +524,8 @@ Verified locally:
 ### 2026-03-08 - Local implementation slice 2
 
 Implemented locally:
-- applicant self-withdraw flow via `POST /api/v1/member-applications/me/withdraw`
-- archived application access for the same account via `GET /api/v1/member-applications/archive/me`
+- applicant self-withdraw flow via `POST /api/v1/applicants/me/withdraw`
+- archived application access for the same account via `GET /api/v1/applicants/archive/me`
 - member/general dashboard payload now signals archive availability
 - portal now exposes a read-only `Application Archive` tab for approved-member history
 - applicant portal now has an explicit `Withdraw Application` action while status is still open

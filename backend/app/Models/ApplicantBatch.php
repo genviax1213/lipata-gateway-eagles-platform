@@ -25,7 +25,7 @@ class ApplicantBatch extends Model
 
     public function applications()
     {
-        return $this->hasMany(MemberApplication::class, 'batch_id');
+        return $this->hasMany(Applicant::class, 'batch_id');
     }
 
     public function documents()

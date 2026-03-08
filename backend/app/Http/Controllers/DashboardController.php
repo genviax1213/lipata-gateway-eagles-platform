@@ -5,7 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Contribution;
 use App\Models\ApplicantBatch;
 use App\Models\Member;
-use App\Models\MemberApplication;
+use App\Models\Applicant;
 use App\Models\User;
 use App\Support\RoleHierarchy;
 use App\Support\Permissions;
@@ -18,14 +18,14 @@ class DashboardController extends Controller
         /** @var User $user */
         $user = $request->user()->loadMissing('role.permissions:id,name');
 
-        $application = MemberApplication::query()
+        $application = Applicant::query()
             ->ownedByUser($user)
             ->latest('id')
             ->first();
         $applicationArchiveAvailable = $application
-            && in_array($application->status, MemberApplication::ARCHIVED_STATUSES, true);
+            && in_array($application->status, Applicant::ARCHIVED_STATUSES, true);
         $hasOpenApplication = $application
-            && in_array($application->status, MemberApplication::OPEN_STATUSES, true);
+            && in_array($application->status, Applicant::OPEN_STATUSES, true);
         $canManageBatchApplicantContributions = ApplicantBatch::query()
             ->where('batch_treasurer_user_id', $user->id)
             ->exists();

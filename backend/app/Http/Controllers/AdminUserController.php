@@ -3,7 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Member;
-use App\Models\MemberApplication;
+use App\Models\Applicant;
 use App\Models\Role;
 use App\Models\User;
 use App\Support\RoleHierarchy;
@@ -317,7 +317,7 @@ class AdminUserController extends Controller
                 ->orWhereRaw('LOWER(TRIM(email)) = ?', [$previousEmail])
                 ->update(['email' => $validated['email']]);
 
-            MemberApplication::query()
+            Applicant::query()
                 ->where('user_id', $user->id)
                 ->orWhereRaw('LOWER(TRIM(email)) = ?', [$previousEmail])
                 ->update(['email' => $validated['email']]);

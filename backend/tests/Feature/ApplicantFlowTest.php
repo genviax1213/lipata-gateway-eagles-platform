@@ -3,13 +3,13 @@
 namespace Tests\Feature;
 
 use App\Models\ApplicantBatch;
-use App\Models\ApplicationDocument;
-use App\Models\ApplicationFeeRequirement;
+use App\Models\ApplicantDocument;
+use App\Models\ApplicantFeeRequirement;
 use App\Models\Member;
-use App\Models\MemberApplication;
+use App\Models\Applicant;
 use App\Models\Role;
 use App\Models\User;
-use App\Notifications\MemberApplicationVerificationToken;
+use App\Notifications\ApplicantVerificationToken;
 use App\Support\VerificationToken;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -19,7 +19,7 @@ use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
-class MemberApplicationFlowTest extends TestCase
+class ApplicantFlowTest extends TestCase
 {
     use RefreshDatabase;
 
@@ -48,7 +48,7 @@ class MemberApplicationFlowTest extends TestCase
         $submit->assertJsonMissingPath('verification_token');
         $applicantUser = User::query()->where('email', 'juan@applicant.test')->firstOrFail();
         $token = '';
-        Notification::assertSentTo($applicantUser, MemberApplicationVerificationToken::class, function (MemberApplicationVerificationToken $notification) use (&$token) {
+        Notification::assertSentTo($applicantUser, ApplicantVerificationToken::class, function (ApplicantVerificationToken $notification) use (&$token) {
             $token = $notification->token();
             return true;
         });
@@ -66,11 +66,11 @@ class MemberApplicationFlowTest extends TestCase
         $chairman = User::factory()->create(['role_id' => $chairmanRole->id]);
         Sanctum::actingAs($chairman);
 
-        $applications = $this->getJson('/api/v1/member-applications');
+        $applications = $this->getJson('/api/v1/applicants');
         $applications->assertOk();
         $applications->assertJsonPath('data.0.id', $applicationId);
 
-        $approve = $this->postJson("/api/v1/member-applications/{$applicationId}/approve");
+        $approve = $this->postJson("/api/v1/applicants/{$applicationId}/approve");
         $approve->assertOk();
         $approve->assertJsonPath('application.status', 'official_applicant');
         $approve->assertJsonPath('application.member_id', null);
@@ -88,7 +88,7 @@ class MemberApplicationFlowTest extends TestCase
             'email' => 'activate@applicant.test',
         ]);
 
-        $application = MemberApplication::query()->create([
+        $application = Applicant::query()->create([
             'user_id' => $applicantUser->id,
             'first_name' => 'Activate',
             'middle_name' => 'Official',
@@ -104,16 +104,16 @@ class MemberApplicationFlowTest extends TestCase
             'reviewed_at' => now(),
         ]);
 
-        ApplicationDocument::query()->create([
-            'member_application_id' => $application->id,
+        ApplicantDocument::query()->create([
+            'applicant_id' => $application->id,
             'file_path' => 'application-docs/activate.pdf',
             'original_name' => 'activate.pdf',
             'status' => 'approved',
         ]);
 
-        $requirement = ApplicationFeeRequirement::query()->create([
-            'member_application_id' => $application->id,
-            'category' => ApplicationFeeRequirement::CATEGORY_PROJECT,
+        $requirement = ApplicantFeeRequirement::query()->create([
+            'applicant_id' => $application->id,
+            'category' => ApplicantFeeRequirement::CATEGORY_PROJECT,
             'required_amount' => 500,
             'set_by_user_id' => $chairman->id,
         ]);
@@ -126,7 +126,7 @@ class MemberApplicationFlowTest extends TestCase
 
         Sanctum::actingAs($chairman);
 
-        $response = $this->postJson("/api/v1/member-applications/{$application->id}/activate");
+        $response = $this->postJson("/api/v1/applicants/{$application->id}/activate");
         $response->assertOk()
             ->assertJsonPath('application.status', 'activated');
 
@@ -158,7 +158,7 @@ class MemberApplicationFlowTest extends TestCase
             'batch_treasurer_user_id' => $treasurer->id,
         ]);
 
-        $application = MemberApplication::query()->create([
+        $application = Applicant::query()->create([
             'user_id' => $applicant->id,
             'batch_id' => $batch->id,
             'first_name' => 'Batch',
@@ -175,17 +175,17 @@ class MemberApplicationFlowTest extends TestCase
             'reviewed_at' => now(),
         ]);
 
-        ApplicationFeeRequirement::query()->create([
-            'member_application_id' => $application->id,
-            'category' => ApplicationFeeRequirement::CATEGORY_PROJECT,
+        ApplicantFeeRequirement::query()->create([
+            'applicant_id' => $application->id,
+            'category' => ApplicantFeeRequirement::CATEGORY_PROJECT,
             'required_amount' => 500,
             'set_by_user_id' => $treasurer->id,
         ]);
 
         Sanctum::actingAs($treasurer);
 
-        $this->postJson("/api/v1/member-applications/{$application->id}/fee-payments", [
-            'category' => ApplicationFeeRequirement::CATEGORY_PROJECT,
+        $this->postJson("/api/v1/applicants/{$application->id}/fee-payments", [
+            'category' => ApplicantFeeRequirement::CATEGORY_PROJECT,
             'amount' => 250,
         ])->assertStatus(201);
     }
@@ -200,7 +200,7 @@ class MemberApplicationFlowTest extends TestCase
             'email' => 'reapply@applicant.test',
         ]);
 
-        MemberApplication::query()->create([
+        Applicant::query()->create([
             'user_id' => $applicant->id,
             'first_name' => 'Reapply',
             'middle_name' => 'Flow',
@@ -227,7 +227,7 @@ class MemberApplicationFlowTest extends TestCase
                 'message' => 'Reapplication started. Verify your email to continue to review.',
             ]);
 
-        $newApplication = MemberApplication::query()
+        $newApplication = Applicant::query()
             ->where('email', 'reapply@applicant.test')
             ->latest('id')
             ->firstOrFail();
@@ -237,7 +237,7 @@ class MemberApplicationFlowTest extends TestCase
         $this->assertFalse($newApplication->is_login_blocked);
         $this->assertNotSame('reapply-old-token', $newApplication->verification_token);
 
-        Notification::assertSentTo($applicant->fresh(), MemberApplicationVerificationToken::class);
+        Notification::assertSentTo($applicant->fresh(), ApplicantVerificationToken::class);
     }
 
     public function test_reapplication_is_rejected_when_open_application_exists(): void
@@ -248,7 +248,7 @@ class MemberApplicationFlowTest extends TestCase
             'email' => 'reapply-open@applicant.test',
         ]);
 
-        MemberApplication::query()->create([
+        Applicant::query()->create([
             'user_id' => $applicant->id,
             'first_name' => 'Reapply',
             'middle_name' => 'Open',
@@ -278,7 +278,7 @@ class MemberApplicationFlowTest extends TestCase
             'email' => 'withdraw-self@applicant.test',
         ]);
 
-        $application = \App\Models\MemberApplication::query()->create([
+        $application = \App\Models\Applicant::query()->create([
             'user_id' => $applicant->id,
             'first_name' => 'Withdraw',
             'middle_name' => 'Self',
@@ -295,7 +295,7 @@ class MemberApplicationFlowTest extends TestCase
 
         Sanctum::actingAs($applicant);
 
-        $this->postJson('/api/v1/member-applications/me/withdraw')
+        $this->postJson('/api/v1/applicants/me/withdraw')
             ->assertOk()
             ->assertJsonPath('application.status', 'withdrawn')
             ->assertJsonPath('application.decision_status', 'withdrawn');
@@ -324,7 +324,7 @@ class MemberApplicationFlowTest extends TestCase
             'user_id' => $memberUser->id,
         ]);
 
-        \App\Models\MemberApplication::query()->create([
+        \App\Models\Applicant::query()->create([
             'user_id' => $memberUser->id,
             'member_id' => $member->id,
             'first_name' => 'Archive',
@@ -343,7 +343,7 @@ class MemberApplicationFlowTest extends TestCase
 
         Sanctum::actingAs($memberUser);
 
-        $this->postJson('/api/v1/member-applications/me/withdraw')
+        $this->postJson('/api/v1/applicants/me/withdraw')
             ->assertStatus(422);
     }
 
@@ -365,7 +365,7 @@ class MemberApplicationFlowTest extends TestCase
             'user_id' => $memberUser->id,
         ]);
 
-        $application = \App\Models\MemberApplication::query()->create([
+        $application = \App\Models\Applicant::query()->create([
             'user_id' => $memberUser->id,
             'member_id' => $member->id,
             'first_name' => 'Archive',
@@ -384,7 +384,7 @@ class MemberApplicationFlowTest extends TestCase
 
         Sanctum::actingAs($memberUser);
 
-        $this->getJson('/api/v1/member-applications/archive/me')
+        $this->getJson('/api/v1/applicants/archive/me')
             ->assertOk()
             ->assertJsonPath('id', $application->id)
             ->assertJsonPath('member_id', $member->id)
@@ -405,7 +405,7 @@ class MemberApplicationFlowTest extends TestCase
             'role_id' => $chairmanRole->id,
         ]);
 
-        $application = \App\Models\MemberApplication::query()->create([
+        $application = \App\Models\Applicant::query()->create([
             'user_id' => $applicant->id,
             'first_name' => 'Internal',
             'middle_name' => 'Note',
@@ -420,15 +420,15 @@ class MemberApplicationFlowTest extends TestCase
             'email_verified_at' => now(),
         ]);
 
-        \App\Models\ApplicationNotice::query()->create([
-            'member_application_id' => $application->id,
+        \App\Models\ApplicantNotice::query()->create([
+            'applicant_id' => $application->id,
             'notice_text' => 'Public applicant notice',
             'visibility' => 'applicant',
             'created_by_user_id' => $chairman->id,
         ]);
 
-        \App\Models\ApplicationNotice::query()->create([
-            'member_application_id' => $application->id,
+        \App\Models\ApplicantNotice::query()->create([
+            'applicant_id' => $application->id,
             'notice_text' => 'Internal committee-only note',
             'visibility' => 'internal',
             'created_by_user_id' => $chairman->id,
@@ -436,7 +436,7 @@ class MemberApplicationFlowTest extends TestCase
 
         Sanctum::actingAs($applicant);
 
-        $this->getJson('/api/v1/member-applications/me')
+        $this->getJson('/api/v1/applicants/me')
             ->assertOk()
             ->assertJsonCount(1, 'notices')
             ->assertJsonMissing(['notice_text' => 'Internal committee-only note']);
@@ -460,14 +460,14 @@ class MemberApplicationFlowTest extends TestCase
             'activated_at' => now(),
         ]);
 
-        $this->getJson('/api/v1/member-applications/archive/me')
+        $this->getJson('/api/v1/applicants/archive/me')
             ->assertOk()
             ->assertJsonCount(1, 'notices')
             ->assertJsonMissing(['notice_text' => 'Internal committee-only note']);
 
         Sanctum::actingAs($chairman);
 
-        $this->getJson("/api/v1/member-applications/{$application->id}")
+        $this->getJson("/api/v1/applicants/{$application->id}")
             ->assertOk()
             ->assertJsonCount(2, 'notices');
     }
@@ -579,7 +579,7 @@ class MemberApplicationFlowTest extends TestCase
 
         $applicantUser = User::query()->where('email', 'pedro@applicant.test')->firstOrFail();
         $token = '';
-        Notification::assertSentTo($applicantUser, MemberApplicationVerificationToken::class, function (MemberApplicationVerificationToken $notification) use (&$token) {
+        Notification::assertSentTo($applicantUser, ApplicantVerificationToken::class, function (ApplicantVerificationToken $notification) use (&$token) {
             $token = $notification->token();
             return true;
         });
@@ -596,7 +596,7 @@ class MemberApplicationFlowTest extends TestCase
         $officer = User::factory()->create(['role_id' => $officerRole->id]);
         Sanctum::actingAs($officer);
 
-        $this->postJson("/api/v1/member-applications/{$applicationId}/approve")
+        $this->postJson("/api/v1/applicants/{$applicationId}/approve")
             ->assertStatus(403);
     }
 
@@ -618,7 +618,7 @@ class MemberApplicationFlowTest extends TestCase
 
         $applicantUser = User::query()->where('email', 'luis@applicant.test')->firstOrFail();
         $token = '';
-        Notification::assertSentTo($applicantUser, MemberApplicationVerificationToken::class, function (MemberApplicationVerificationToken $notification) use (&$token) {
+        Notification::assertSentTo($applicantUser, ApplicantVerificationToken::class, function (ApplicantVerificationToken $notification) use (&$token) {
             $token = $notification->token();
             return true;
         });
@@ -638,7 +638,7 @@ class MemberApplicationFlowTest extends TestCase
         ]);
         Sanctum::actingAs($treasurer);
 
-        $this->postJson("/api/v1/member-applications/{$applicationId}/approve")
+        $this->postJson("/api/v1/applicants/{$applicationId}/approve")
             ->assertStatus(403);
     }
 
@@ -653,7 +653,7 @@ class MemberApplicationFlowTest extends TestCase
             'email' => 'stage-guard@applicant.test',
         ]);
 
-        $application = \App\Models\MemberApplication::query()->create([
+        $application = \App\Models\Applicant::query()->create([
             'user_id' => $applicant->id,
             'first_name' => 'Stage',
             'middle_name' => 'Guard',
@@ -670,7 +670,7 @@ class MemberApplicationFlowTest extends TestCase
 
         Sanctum::actingAs($officer);
 
-        $this->postJson("/api/v1/member-applications/{$application->id}/stage", [
+        $this->postJson("/api/v1/applicants/{$application->id}/stage", [
             'current_stage' => 'incubation',
         ])->assertStatus(403);
     }
@@ -680,7 +680,7 @@ class MemberApplicationFlowTest extends TestCase
         $officerRole = Role::query()->where('name', 'officer')->firstOrFail();
         $officer = User::factory()->create(['role_id' => $officerRole->id]);
 
-        $application = \App\Models\MemberApplication::query()->create([
+        $application = \App\Models\Applicant::query()->create([
             'first_name' => 'Notice',
             'middle_name' => 'Guard',
             'last_name' => 'Applicant',
@@ -696,7 +696,7 @@ class MemberApplicationFlowTest extends TestCase
 
         Sanctum::actingAs($officer);
 
-        $this->postJson("/api/v1/member-applications/{$application->id}/notice", [
+        $this->postJson("/api/v1/applicants/{$application->id}/notice", [
             'notice_text' => 'This should be denied for non-chairman.',
         ])->assertStatus(403);
     }
@@ -706,7 +706,7 @@ class MemberApplicationFlowTest extends TestCase
         $officerRole = Role::query()->where('name', 'officer')->firstOrFail();
         $officer = User::factory()->create(['role_id' => $officerRole->id]);
 
-        $application = \App\Models\MemberApplication::query()->create([
+        $application = \App\Models\Applicant::query()->create([
             'first_name' => 'Fee',
             'middle_name' => 'Guard',
             'last_name' => 'Applicant',
@@ -722,7 +722,7 @@ class MemberApplicationFlowTest extends TestCase
 
         Sanctum::actingAs($officer);
 
-        $this->postJson("/api/v1/member-applications/{$application->id}/fee-requirements", [
+        $this->postJson("/api/v1/applicants/{$application->id}/fee-requirements", [
             'required_amount' => 1000,
             'category' => 'project',
             'note' => 'Should be blocked for non-chairman',
@@ -734,7 +734,7 @@ class MemberApplicationFlowTest extends TestCase
         $chairmanRole = Role::query()->where('name', 'membership_chairman')->firstOrFail();
         $chairman = User::factory()->create(['role_id' => $chairmanRole->id]);
 
-        $application = \App\Models\MemberApplication::query()->create([
+        $application = \App\Models\Applicant::query()->create([
             'first_name' => 'Fee',
             'middle_name' => 'Flow',
             'last_name' => 'Applicant',
@@ -750,7 +750,7 @@ class MemberApplicationFlowTest extends TestCase
 
         Sanctum::actingAs($chairman);
 
-        $setRequirement = $this->postJson("/api/v1/member-applications/{$application->id}/fee-requirements", [
+        $setRequirement = $this->postJson("/api/v1/applicants/{$application->id}/fee-requirements", [
             'category' => 'project',
             'required_amount' => 2000,
             'note' => 'Applicant project target',
@@ -760,7 +760,7 @@ class MemberApplicationFlowTest extends TestCase
         $requirementId = (int) $setRequirement->json('requirement.id');
         $this->assertGreaterThan(0, $requirementId);
 
-        $addPayment = $this->postJson("/api/v1/member-applications/{$application->id}/fee-payments", [
+        $addPayment = $this->postJson("/api/v1/applicants/{$application->id}/fee-payments", [
             'category' => 'project',
             'amount' => 500,
             'note' => 'Partial payment',
@@ -775,7 +775,7 @@ class MemberApplicationFlowTest extends TestCase
         $officerRole = Role::query()->where('name', 'officer')->firstOrFail();
         $officer = User::factory()->create(['role_id' => $officerRole->id]);
 
-        $application = \App\Models\MemberApplication::query()->create([
+        $application = \App\Models\Applicant::query()->create([
             'first_name' => 'Reject',
             'middle_name' => 'Guard',
             'last_name' => 'Applicant',
@@ -791,7 +791,7 @@ class MemberApplicationFlowTest extends TestCase
 
         Sanctum::actingAs($officer);
 
-        $this->postJson("/api/v1/member-applications/{$application->id}/reject", [
+        $this->postJson("/api/v1/applicants/{$application->id}/reject", [
             'reason' => 'Should be blocked',
         ])->assertStatus(403);
     }
@@ -801,7 +801,7 @@ class MemberApplicationFlowTest extends TestCase
         $officerRole = Role::query()->where('name', 'officer')->firstOrFail();
         $officer = User::factory()->create(['role_id' => $officerRole->id]);
 
-        $application = \App\Models\MemberApplication::query()->create([
+        $application = \App\Models\Applicant::query()->create([
             'first_name' => 'Probation',
             'middle_name' => 'Guard',
             'last_name' => 'Applicant',
@@ -817,7 +817,7 @@ class MemberApplicationFlowTest extends TestCase
 
         Sanctum::actingAs($officer);
 
-        $this->postJson("/api/v1/member-applications/{$application->id}/probation")
+        $this->postJson("/api/v1/applicants/{$application->id}/probation")
             ->assertStatus(403);
     }
 
@@ -826,7 +826,7 @@ class MemberApplicationFlowTest extends TestCase
         $officerRole = Role::query()->where('name', 'officer')->firstOrFail();
         $officer = User::factory()->create(['role_id' => $officerRole->id]);
 
-        $application = \App\Models\MemberApplication::query()->create([
+        $application = \App\Models\Applicant::query()->create([
             'first_name' => 'Document',
             'middle_name' => 'Guard',
             'last_name' => 'Applicant',
@@ -840,8 +840,8 @@ class MemberApplicationFlowTest extends TestCase
             'email_verified_at' => now(),
         ]);
 
-        $document = \App\Models\ApplicationDocument::query()->create([
-            'member_application_id' => $application->id,
+        $document = \App\Models\ApplicantDocument::query()->create([
+            'applicant_id' => $application->id,
             'file_path' => 'application-docs/sample.pdf',
             'original_name' => 'sample.pdf',
             'status' => 'pending',
@@ -849,7 +849,7 @@ class MemberApplicationFlowTest extends TestCase
 
         Sanctum::actingAs($officer);
 
-        $this->postJson("/api/v1/member-applications/documents/{$document->id}/review", [
+        $this->postJson("/api/v1/applicants/documents/{$document->id}/review", [
             'status' => 'approved',
             'review_note' => 'Should be blocked for non-chairman',
         ])->assertStatus(403);
@@ -869,7 +869,7 @@ class MemberApplicationFlowTest extends TestCase
             'email' => 'other-upload@applicant.test',
         ]);
 
-        $application = \App\Models\MemberApplication::query()->create([
+        $application = \App\Models\Applicant::query()->create([
             'user_id' => $owner->id,
             'first_name' => 'Owner',
             'middle_name' => 'Upload',
@@ -886,7 +886,7 @@ class MemberApplicationFlowTest extends TestCase
 
         Sanctum::actingAs($otherApplicant);
 
-        $this->postJson("/api/v1/member-applications/{$application->id}/documents", [
+        $this->postJson("/api/v1/applicants/{$application->id}/documents", [
             'document' => UploadedFile::fake()->image('id-card.png'),
         ])->assertStatus(403);
     }
@@ -901,7 +901,7 @@ class MemberApplicationFlowTest extends TestCase
             'email' => 'doc-owner@applicant.test',
         ]);
 
-        $application = \App\Models\MemberApplication::query()->create([
+        $application = \App\Models\Applicant::query()->create([
             'user_id' => $applicant->id,
             'first_name' => 'Doc',
             'middle_name' => 'Owner',
@@ -916,8 +916,8 @@ class MemberApplicationFlowTest extends TestCase
             'email_verified_at' => now(),
         ]);
 
-        $document = \App\Models\ApplicationDocument::query()->create([
-            'member_application_id' => $application->id,
+        $document = \App\Models\ApplicantDocument::query()->create([
+            'applicant_id' => $application->id,
             'file_path' => 'application-docs/doc-owner.pdf',
             'original_name' => 'doc-owner.pdf',
             'status' => 'pending',
@@ -926,7 +926,7 @@ class MemberApplicationFlowTest extends TestCase
 
         Sanctum::actingAs($applicant);
 
-        $this->get("/api/v1/member-applications/documents/{$document->id}/view")
+        $this->get("/api/v1/applicants/documents/{$document->id}/view")
             ->assertStatus(200);
     }
 
@@ -944,7 +944,7 @@ class MemberApplicationFlowTest extends TestCase
             'email' => 'doc-guard-other@applicant.test',
         ]);
 
-        $application = \App\Models\MemberApplication::query()->create([
+        $application = \App\Models\Applicant::query()->create([
             'user_id' => $owner->id,
             'first_name' => 'Doc',
             'middle_name' => 'Guard',
@@ -959,8 +959,8 @@ class MemberApplicationFlowTest extends TestCase
             'email_verified_at' => now(),
         ]);
 
-        $document = \App\Models\ApplicationDocument::query()->create([
-            'member_application_id' => $application->id,
+        $document = \App\Models\ApplicantDocument::query()->create([
+            'applicant_id' => $application->id,
             'file_path' => 'application-docs/doc-guard.pdf',
             'original_name' => 'doc-guard.pdf',
             'status' => 'pending',
@@ -969,7 +969,7 @@ class MemberApplicationFlowTest extends TestCase
 
         Sanctum::actingAs($other);
 
-        $this->get("/api/v1/member-applications/documents/{$document->id}/view")
+        $this->get("/api/v1/applicants/documents/{$document->id}/view")
             ->assertStatus(403);
     }
 }

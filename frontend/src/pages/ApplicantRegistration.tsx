@@ -13,7 +13,7 @@ interface ApplicationForm {
   password_confirmation: string;
 }
 
-type MemberApplicationTab = "apply" | "reapply" | "verify";
+type ApplicantRegistrationTab = "apply" | "reapply" | "verify";
 
 const initialForm: ApplicationForm = {
   first_name: "",
@@ -32,8 +32,8 @@ function normalizeVerificationToken(value: string): string {
   return value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10);
 }
 
-export default function MemberApplication() {
-  const [activeTab, setActiveTab] = useState<MemberApplicationTab>("apply");
+export default function ApplicantRegistration() {
+  const [activeTab, setActiveTab] = useState<ApplicantRegistrationTab>("apply");
   const [form, setForm] = useState<ApplicationForm>(initialForm);
   const [reapplyEmail, setReapplyEmail] = useState("");
   const [reapplyPassword, setReapplyPassword] = useState("");

@@ -14,12 +14,12 @@ CREATE TABLE `announcements` (
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `application_documents`;
+DROP TABLE IF EXISTS `applicant_documents`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
-CREATE TABLE `application_documents` (
+CREATE TABLE `applicant_documents` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,
-  `member_application_id` bigint unsigned NOT NULL,
+  `applicant_id` bigint unsigned NOT NULL,
   `file_path` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
   `original_name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
   `status` enum('pending','approved','rejected') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'pending',
@@ -29,19 +29,19 @@ CREATE TABLE `application_documents` (
   `created_at` timestamp NULL DEFAULT NULL,
   `updated_at` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`id`),
-  KEY `application_documents_member_application_id_foreign` (`member_application_id`),
-  KEY `application_documents_reviewed_by_user_id_foreign` (`reviewed_by_user_id`),
-  KEY `application_documents_status_index` (`status`),
-  CONSTRAINT `application_documents_member_application_id_foreign` FOREIGN KEY (`member_application_id`) REFERENCES `member_applications` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `application_documents_reviewed_by_user_id_foreign` FOREIGN KEY (`reviewed_by_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
+  KEY `applicant_documents_applicant_id_foreign` (`applicant_id`),
+  KEY `applicant_documents_reviewed_by_user_id_foreign` (`reviewed_by_user_id`),
+  KEY `applicant_documents_status_index` (`status`),
+  CONSTRAINT `applicant_documents_applicant_id_foreign` FOREIGN KEY (`applicant_id`) REFERENCES `applicants` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `applicant_documents_reviewed_by_user_id_foreign` FOREIGN KEY (`reviewed_by_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `application_fee_payments`;
+DROP TABLE IF EXISTS `applicant_fee_payments`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
-CREATE TABLE `application_fee_payments` (
+CREATE TABLE `applicant_fee_payments` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,
-  `application_fee_requirement_id` bigint unsigned NOT NULL,
+  `applicant_fee_requirement_id` bigint unsigned NOT NULL,
   `amount` decimal(12,2) NOT NULL,
   `payment_date` date NOT NULL,
   `note` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
@@ -49,45 +49,45 @@ CREATE TABLE `application_fee_payments` (
   `created_at` timestamp NULL DEFAULT NULL,
   `updated_at` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`id`),
-  KEY `application_fee_payments_application_fee_requirement_id_foreign` (`application_fee_requirement_id`),
-  KEY `application_fee_payments_encoded_by_user_id_foreign` (`encoded_by_user_id`),
-  CONSTRAINT `application_fee_payments_application_fee_requirement_id_foreign` FOREIGN KEY (`application_fee_requirement_id`) REFERENCES `application_fee_requirements` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `application_fee_payments_encoded_by_user_id_foreign` FOREIGN KEY (`encoded_by_user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+  KEY `applicant_fee_payments_applicant_fee_requirement_id_foreign` (`applicant_fee_requirement_id`),
+  KEY `applicant_fee_payments_encoded_by_user_id_foreign` (`encoded_by_user_id`),
+  CONSTRAINT `applicant_fee_payments_applicant_fee_requirement_id_foreign` FOREIGN KEY (`applicant_fee_requirement_id`) REFERENCES `applicant_fee_requirements` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `applicant_fee_payments_encoded_by_user_id_foreign` FOREIGN KEY (`encoded_by_user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `application_fee_requirements`;
+DROP TABLE IF EXISTS `applicant_fee_requirements`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
-CREATE TABLE `application_fee_requirements` (
+CREATE TABLE `applicant_fee_requirements` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,
-  `member_application_id` bigint unsigned NOT NULL,
+  `applicant_id` bigint unsigned NOT NULL,
   `required_amount` decimal(12,2) NOT NULL,
   `note` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `set_by_user_id` bigint unsigned NOT NULL,
   `created_at` timestamp NULL DEFAULT NULL,
   `updated_at` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`id`),
-  KEY `application_fee_requirements_member_application_id_foreign` (`member_application_id`),
-  KEY `application_fee_requirements_set_by_user_id_foreign` (`set_by_user_id`),
-  CONSTRAINT `application_fee_requirements_member_application_id_foreign` FOREIGN KEY (`member_application_id`) REFERENCES `member_applications` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `application_fee_requirements_set_by_user_id_foreign` FOREIGN KEY (`set_by_user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+  KEY `applicant_fee_requirements_applicant_id_foreign` (`applicant_id`),
+  KEY `applicant_fee_requirements_set_by_user_id_foreign` (`set_by_user_id`),
+  CONSTRAINT `applicant_fee_requirements_applicant_id_foreign` FOREIGN KEY (`applicant_id`) REFERENCES `applicants` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `applicant_fee_requirements_set_by_user_id_foreign` FOREIGN KEY (`set_by_user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `application_notices`;
+DROP TABLE IF EXISTS `applicant_notices`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
-CREATE TABLE `application_notices` (
+CREATE TABLE `applicant_notices` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,
-  `member_application_id` bigint unsigned NOT NULL,
+  `applicant_id` bigint unsigned NOT NULL,
   `notice_text` text COLLATE utf8mb4_unicode_ci NOT NULL,
   `created_by_user_id` bigint unsigned NOT NULL,
   `created_at` timestamp NULL DEFAULT NULL,
   `updated_at` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`id`),
-  KEY `application_notices_member_application_id_foreign` (`member_application_id`),
-  KEY `application_notices_created_by_user_id_foreign` (`created_by_user_id`),
-  CONSTRAINT `application_notices_created_by_user_id_foreign` FOREIGN KEY (`created_by_user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `application_notices_member_application_id_foreign` FOREIGN KEY (`member_application_id`) REFERENCES `member_applications` (`id`) ON DELETE CASCADE
+  KEY `applicant_notices_applicant_id_foreign` (`applicant_id`),
+  KEY `applicant_notices_created_by_user_id_foreign` (`created_by_user_id`),
+  CONSTRAINT `applicant_notices_created_by_user_id_foreign` FOREIGN KEY (`created_by_user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `applicant_notices_applicant_id_foreign` FOREIGN KEY (`applicant_id`) REFERENCES `applicants` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `cache`;
@@ -262,10 +262,10 @@ CREATE TABLE `jobs` (
   KEY `jobs_queue_index` (`queue`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-DROP TABLE IF EXISTS `member_applications`;
+DROP TABLE IF EXISTS `applicants`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
-CREATE TABLE `member_applications` (
+CREATE TABLE `applicants` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,
   `user_id` bigint unsigned DEFAULT NULL,
   `member_number` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
@@ -286,15 +286,15 @@ CREATE TABLE `member_applications` (
   `created_at` timestamp NULL DEFAULT NULL,
   `updated_at` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `member_applications_member_number_unique` (`member_number`),
-  KEY `member_applications_reviewed_by_user_id_foreign` (`reviewed_by_user_id`),
-  KEY `member_applications_email_index` (`email`),
-  KEY `member_applications_status_index` (`status`),
-  KEY `member_applications_verification_token_index` (`verification_token`),
-  KEY `member_applications_user_id_foreign` (`user_id`),
-  KEY `member_applications_decision_status_index` (`decision_status`),
-  CONSTRAINT `member_applications_reviewed_by_user_id_foreign` FOREIGN KEY (`reviewed_by_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
-  CONSTRAINT `member_applications_user_id_foreign` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
+  UNIQUE KEY `applicants_member_number_unique` (`member_number`),
+  KEY `applicants_reviewed_by_user_id_foreign` (`reviewed_by_user_id`),
+  KEY `applicants_email_index` (`email`),
+  KEY `applicants_status_index` (`status`),
+  KEY `applicants_verification_token_index` (`verification_token`),
+  KEY `applicants_user_id_foreign` (`user_id`),
+  KEY `applicants_decision_status_index` (`decision_status`),
+  CONSTRAINT `applicants_reviewed_by_user_id_foreign` FOREIGN KEY (`reviewed_by_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `applicants_user_id_foreign` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `members`;
@@ -493,7 +493,7 @@ INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (12,'2026_02_14_001
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (13,'2026_02_14_001100_expand_posts_excerpt_limit',3);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (14,'2026_02_16_140100_create_permissions_table',4);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (15,'2026_02_16_140200_create_role_permissions_table',4);
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (16,'2026_02_16_160100_create_member_applications_table',5);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (16,'2026_02_16_160100_create_applicants_table',5);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (17,'2026_02_16_170100_rename_probationary_to_applicant_status',6);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (18,'2026_02_16_180100_add_middle_name_and_remove_application_member_number_requirement',7);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (19,'2026_02_16_190100_add_email_and_user_link_to_members',8);
@@ -505,9 +505,9 @@ INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (24,'2026_02_16_230
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (25,'2026_02_17_120100_add_forum_role_to_users',12);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (26,'2026_02_17_120200_create_forum_threads_table',12);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (27,'2026_02_17_120300_create_forum_posts_table',12);
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (28,'2026_02_17_130100_add_applicant_lifecycle_fields_to_member_applications',13);
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (29,'2026_02_17_130200_create_application_notices_table',13);
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (30,'2026_02_17_130300_create_application_documents_table',13);
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (31,'2026_02_17_130400_create_application_fee_requirements_table',13);
-INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (32,'2026_02_17_130500_create_application_fee_payments_table',13);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (28,'2026_02_17_130100_add_applicant_lifecycle_fields_to_applicants',13);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (29,'2026_02_17_130200_create_applicant_notices_table',13);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (30,'2026_02_17_130300_create_applicant_documents_table',13);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (31,'2026_02_17_130400_create_applicant_fee_requirements_table',13);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (32,'2026_02_17_130500_create_applicant_fee_payments_table',13);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (33,'2026_02_27_150000_add_sheet_profile_fields_to_members_table',14);

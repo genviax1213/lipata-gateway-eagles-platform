@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 
-class MemberApplication extends Model
+class Applicant extends Model
 {
     use HasFactory;
 
@@ -89,17 +89,17 @@ class MemberApplication extends Model
 
     public function notices()
     {
-        return $this->hasMany(ApplicationNotice::class, 'member_application_id');
+        return $this->hasMany(ApplicantNotice::class, 'applicant_id');
     }
 
     public function documents()
     {
-        return $this->hasMany(ApplicationDocument::class, 'member_application_id');
+        return $this->hasMany(ApplicantDocument::class, 'applicant_id');
     }
 
     public function feeRequirements()
     {
-        return $this->hasMany(ApplicationFeeRequirement::class, 'member_application_id');
+        return $this->hasMany(ApplicantFeeRequirement::class, 'applicant_id');
     }
 
     public function scopeOwnedByUser(Builder $query, User $user): Builder

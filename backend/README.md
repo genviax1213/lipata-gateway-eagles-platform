@@ -9,15 +9,17 @@
   - `/api/v1/login`
   - `/api/v1/forgot-password`
   - `/api/v1/reset-password`
-  - `/api/v1/member-applications`
-  - `/api/v1/member-applications/verify`
+  - `/api/v1/applicant-registrations`
+  - `/api/v1/applicant-registrations/verify`
+  - `/api/v1/member-registrations`
+  - `/api/v1/member-registrations/verify`
   - Implemented with named rate limiters keyed by `ip|email`
 - Logout endpoint:
   - `POST /api/v1/logout` (revokes current token/session)
-- Member-application verification:
-  - Verification token is emailed to the applicant
-  - Submit endpoint no longer returns verification token in API response
-  - Verification token is stored hashed at rest
+- Registration verification:
+  - Verification token is emailed to the registrant/applicant
+  - Submit endpoints no longer return verification tokens in API responses
+  - Verification tokens are stored hashed at rest
 - Incident response logging:
   - API responses include `X-Request-Id`
   - Structured audit events are available for auth, admin role/user changes, applicant decisions, finance reversals, and finance audit-note creation
@@ -26,10 +28,10 @@
 
 ## Authorization Policy Map
 
-- `MemberApplicationPolicy`
+- `ApplicantPolicy`
   - `uploadDocument`: applicant can upload only to their own application and must have `applications.docs.upload`.
-- `ApplicationDocumentPolicy`
-  - `view`: owner, membership reviewers, or users with `members.view`.
+- `ApplicantDocumentPolicy`
+  - `view`: owner, membership reviewers, or users with `applications.docs.view`.
   - `review`: membership chairman role only.
 - `ForumThreadPolicy`
   - `setLock`: requires forum moderation capability.
@@ -112,7 +114,7 @@ Seeder note:
 
 ### Migration Release Note
 
-- `2026_03_02_090000_normalize_existing_email_identity_data.php` lowercases and trims email data in `users`, `members`, and `member_applications`.
+- `2026_03_02_090000_normalize_existing_email_identity_data.php` lowercases and trims email data in `users`, `members`, and `applicants`.
 - This normalization is intentionally irreversible (`down()` is a no-op). Before production rollout, take a database backup/snapshot and include this migration in your release checklist.
 
 <p align="center">

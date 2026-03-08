@@ -4,7 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Contribution;
 use App\Models\Member;
-use App\Models\MemberApplication;
+use App\Models\Applicant;
 use App\Models\Role;
 use App\Models\User;
 use Database\Seeders\RoleSeeder;
@@ -30,7 +30,7 @@ class DashboardMeTest extends TestCase
             'email' => 'dashboard-applicant@example.com',
         ]);
 
-        MemberApplication::query()->create([
+        Applicant::query()->create([
             'user_id' => $applicant->id,
             'first_name' => 'Dashboard',
             'middle_name' => 'Applicant',
@@ -109,7 +109,7 @@ class DashboardMeTest extends TestCase
             'user_id' => $memberUser->id,
         ]);
 
-        MemberApplication::query()->create([
+        Applicant::query()->create([
             'user_id' => $memberUser->id,
             'member_id' => $member->id,
             'first_name' => 'Dashboard',
@@ -142,7 +142,7 @@ class DashboardMeTest extends TestCase
             'email' => 'dashboard-archived-applicant@example.com',
         ]);
 
-        MemberApplication::query()->create([
+        Applicant::query()->create([
             'user_id' => $applicant->id,
             'first_name' => 'Archived',
             'middle_name' => 'Applicant',
@@ -174,7 +174,7 @@ class DashboardMeTest extends TestCase
             'email' => 'dashboard-official@applicant.test',
         ]);
 
-        MemberApplication::query()->create([
+        Applicant::query()->create([
             'user_id' => $applicant->id,
             'first_name' => 'Official',
             'middle_name' => 'Applicant',

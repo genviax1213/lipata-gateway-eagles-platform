@@ -6,7 +6,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\PostController;
 use App\Http\Controllers\MemberController;
 use App\Http\Controllers\AdminUserController;
-use App\Http\Controllers\MemberApplicationController;
+use App\Http\Controllers\ApplicantController;
 use App\Http\Controllers\MemberRegistrationController;
 use App\Http\Controllers\FinanceController;
 use App\Http\Controllers\FinanceAuditController;
@@ -20,11 +20,11 @@ Route::prefix('v1')->group(function () {
     Route::get('/content/homepage-community', [PostController::class, 'publicHomepageCommunity']);
     Route::get('/content/{section}', [PostController::class, 'publicBySection']);
     Route::get('/content/post/{slug}', [PostController::class, 'publicBySlug']);
-    Route::post('/applicant-registrations', [MemberApplicationController::class, 'submit'])
+    Route::post('/applicant-registrations', [ApplicantController::class, 'submit'])
         ->middleware('throttle:application-submit');
-    Route::post('/applicant-registrations/reapply', [MemberApplicationController::class, 'reapply'])
+    Route::post('/applicant-registrations/reapply', [ApplicantController::class, 'reapply'])
         ->middleware('throttle:application-submit');
-    Route::post('/applicant-registrations/verify', [MemberApplicationController::class, 'verify'])
+    Route::post('/applicant-registrations/verify', [ApplicantController::class, 'verify'])
         ->middleware('throttle:application-verify');
     Route::post('/member-registrations', [MemberRegistrationController::class, 'register'])
         ->middleware('throttle:application-submit');
@@ -73,29 +73,29 @@ Route::prefix('v1')->group(function () {
         Route::post('/members', [MemberController::class, 'store'])->middleware('throttle:members-write', 'portal.permission:members.create');
         Route::put('/members/{member}', [MemberController::class, 'update'])->middleware('throttle:members-write', 'portal.permission:members.update');
         Route::delete('/members/{member}', [MemberController::class, 'destroy'])->middleware('throttle:members-write', 'portal.permission:users.manage');
-        Route::get('/member-applications', [MemberApplicationController::class, 'index']);
-        Route::get('/member-applications/me', [MemberApplicationController::class, 'myApplication'])->middleware('portal.permission:applications.dashboard.view');
-        Route::post('/member-applications/me/withdraw', [MemberApplicationController::class, 'withdraw']);
-        Route::get('/member-applications/archive/me', [MemberApplicationController::class, 'myArchive']);
-        Route::get('/member-applications/{memberApplication}', [MemberApplicationController::class, 'show']);
-        Route::post('/member-applications/{memberApplication}/documents', [MemberApplicationController::class, 'uploadDocument'])->middleware('portal.permission:applications.docs.upload');
-        Route::get('/member-applications/documents/{document}/view', [MemberApplicationController::class, 'viewDocument']);
-        Route::post('/member-applications/documents/{document}/review', [MemberApplicationController::class, 'reviewDocument'])->middleware('portal.permission:applications.docs.review');
-        Route::post('/member-applications/{memberApplication}/stage', [MemberApplicationController::class, 'setStage'])->middleware('portal.permission:applications.stage.set');
-        Route::post('/member-applications/{memberApplication}/notice', [MemberApplicationController::class, 'setNotice'])->middleware('portal.permission:applications.notice.set');
-        Route::post('/member-applications/{memberApplication}/fee-requirements', [MemberApplicationController::class, 'setFeeRequirement'])->middleware('portal.permission:applications.fee.set');
-        Route::post('/member-applications/{memberApplication}/fee-payments', [MemberApplicationController::class, 'addCategoryFeePayment']);
-        Route::post('/member-applications/fee-requirements/{applicationFeeRequirement}/payments', [MemberApplicationController::class, 'addFeePayment']);
-        Route::post('/member-applications/{memberApplication}/approve', [MemberApplicationController::class, 'approve'])->middleware('portal.permission:applications.review');
-        Route::post('/member-applications/{memberApplication}/activate', [MemberApplicationController::class, 'activate'])->middleware('portal.permission:applications.review');
-        Route::post('/member-applications/{memberApplication}/probation', [MemberApplicationController::class, 'setProbation'])->middleware('portal.permission:applications.review');
-        Route::post('/member-applications/{memberApplication}/reject', [MemberApplicationController::class, 'reject'])->middleware('portal.permission:applications.review');
-        Route::post('/member-applications/{memberApplication}/assign-batch', [MemberApplicationController::class, 'assignBatch'])->middleware('portal.permission:applications.review');
-        Route::get('/applicant-batches', [MemberApplicationController::class, 'listBatches'])->middleware('portal.permission:applications.review');
-        Route::get('/applicant-batch-treasurer-candidates', [MemberApplicationController::class, 'batchTreasurerCandidates'])->middleware('portal.permission:applications.review');
-        Route::post('/applicant-batches', [MemberApplicationController::class, 'createBatch'])->middleware('portal.permission:applications.review');
-        Route::post('/applicant-batches/{applicantBatch}/documents', [MemberApplicationController::class, 'uploadBatchDocument'])->middleware('portal.permission:applications.review');
-        Route::get('/applicant-batches/documents/{document}/view', [MemberApplicationController::class, 'viewBatchDocument']);
+        Route::get('/applicants', [ApplicantController::class, 'index']);
+        Route::get('/applicants/me', [ApplicantController::class, 'myApplication'])->middleware('portal.permission:applications.dashboard.view');
+        Route::post('/applicants/me/withdraw', [ApplicantController::class, 'withdraw']);
+        Route::get('/applicants/archive/me', [ApplicantController::class, 'myArchive']);
+        Route::get('/applicants/{applicant}', [ApplicantController::class, 'show']);
+        Route::post('/applicants/{applicant}/documents', [ApplicantController::class, 'uploadDocument'])->middleware('portal.permission:applications.docs.upload');
+        Route::get('/applicants/documents/{document}/view', [ApplicantController::class, 'viewDocument']);
+        Route::post('/applicants/documents/{document}/review', [ApplicantController::class, 'reviewDocument'])->middleware('portal.permission:applications.docs.review');
+        Route::post('/applicants/{applicant}/stage', [ApplicantController::class, 'setStage'])->middleware('portal.permission:applications.stage.set');
+        Route::post('/applicants/{applicant}/notice', [ApplicantController::class, 'setNotice'])->middleware('portal.permission:applications.notice.set');
+        Route::post('/applicants/{applicant}/fee-requirements', [ApplicantController::class, 'setFeeRequirement'])->middleware('portal.permission:applications.fee.set');
+        Route::post('/applicants/{applicant}/fee-payments', [ApplicantController::class, 'addCategoryFeePayment']);
+        Route::post('/applicants/fee-requirements/{applicantFeeRequirement}/payments', [ApplicantController::class, 'addFeePayment']);
+        Route::post('/applicants/{applicant}/approve', [ApplicantController::class, 'approve'])->middleware('portal.permission:applications.review');
+        Route::post('/applicants/{applicant}/activate', [ApplicantController::class, 'activate'])->middleware('portal.permission:applications.review');
+        Route::post('/applicants/{applicant}/probation', [ApplicantController::class, 'setProbation'])->middleware('portal.permission:applications.review');
+        Route::post('/applicants/{applicant}/reject', [ApplicantController::class, 'reject'])->middleware('portal.permission:applications.review');
+        Route::post('/applicants/{applicant}/assign-batch', [ApplicantController::class, 'assignBatch'])->middleware('portal.permission:applications.review');
+        Route::get('/applicant-batches', [ApplicantController::class, 'listBatches'])->middleware('portal.permission:applications.review');
+        Route::get('/applicant-batch-treasurer-candidates', [ApplicantController::class, 'batchTreasurerCandidates'])->middleware('portal.permission:applications.review');
+        Route::post('/applicant-batches', [ApplicantController::class, 'createBatch'])->middleware('portal.permission:applications.review');
+        Route::post('/applicant-batches/{applicantBatch}/documents', [ApplicantController::class, 'uploadBatchDocument'])->middleware('portal.permission:applications.review');
+        Route::get('/applicant-batches/documents/{document}/view', [ApplicantController::class, 'viewBatchDocument']);
 
         Route::get('/admin/roles', [AdminUserController::class, 'roles'])->middleware('portal.permission:users.view');
         Route::get('/admin/members', [AdminUserController::class, 'members'])->middleware('portal.permission:users.view');

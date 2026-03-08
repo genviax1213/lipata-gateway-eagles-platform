@@ -3,7 +3,7 @@ import axios from "axios";
 import api from "../services/api";
 import MemberModal from "../components/MemberModal";
 import DeleteModal from "../components/DeleteModal";
-import type { Member, MemberApplication, MemberForm, ValidationErrors } from "../types/member";
+import type { Member, Applicant, MemberForm, ValidationErrors } from "../types/member";
 import { useAuth } from "../contexts/useAuth";
 import { hasPermission } from "../utils/auth";
 
@@ -19,7 +19,7 @@ export default function Members() {
 
   const [activeTab, setActiveTab] = useState<MembersTab>("members");
   const [members, setMembers] = useState<Member[]>([]);
-  const [applications, setApplications] = useState<MemberApplication[]>([]);
+  const [applications, setApplications] = useState<Applicant[]>([]);
   const [membersLoaded, setMembersLoaded] = useState(false);
   const [applicationsLoaded, setApplicationsLoaded] = useState(false);
   const [search, setSearch] = useState("");
@@ -57,8 +57,8 @@ export default function Members() {
 
   const fetchApplications = useCallback(async (page = 1) => {
     if (!canViewApplications) return;
-    const res = await api.get("/member-applications", { params: { status: "under_review", page } });
-    setApplications((res.data?.data ?? []) as MemberApplication[]);
+    const res = await api.get("/applicants", { params: { status: "under_review", page } });
+    setApplications((res.data?.data ?? []) as Applicant[]);
     setApplicationsPage(Number(res.data?.current_page ?? 1));
     setApplicationsLastPage(Number(res.data?.last_page ?? 1));
     setApplicationsLoaded(true);
@@ -108,7 +108,7 @@ export default function Members() {
   async function approveApplication(applicationId: number) {
     try {
       setError("");
-      await api.post(`/member-applications/${applicationId}/approve`);
+      await api.post(`/applicants/${applicationId}/approve`);
       setNotice("Application approved. The applicant is now in the official applicant workflow and continues 5I, documents, and requirement tracking.");
       if (applicationsLoaded) {
         await fetchApplications(applicationsPage);
@@ -126,7 +126,7 @@ export default function Members() {
   async function rejectApplication(applicationId: number) {
     try {
       setError("");
-      await api.post(`/member-applications/${applicationId}/reject`, {
+      await api.post(`/applicants/${applicationId}/reject`, {
         reason: "Rejected during review.",
       });
       setNotice("Application rejected.");

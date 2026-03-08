@@ -15,25 +15,25 @@ return new class extends Migration
             }
         });
 
-        Schema::table('member_applications', function (Blueprint $table) {
-            if (!Schema::hasColumn('member_applications', 'middle_name')) {
+        Schema::table('applicants', function (Blueprint $table) {
+            if (!Schema::hasColumn('applicants', 'middle_name')) {
                 $table->string('middle_name', 120)->nullable()->after('first_name');
             }
         });
 
-        if (Schema::hasColumn('member_applications', 'member_number') && DB::getDriverName() === 'mysql') {
-            DB::statement('ALTER TABLE member_applications MODIFY member_number VARCHAR(255) NULL');
+        if (Schema::hasColumn('applicants', 'member_number') && DB::getDriverName() === 'mysql') {
+            DB::statement('ALTER TABLE applicants MODIFY member_number VARCHAR(255) NULL');
         }
     }
 
     public function down(): void
     {
-        if (Schema::hasColumn('member_applications', 'member_number') && DB::getDriverName() === 'mysql') {
-            DB::statement('ALTER TABLE member_applications MODIFY member_number VARCHAR(255) NOT NULL');
+        if (Schema::hasColumn('applicants', 'member_number') && DB::getDriverName() === 'mysql') {
+            DB::statement('ALTER TABLE applicants MODIFY member_number VARCHAR(255) NOT NULL');
         }
 
-        Schema::table('member_applications', function (Blueprint $table) {
-            if (Schema::hasColumn('member_applications', 'middle_name')) {
+        Schema::table('applicants', function (Blueprint $table) {
+            if (Schema::hasColumn('applicants', 'middle_name')) {
                 $table->dropColumn('middle_name');
             }
         });

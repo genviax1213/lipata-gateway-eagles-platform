@@ -3,7 +3,7 @@
 use App\Models\Member;
 use App\Models\Role;
 use App\Models\User;
-use App\Models\ApplicationDocument;
+use App\Models\ApplicantDocument;
 use App\Support\TextCase;
 use Carbon\Carbon;
 use Illuminate\Foundation\Inspiring;
@@ -202,7 +202,7 @@ Artisan::command('documents:migrate-applicant-storage {--dry-run : Show migratio
         'failed' => 0,
     ];
 
-    ApplicationDocument::query()
+    ApplicantDocument::query()
         ->where('file_path', 'like', 'application-docs/%')
         ->orderBy('id')
         ->chunkById($chunkSize, function ($documents) use (&$stats, $dryRun) {

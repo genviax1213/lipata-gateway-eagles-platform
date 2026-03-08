@@ -5,12 +5,12 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class ApplicationDocument extends Model
+class ApplicantDocument extends Model
 {
     use HasFactory;
 
     protected $fillable = [
-        'member_application_id',
+        'applicant_id',
         'file_path',
         'original_name',
         'status',
@@ -23,9 +23,9 @@ class ApplicationDocument extends Model
         'reviewed_at' => 'datetime',
     ];
 
-    public function application()
+    public function applicant()
     {
-        return $this->belongsTo(MemberApplication::class, 'member_application_id');
+        return $this->belongsTo(Applicant::class, 'applicant_id');
     }
 
     public function reviewedBy()

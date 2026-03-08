@@ -5,7 +5,7 @@ namespace Tests\Feature;
 use App\Models\Post;
 use App\Models\Role;
 use App\Models\Member;
-use App\Models\MemberApplication;
+use App\Models\Applicant;
 use App\Models\Contribution;
 use App\Models\FinanceAccount;
 use App\Models\User;
@@ -158,7 +158,7 @@ class RolePermissionAuthorizationTest extends TestCase
         $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
         $admin = User::factory()->create(['role_id' => $adminRole->id]);
 
-        MemberApplication::query()->create([
+        Applicant::query()->create([
             'first_name' => 'Queued',
             'middle_name' => 'Applicant',
             'last_name' => 'Admin View',
@@ -174,7 +174,7 @@ class RolePermissionAuthorizationTest extends TestCase
 
         Sanctum::actingAs($admin);
 
-        $this->getJson('/api/v1/member-applications')
+        $this->getJson('/api/v1/applicants')
             ->assertOk()
             ->assertJsonPath('data.0.email', 'queued-admin-view@applicant.test');
     }
@@ -184,7 +184,7 @@ class RolePermissionAuthorizationTest extends TestCase
         $superadminRole = Role::query()->where('name', 'superadmin')->firstOrFail();
         $superadmin = User::factory()->create(['role_id' => $superadminRole->id]);
 
-        MemberApplication::query()->create([
+        Applicant::query()->create([
             'first_name' => 'Queued',
             'middle_name' => 'Applicant',
             'last_name' => 'Superadmin View',
@@ -200,7 +200,7 @@ class RolePermissionAuthorizationTest extends TestCase
 
         Sanctum::actingAs($superadmin);
 
-        $this->getJson('/api/v1/member-applications')
+        $this->getJson('/api/v1/applicants')
             ->assertOk()
             ->assertJsonPath('data.0.email', 'queued-superadmin-view@applicant.test');
     }
@@ -210,7 +210,7 @@ class RolePermissionAuthorizationTest extends TestCase
         $officerRole = Role::query()->where('name', 'officer')->firstOrFail();
         $officer = User::factory()->create(['role_id' => $officerRole->id]);
 
-        $application = MemberApplication::query()->create([
+        $application = Applicant::query()->create([
             'first_name' => 'Queued',
             'middle_name' => 'Applicant',
             'last_name' => 'Officer View',
@@ -226,11 +226,11 @@ class RolePermissionAuthorizationTest extends TestCase
 
         Sanctum::actingAs($officer);
 
-        $this->getJson('/api/v1/member-applications')
+        $this->getJson('/api/v1/applicants')
             ->assertOk()
             ->assertJsonPath('data.0.email', 'queued-officer-view@applicant.test');
 
-        $this->getJson("/api/v1/member-applications/{$application->id}")
+        $this->getJson("/api/v1/applicants/{$application->id}")
             ->assertStatus(403);
     }
 
@@ -239,7 +239,7 @@ class RolePermissionAuthorizationTest extends TestCase
         $treasurerRole = Role::query()->where('name', 'treasurer')->firstOrFail();
         $treasurer = User::factory()->create(['role_id' => $treasurerRole->id]);
 
-        $application = MemberApplication::query()->create([
+        $application = Applicant::query()->create([
             'first_name' => 'Queued',
             'middle_name' => 'Applicant',
             'last_name' => 'Treasurer View',
@@ -255,11 +255,11 @@ class RolePermissionAuthorizationTest extends TestCase
 
         Sanctum::actingAs($treasurer);
 
-        $this->getJson('/api/v1/member-applications')
+        $this->getJson('/api/v1/applicants')
             ->assertOk()
             ->assertJsonPath('data.0.email', 'queued-treasurer-view@applicant.test');
 
-        $this->getJson("/api/v1/member-applications/{$application->id}")
+        $this->getJson("/api/v1/applicants/{$application->id}")
             ->assertStatus(403);
     }
 
@@ -268,7 +268,7 @@ class RolePermissionAuthorizationTest extends TestCase
         $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
         $admin = User::factory()->create(['role_id' => $adminRole->id]);
 
-        $application = MemberApplication::query()->create([
+        $application = Applicant::query()->create([
             'first_name' => 'Queued',
             'middle_name' => 'Applicant',
             'last_name' => 'Admin Dossier',
@@ -284,7 +284,7 @@ class RolePermissionAuthorizationTest extends TestCase
 
         Sanctum::actingAs($admin);
 
-        $this->getJson("/api/v1/member-applications/{$application->id}")
+        $this->getJson("/api/v1/applicants/{$application->id}")
             ->assertOk()
             ->assertJsonPath('email', 'queued-admin-dossier@applicant.test');
     }
@@ -294,7 +294,7 @@ class RolePermissionAuthorizationTest extends TestCase
         $superadminRole = Role::query()->where('name', 'superadmin')->firstOrFail();
         $superadmin = User::factory()->create(['role_id' => $superadminRole->id]);
 
-        $application = MemberApplication::query()->create([
+        $application = Applicant::query()->create([
             'first_name' => 'Queued',
             'middle_name' => 'Applicant',
             'last_name' => 'Superadmin Dossier',
@@ -310,11 +310,11 @@ class RolePermissionAuthorizationTest extends TestCase
 
         Sanctum::actingAs($superadmin);
 
-        $this->getJson("/api/v1/member-applications/{$application->id}")
+        $this->getJson("/api/v1/applicants/{$application->id}")
             ->assertOk()
             ->assertJsonPath('email', 'queued-superadmin-dossier@applicant.test');
 
-        $this->postJson("/api/v1/member-applications/{$application->id}/approve")
+        $this->postJson("/api/v1/applicants/{$application->id}/approve")
             ->assertStatus(403);
     }
 

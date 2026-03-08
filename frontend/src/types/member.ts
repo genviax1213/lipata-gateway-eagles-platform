@@ -1,4 +1,4 @@
-export type MemberApplicationStatus =
+export type ApplicantStatus =
   | "pending_verification"
   | "under_review"
   | "official_applicant"
@@ -7,7 +7,7 @@ export type MemberApplicationStatus =
   | "rejected"
   | "withdrawn";
 
-export type MemberApplicationDecisionStatus =
+export type ApplicantDecisionStatus =
   | "pending"
   | "probation"
   | "approved"
@@ -49,7 +49,7 @@ export interface MemberForm {
   password_set: boolean;
 }
 
-export interface MemberApplication {
+export interface Applicant {
   id: number;
   first_name: string;
   middle_name: string | null;
@@ -57,12 +57,12 @@ export interface MemberApplication {
   email: string;
   membership_status: "applicant";
   member_id?: number | null;
-  status: MemberApplicationStatus;
+  status: ApplicantStatus;
   email_verified_at: string | null;
   reviewed_at: string | null;
   reviewed_by_user_id: number | null;
   rejection_reason: string | null;
-  decision_status?: MemberApplicationDecisionStatus;
+  decision_status?: ApplicantDecisionStatus;
 }
 
 export type ValidationErrors = Record<string, string[]>;

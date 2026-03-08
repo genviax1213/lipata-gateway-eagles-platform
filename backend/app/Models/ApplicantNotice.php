@@ -5,20 +5,20 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class ApplicationNotice extends Model
+class ApplicantNotice extends Model
 {
     use HasFactory;
 
     protected $fillable = [
-        'member_application_id',
+        'applicant_id',
         'notice_text',
         'visibility',
         'created_by_user_id',
     ];
 
-    public function application()
+    public function applicant()
     {
-        return $this->belongsTo(MemberApplication::class, 'member_application_id');
+        return $this->belongsTo(Applicant::class, 'applicant_id');
     }
 
     public function createdBy()

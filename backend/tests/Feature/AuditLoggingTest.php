@@ -3,7 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Member;
-use App\Models\MemberApplication;
+use App\Models\Applicant;
 use App\Models\Contribution;
 use App\Models\Expense;
 use App\Models\FinanceAccount;
@@ -65,7 +65,7 @@ class AuditLoggingTest extends TestCase
         $chairmanRole = Role::query()->where('name', 'membership_chairman')->firstOrFail();
         $chairman = User::factory()->create(['role_id' => $chairmanRole->id]);
 
-        $application = MemberApplication::query()->create([
+        $application = Applicant::query()->create([
             'first_name' => 'Notice',
             'middle_name' => 'Audit',
             'last_name' => 'Case',
@@ -81,7 +81,7 @@ class AuditLoggingTest extends TestCase
 
         Sanctum::actingAs($chairman);
 
-        $this->postJson("/api/v1/member-applications/{$application->id}/notice", [
+        $this->postJson("/api/v1/applicants/{$application->id}/notice", [
             'notice_text' => 'Submit remaining requirements this week.',
         ])->assertStatus(201);
 
@@ -102,7 +102,7 @@ class AuditLoggingTest extends TestCase
         $chairmanRole = Role::query()->where('name', 'membership_chairman')->firstOrFail();
         $chairman = User::factory()->create(['role_id' => $chairmanRole->id]);
 
-        $application = MemberApplication::query()->create([
+        $application = Applicant::query()->create([
             'first_name' => 'Probation',
             'middle_name' => 'Audit',
             'last_name' => 'Case',
@@ -118,7 +118,7 @@ class AuditLoggingTest extends TestCase
 
         Sanctum::actingAs($chairman);
 
-        $this->postJson("/api/v1/member-applications/{$application->id}/probation")
+        $this->postJson("/api/v1/applicants/{$application->id}/probation")
             ->assertOk();
 
         Log::shouldHaveReceived('info')
@@ -137,7 +137,7 @@ class AuditLoggingTest extends TestCase
         $chairmanRole = Role::query()->where('name', 'membership_chairman')->firstOrFail();
         $chairman = User::factory()->create(['role_id' => $chairmanRole->id]);
 
-        $application = MemberApplication::query()->create([
+        $application = Applicant::query()->create([
             'first_name' => 'Stage',
             'middle_name' => 'Audit',
             'last_name' => 'Case',
@@ -153,7 +153,7 @@ class AuditLoggingTest extends TestCase
 
         Sanctum::actingAs($chairman);
 
-        $this->postJson("/api/v1/member-applications/{$application->id}/stage", [
+        $this->postJson("/api/v1/applicants/{$application->id}/stage", [
             'current_stage' => 'incubation',
         ])->assertOk();
 
@@ -174,7 +174,7 @@ class AuditLoggingTest extends TestCase
         $chairmanRole = Role::query()->where('name', 'membership_chairman')->firstOrFail();
         $chairman = User::factory()->create(['role_id' => $chairmanRole->id]);
 
-        $application = MemberApplication::query()->create([
+        $application = Applicant::query()->create([
             'first_name' => 'Document',
             'middle_name' => 'Audit',
             'last_name' => 'Case',
@@ -188,8 +188,8 @@ class AuditLoggingTest extends TestCase
             'email_verified_at' => now(),
         ]);
 
-        $document = \App\Models\ApplicationDocument::query()->create([
-            'member_application_id' => $application->id,
+        $document = \App\Models\ApplicantDocument::query()->create([
+            'applicant_id' => $application->id,
             'file_path' => 'application-docs/document-audit.pdf',
             'original_name' => 'document-audit.pdf',
             'status' => 'pending',
@@ -197,7 +197,7 @@ class AuditLoggingTest extends TestCase
 
         Sanctum::actingAs($chairman);
 
-        $this->postJson("/api/v1/member-applications/documents/{$document->id}/review", [
+        $this->postJson("/api/v1/applicants/documents/{$document->id}/review", [
             'status' => 'approved',
             'review_note' => 'Validated',
         ])->assertOk();
@@ -332,7 +332,7 @@ class AuditLoggingTest extends TestCase
         $chairmanRole = Role::query()->where('name', 'membership_chairman')->firstOrFail();
         $chairman = User::factory()->create(['role_id' => $chairmanRole->id]);
 
-        $application = MemberApplication::query()->create([
+        $application = Applicant::query()->create([
             'first_name' => 'Fee',
             'middle_name' => 'Requirement',
             'last_name' => 'Audit',
@@ -348,7 +348,7 @@ class AuditLoggingTest extends TestCase
 
         Sanctum::actingAs($chairman);
 
-        $this->postJson("/api/v1/member-applications/{$application->id}/fee-requirements", [
+        $this->postJson("/api/v1/applicants/{$application->id}/fee-requirements", [
             'category' => 'project',
             'required_amount' => 1500,
             'note' => 'Initial applicant contribution target',
@@ -373,7 +373,7 @@ class AuditLoggingTest extends TestCase
         $chairmanRole = Role::query()->where('name', 'membership_chairman')->firstOrFail();
         $chairman = User::factory()->create(['role_id' => $chairmanRole->id]);
 
-        $application = MemberApplication::query()->create([
+        $application = Applicant::query()->create([
             'first_name' => 'Fee',
             'middle_name' => 'Payment',
             'last_name' => 'Audit',
@@ -389,7 +389,7 @@ class AuditLoggingTest extends TestCase
 
         Sanctum::actingAs($chairman);
 
-        $requirementResponse = $this->postJson("/api/v1/member-applications/{$application->id}/fee-requirements", [
+        $requirementResponse = $this->postJson("/api/v1/applicants/{$application->id}/fee-requirements", [
             'category' => 'project',
             'required_amount' => 1200,
             'note' => 'Payment audit requirement',
@@ -398,7 +398,7 @@ class AuditLoggingTest extends TestCase
         $requirementId = (int) $requirementResponse->json('requirement.id');
         $this->assertGreaterThan(0, $requirementId);
 
-        $this->postJson("/api/v1/member-applications/{$application->id}/fee-payments", [
+        $this->postJson("/api/v1/applicants/{$application->id}/fee-payments", [
             'category' => 'project',
             'amount' => 1200,
             'note' => 'Paid in full',
@@ -429,7 +429,7 @@ class AuditLoggingTest extends TestCase
             'email' => 'approve-audit@applicant.test',
         ]);
 
-        $application = MemberApplication::query()->create([
+        $application = Applicant::query()->create([
             'user_id' => $applicantUser->id,
             'first_name' => 'Approve',
             'middle_name' => 'Audit',
@@ -446,7 +446,7 @@ class AuditLoggingTest extends TestCase
 
         Sanctum::actingAs($chairman);
 
-        $this->postJson("/api/v1/member-applications/{$application->id}/approve")
+        $this->postJson("/api/v1/applicants/{$application->id}/approve")
             ->assertOk();
 
         Log::shouldHaveReceived('info')
@@ -466,7 +466,7 @@ class AuditLoggingTest extends TestCase
         $chairmanRole = Role::query()->where('name', 'membership_chairman')->firstOrFail();
         $chairman = User::factory()->create(['role_id' => $chairmanRole->id]);
 
-        $application = MemberApplication::query()->create([
+        $application = Applicant::query()->create([
             'first_name' => 'Reject',
             'middle_name' => 'Audit',
             'last_name' => 'Case',
@@ -482,7 +482,7 @@ class AuditLoggingTest extends TestCase
 
         Sanctum::actingAs($chairman);
 
-        $this->postJson("/api/v1/member-applications/{$application->id}/reject", [
+        $this->postJson("/api/v1/applicants/{$application->id}/reject", [
             'reason' => 'Insufficient documentary requirements',
         ])->assertOk();
 
@@ -506,7 +506,7 @@ class AuditLoggingTest extends TestCase
             'email' => 'withdraw-audit@applicant.test',
         ]);
 
-        $application = MemberApplication::query()->create([
+        $application = Applicant::query()->create([
             'user_id' => $applicant->id,
             'first_name' => 'Withdraw',
             'middle_name' => 'Audit',
@@ -523,7 +523,7 @@ class AuditLoggingTest extends TestCase
 
         Sanctum::actingAs($applicant);
 
-        $this->postJson('/api/v1/member-applications/me/withdraw')
+        $this->postJson('/api/v1/applicants/me/withdraw')
             ->assertOk();
 
         Log::shouldHaveReceived('info')
@@ -545,7 +545,7 @@ class AuditLoggingTest extends TestCase
             'email' => 'reapply-audit@applicant.test',
         ]);
 
-        $archived = MemberApplication::query()->create([
+        $archived = Applicant::query()->create([
             'user_id' => $applicant->id,
             'first_name' => 'Reapply',
             'middle_name' => 'Audit',
@@ -567,7 +567,7 @@ class AuditLoggingTest extends TestCase
             'password_confirmation' => 'Password123',
         ])->assertStatus(201);
 
-        $newApplication = MemberApplication::query()
+        $newApplication = Applicant::query()
             ->where('email', 'reapply-audit@applicant.test')
             ->latest('id')
             ->firstOrFail();
@@ -657,7 +657,7 @@ class AuditLoggingTest extends TestCase
             'role_id' => $memberRole->id,
         ]);
 
-        $application = MemberApplication::query()->create([
+        $application = Applicant::query()->create([
             'user_id' => $user->id,
             'first_name' => 'Blocked',
             'middle_name' => 'Login',

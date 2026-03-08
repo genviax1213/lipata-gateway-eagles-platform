@@ -8,9 +8,9 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('application_fee_requirements', function (Blueprint $table) {
+        Schema::create('applicant_fee_requirements', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('member_application_id')->constrained('member_applications')->cascadeOnDelete();
+            $table->foreignId('applicant_id')->constrained('applicants')->cascadeOnDelete();
             $table->decimal('required_amount', 12, 2);
             $table->string('note', 255)->nullable();
             $table->foreignId('set_by_user_id')->constrained('users')->cascadeOnDelete();
@@ -20,6 +20,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('application_fee_requirements');
+        Schema::dropIfExists('applicant_fee_requirements');
     }
 };

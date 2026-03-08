@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Models\MemberApplication;
+use App\Models\Applicant;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -58,7 +58,7 @@ class AuthSessionTest extends TestCase
             'password' => $password,
         ]);
 
-        MemberApplication::query()->create([
+        Applicant::query()->create([
             'user_id' => $user->id,
             'first_name' => 'Withdrawn',
             'middle_name' => 'Login',

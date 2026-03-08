@@ -28,14 +28,14 @@ return new class extends Migration
             $table->timestamps();
         });
 
-        Schema::table('member_applications', function (Blueprint $table) {
-            if (!Schema::hasColumn('member_applications', 'batch_id')) {
+        Schema::table('applicants', function (Blueprint $table) {
+            if (!Schema::hasColumn('applicants', 'batch_id')) {
                 $table->foreignId('batch_id')->nullable()->after('member_id')->constrained('applicant_batches')->nullOnDelete();
             }
-            if (!Schema::hasColumn('member_applications', 'activated_at')) {
+            if (!Schema::hasColumn('applicants', 'activated_at')) {
                 $table->timestamp('activated_at')->nullable()->after('reviewed_at');
             }
-            if (!Schema::hasColumn('member_applications', 'activated_by_user_id')) {
+            if (!Schema::hasColumn('applicants', 'activated_by_user_id')) {
                 $table->foreignId('activated_by_user_id')->nullable()->after('activated_at')->constrained('users')->nullOnDelete();
             }
         });
@@ -43,14 +43,14 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::table('member_applications', function (Blueprint $table) {
-            if (Schema::hasColumn('member_applications', 'activated_by_user_id')) {
+        Schema::table('applicants', function (Blueprint $table) {
+            if (Schema::hasColumn('applicants', 'activated_by_user_id')) {
                 $table->dropConstrainedForeignId('activated_by_user_id');
             }
-            if (Schema::hasColumn('member_applications', 'activated_at')) {
+            if (Schema::hasColumn('applicants', 'activated_at')) {
                 $table->dropColumn('activated_at');
             }
-            if (Schema::hasColumn('member_applications', 'batch_id')) {
+            if (Schema::hasColumn('applicants', 'batch_id')) {
                 $table->dropConstrainedForeignId('batch_id');
             }
         });

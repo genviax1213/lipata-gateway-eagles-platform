@@ -3,7 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
-use App\Models\MemberApplication;
+use App\Models\Applicant;
 use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -46,7 +46,7 @@ class AuthController extends Controller
             $request->session()->regenerate();
         }
 
-        $application = MemberApplication::query()
+        $application = Applicant::query()
             ->whereRaw('LOWER(TRIM(email)) = ?', [strtolower(trim((string) $user->email))])
             ->latest('id')
             ->first();

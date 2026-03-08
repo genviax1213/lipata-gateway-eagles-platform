@@ -8,9 +8,9 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('application_fee_payments', function (Blueprint $table) {
+        Schema::create('applicant_fee_payments', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('application_fee_requirement_id')->constrained('application_fee_requirements')->cascadeOnDelete();
+            $table->foreignId('applicant_fee_requirement_id')->constrained('applicant_fee_requirements')->cascadeOnDelete();
             $table->decimal('amount', 12, 2);
             $table->date('payment_date');
             $table->string('note', 255)->nullable();
@@ -21,6 +21,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('application_fee_payments');
+        Schema::dropIfExists('applicant_fee_payments');
     }
 };

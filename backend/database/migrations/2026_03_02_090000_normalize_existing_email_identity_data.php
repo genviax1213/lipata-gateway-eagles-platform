@@ -9,7 +9,7 @@ return new class extends Migration
     {
         DB::statement("UPDATE users SET email = LOWER(TRIM(email)) WHERE email IS NOT NULL");
         DB::statement("UPDATE members SET email = LOWER(TRIM(email)) WHERE email IS NOT NULL");
-        DB::statement("UPDATE member_applications SET email = LOWER(TRIM(email)) WHERE email IS NOT NULL");
+        DB::statement("UPDATE applicants SET email = LOWER(TRIM(email)) WHERE email IS NOT NULL");
     }
 
     public function down(): void
