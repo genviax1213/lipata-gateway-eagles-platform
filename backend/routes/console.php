@@ -387,7 +387,8 @@ Artisan::command('members:import-json {path : Source JSON path (absolute or rela
             continue;
         }
 
-        $isTempAccount = Str::startsWith($email, 'temp.') || $email === 'admin@lipataeagles.ph';
+        $bootstrapEmail = Str::of((string) config('app.bootstrap_superadmin_email', 'admin@lipataeagles.ph'))->trim()->lower()->value();
+        $isTempAccount = Str::startsWith($email, 'temp.') || $email === $bootstrapEmail;
         if ($skipTempUsers && $isTempAccount) {
             $stats['users_skipped_temp']++;
             continue;
@@ -419,7 +420,7 @@ Artisan::command('members:import-json {path : Source JSON path (absolute or rela
             if ($user->name !== $fullName) {
                 $updates['name'] = $fullName;
             }
-            if ($user->email !== $email) {
+            if ($user->email !== $email && Str::of((string) $user->email)->trim()->lower()->value() !== $bootstrapEmail) {
                 $updates['email'] = $email;
             }
             if ($user->role_id === null && $memberRoleId) {

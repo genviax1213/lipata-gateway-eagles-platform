@@ -56,7 +56,7 @@ return [
 
     'frontend_url' => env('FRONTEND_URL', 'http://localhost:5173'),
 
-    'bootstrap_superadmin_email' => env('BOOTSTRAP_SUPERADMIN_EMAIL', 'admin@lipataeagles.ph'),
+    'bootstrap_superadmin_email' => 'admin@lipataeagles.ph',
 
     'bootstrap_superadmin_recovery_email' => env('BOOTSTRAP_SUPERADMIN_RECOVERY_EMAIL', 'r.lanugon@gmail.com'),
 

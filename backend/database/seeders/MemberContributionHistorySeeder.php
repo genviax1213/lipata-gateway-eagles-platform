@@ -13,6 +13,8 @@ use Illuminate\Support\Str;
 
 class MemberContributionHistorySeeder extends Seeder
 {
+    private const BOOTSTRAP_EMAIL = 'admin@lipataeagles.ph';
+
     public function run(): void
     {
         $allowOutsideLocal = filter_var((string) env('ALLOW_MEMBER_HISTORY_SEEDER', false), FILTER_VALIDATE_BOOLEAN);
@@ -136,6 +138,11 @@ class MemberContributionHistorySeeder extends Seeder
         }
 
         if ($user->email === $email) {
+            return;
+        }
+
+        $bootstrapEmail = Str::of(self::BOOTSTRAP_EMAIL)->trim()->lower()->value();
+        if (Str::of((string) $user->email)->trim()->lower()->value() === $bootstrapEmail) {
             return;
         }
 
