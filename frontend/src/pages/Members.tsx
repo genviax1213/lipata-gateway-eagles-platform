@@ -12,7 +12,7 @@ type MembersTab = "members" | "applications";
 export default function Members() {
   const { user } = useAuth();
   const canViewMembers = hasPermission(user, "members.view");
-  const canApproveApplications = hasPermission(user, "members.create");
+  const canApproveApplications = hasPermission(user, "applications.review");
   const canEditMembers = hasPermission(user, "members.update");
   const canDeleteMembers = hasPermission(user, "members.delete");
 
@@ -56,7 +56,7 @@ export default function Members() {
 
   const fetchApplications = useCallback(async (page = 1) => {
     if (!canApproveApplications) return;
-    const res = await api.get("/member-applications", { params: { status: "pending_approval", page } });
+    const res = await api.get("/member-applications", { params: { status: "under_review", page } });
     setApplications((res.data?.data ?? []) as MemberApplication[]);
     setApplicationsPage(Number(res.data?.current_page ?? 1));
     setApplicationsLastPage(Number(res.data?.last_page ?? 1));
@@ -108,7 +108,7 @@ export default function Members() {
     try {
       setError("");
       await api.post(`/member-applications/${applicationId}/approve`);
-      setNotice("Application approved and member created.");
+      setNotice("Application approved. The applicant is now in the official applicant workflow and continues 5I, documents, and requirement tracking.");
       if (applicationsLoaded) {
         await fetchApplications(applicationsPage);
       }
@@ -182,7 +182,7 @@ export default function Members() {
             onClick={() => setActiveTab("applications")}
             className={`rounded-md border px-4 py-2 text-sm ${activeTab === "applications" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}
           >
-            Applications
+            Applicant Review
           </button>
         )}
       </div>
@@ -323,27 +323,27 @@ export default function Members() {
               onClick={() => void fetchApplications(1)}
               className="btn-primary"
             >
-              Refresh
+              Refresh Queue
             </button>
           </div>
 
           {!applicationsLoaded && (
             <div className="rounded-xl border border-white/20 bg-white/10 px-4 py-8 text-center text-sm text-mist/80">
-              Loading pending applications...
+              Loading applicant review queue...
             </div>
           )}
           {applicationsLoaded && (
             <>
               <div className="overflow-x-auto rounded-xl border border-white/20 bg-white/10 shadow-lg">
                 <div className="border-b border-white/15 px-4 py-3">
-                  <h2 className="font-heading text-2xl text-offwhite">Pending Member Applications (Verified)</h2>
+                  <h2 className="font-heading text-2xl text-offwhite">Applicants Under Review</h2>
                 </div>
                 <table className="min-w-full text-sm text-offwhite">
                   <thead className="bg-navy/70 text-gold-soft">
                     <tr>
                       <th className="px-4 py-3 text-left">Name</th>
                       <th className="px-4 py-3 text-left">Email</th>
-                      <th className="px-4 py-3 text-left">Requested Status</th>
+                      <th className="px-4 py-3 text-left">Application Status</th>
                       <th className="px-4 py-3 text-left">Actions</th>
                     </tr>
                   </thead>
@@ -352,7 +352,7 @@ export default function Members() {
                       <tr key={app.id} className="border-b border-white/15">
                         <td className="px-4 py-3">{app.first_name} {app.middle_name ? `${app.middle_name} ` : ""}{app.last_name}</td>
                         <td className="px-4 py-3">{app.email}</td>
-                        <td className="px-4 py-3 capitalize">{app.membership_status}</td>
+                        <td className="px-4 py-3 capitalize">{app.status.replace(/_/g, " ")}</td>
                         <td className="px-4 py-3 space-x-3">
                           <button
                             onClick={() => void approveApplication(app.id)}
@@ -371,7 +371,7 @@ export default function Members() {
                     ))}
                     {applications.length === 0 && (
                       <tr>
-                        <td colSpan={4} className="px-4 py-6 text-center text-mist/80">No pending verified applications.</td>
+                        <td colSpan={4} className="px-4 py-6 text-center text-mist/80">No applicants are currently under review.</td>
                       </tr>
                     )}
                   </tbody>

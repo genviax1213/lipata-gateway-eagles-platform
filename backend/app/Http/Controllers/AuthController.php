@@ -51,12 +51,17 @@ class AuthController extends Controller
             ->latest('id')
             ->first();
 
-        if ($application && ($application->decision_status === 'rejected' || $application->is_login_blocked)) {
+        if ($application && (($application->decision_status ?? null) === 'rejected' || ($application->decision_status ?? null) === 'withdrawn' || $application->is_login_blocked)) {
             Auth::logout();
             if ($request->hasSession()) {
                 $request->session()->invalidate();
                 $request->session()->regenerateToken();
             }
+            $blockedMessage = match ($application->decision_status) {
+                'withdrawn' => 'Your membership application was withdrawn. Login access is blocked.',
+                'rejected' => 'Your application was rejected. Login access is blocked.',
+                default => 'Login access is blocked for this account.',
+            };
             Log::warning('auth.login_blocked', [
                 'user_id' => $user->id,
                 'application_id' => $application->id,
@@ -64,7 +69,7 @@ class AuthController extends Controller
                 'ip' => $request->ip(),
             ]);
             return response()->json([
-                'message' => 'Your application was rejected. Login access is blocked.',
+                'message' => $blockedMessage,
             ], 403);
         }
 

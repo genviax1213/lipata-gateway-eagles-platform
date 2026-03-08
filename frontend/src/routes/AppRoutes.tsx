@@ -12,6 +12,7 @@ const Activities = lazy(() => import("../pages/Activities"));
 const News = lazy(() => import("../pages/News"));
 const Contact = lazy(() => import("../pages/Contact"));
 const MemberApplication = lazy(() => import("../pages/MemberApplication"));
+const MemberRegistration = lazy(() => import("../pages/MemberRegistration"));
 const PortalDashboard = lazy(() => import("../pages/PortalDashboard"));
 const Members = lazy(() => import("../pages/Members"));
 const Contributions = lazy(() => import("../pages/Contributions"));
@@ -39,13 +40,22 @@ export default function AppRoutes() {
           <Route path="/news" element={<Layout><News /></Layout>} />
           <Route path="/contact" element={<Layout><Contact /></Layout>} />
           <Route
-            path="/member-application"
+            path="/applicant-registration"
             element={
               <GuestRoute>
                 <Layout><MemberApplication /></Layout>
               </GuestRoute>
             }
           />
+          <Route
+            path="/member-registration"
+            element={
+              <GuestRoute>
+                <Layout><MemberRegistration /></Layout>
+              </GuestRoute>
+            }
+          />
+          <Route path="/member-application" element={<Navigate to="/applicant-registration" replace />} />
           <Route path="/news/:slug" element={<Layout><NewsArticle /></Layout>} />
 
           {/* Auth */}

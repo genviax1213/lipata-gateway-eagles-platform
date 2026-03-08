@@ -1,6 +1,7 @@
 export const canonicalRoutes = {
   login: "/login",
-  memberApplication: "/member-application",
+  applicantRegistration: "/applicant-registration",
+  memberRegistration: "/member-registration",
   passwordReset: "/member-reset-password",
 } as const;
 
@@ -22,10 +23,11 @@ export const microcopy = {
   success: {
     login: "Login successful.",
     applicationSubmitted: "Application submitted. Continue with email verification.",
-    applicationVerified: "Verification successful. Your application is now in review queue.",
+    applicationReapplied: "Reapplication started. Continue with email verification.",
+    applicationVerified: "Verification successful. Your application is now under review.",
   },
   nextStep: {
     login: "After login, review your dashboard status and complete the next required action.",
-    application: "Check your email for the verification token, then complete verification below.",
+    application: "Check your email for the verification token, verify the application, and monitor your applicant progress from the portal.",
   },
 } as const;

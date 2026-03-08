@@ -12,6 +12,7 @@ class ApplicationNotice extends Model
     protected $fillable = [
         'member_application_id',
         'notice_text',
+        'visibility',
         'created_by_user_id',
     ];
 

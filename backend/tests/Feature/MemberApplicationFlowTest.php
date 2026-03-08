@@ -2,7 +2,11 @@
 
 namespace Tests\Feature;
 
+use App\Models\ApplicantBatch;
+use App\Models\ApplicationDocument;
+use App\Models\ApplicationFeeRequirement;
 use App\Models\Member;
+use App\Models\MemberApplication;
 use App\Models\Role;
 use App\Models\User;
 use App\Notifications\MemberApplicationVerificationToken;
@@ -65,8 +69,404 @@ class MemberApplicationFlowTest extends TestCase
 
         $approve = $this->postJson("/api/v1/member-applications/{$applicationId}/approve");
         $approve->assertOk();
-        $memberNumber = (string) $approve->json('member.member_number');
-        $this->assertMatchesRegularExpression('/^LGEC-\d{4}-\d{5}$/', $memberNumber);
+        $approve->assertJsonPath('application.status', 'official_applicant');
+        $approve->assertJsonPath('application.member_id', null);
+        $this->assertSame('applicant', User::query()->findOrFail($applicantUser->id)->role->name);
+    }
+
+    public function test_eligible_official_applicant_can_be_activated_as_member_by_chairman(): void
+    {
+        $chairmanRole = Role::query()->where('name', 'membership_chairman')->firstOrFail();
+        $applicantRole = Role::query()->where('name', 'applicant')->firstOrFail();
+
+        $chairman = User::factory()->create(['role_id' => $chairmanRole->id]);
+        $applicantUser = User::factory()->create([
+            'role_id' => $applicantRole->id,
+            'email' => 'activate@applicant.test',
+        ]);
+
+        $application = MemberApplication::query()->create([
+            'user_id' => $applicantUser->id,
+            'first_name' => 'Activate',
+            'middle_name' => 'Official',
+            'last_name' => 'Applicant',
+            'email' => 'activate@applicant.test',
+            'membership_status' => 'applicant',
+            'status' => 'eligible_for_activation',
+            'decision_status' => 'approved',
+            'current_stage' => 'induction',
+            'is_login_blocked' => false,
+            'verification_token' => hash('sha256', 'activate-token'),
+            'email_verified_at' => now(),
+            'reviewed_at' => now(),
+        ]);
+
+        ApplicationDocument::query()->create([
+            'member_application_id' => $application->id,
+            'file_path' => 'application-docs/activate.pdf',
+            'original_name' => 'activate.pdf',
+            'status' => 'approved',
+        ]);
+
+        $requirement = ApplicationFeeRequirement::query()->create([
+            'member_application_id' => $application->id,
+            'category' => ApplicationFeeRequirement::CATEGORY_PROJECT,
+            'required_amount' => 500,
+            'set_by_user_id' => $chairman->id,
+        ]);
+
+        $requirement->payments()->create([
+            'amount' => 500,
+            'payment_date' => now()->toDateString(),
+            'encoded_by_user_id' => $chairman->id,
+        ]);
+
+        Sanctum::actingAs($chairman);
+
+        $response = $this->postJson("/api/v1/member-applications/{$application->id}/activate");
+        $response->assertOk()
+            ->assertJsonPath('application.status', 'activated');
+
+        $application->refresh();
+        $applicantUser->refresh();
+
+        $this->assertNotNull($application->member_id);
+        $this->assertNotNull($application->activated_at);
+        $this->assertSame('member', $applicantUser->role->name);
+        $this->assertDatabaseHas('members', [
+            'id' => $application->member_id,
+            'email' => 'activate@applicant.test',
+        ]);
+    }
+
+    public function test_batch_treasurer_can_log_applicant_payment_for_assigned_batch(): void
+    {
+        $applicantRole = Role::query()->where('name', 'applicant')->firstOrFail();
+        $treasurer = User::factory()->create([
+            'email' => 'batch-treasurer@example.test',
+        ]);
+        $applicant = User::factory()->create([
+            'role_id' => $applicantRole->id,
+            'email' => 'batch-applicant@example.test',
+        ]);
+
+        $batch = ApplicantBatch::query()->create([
+            'name' => 'Batch Marilag',
+            'batch_treasurer_user_id' => $treasurer->id,
+        ]);
+
+        $application = MemberApplication::query()->create([
+            'user_id' => $applicant->id,
+            'batch_id' => $batch->id,
+            'first_name' => 'Batch',
+            'middle_name' => 'Track',
+            'last_name' => 'Applicant',
+            'email' => 'batch-applicant@example.test',
+            'membership_status' => 'applicant',
+            'status' => 'official_applicant',
+            'decision_status' => 'approved',
+            'current_stage' => 'incubation',
+            'is_login_blocked' => false,
+            'verification_token' => hash('sha256', 'batch-pay-token'),
+            'email_verified_at' => now(),
+            'reviewed_at' => now(),
+        ]);
+
+        ApplicationFeeRequirement::query()->create([
+            'member_application_id' => $application->id,
+            'category' => ApplicationFeeRequirement::CATEGORY_PROJECT,
+            'required_amount' => 500,
+            'set_by_user_id' => $treasurer->id,
+        ]);
+
+        Sanctum::actingAs($treasurer);
+
+        $this->postJson("/api/v1/member-applications/{$application->id}/fee-payments", [
+            'category' => ApplicationFeeRequirement::CATEGORY_PROJECT,
+            'amount' => 250,
+        ])->assertStatus(201);
+    }
+
+    public function test_archived_withdrawn_applicant_can_start_reapplication(): void
+    {
+        Notification::fake();
+
+        $applicantRole = Role::query()->where('name', 'applicant')->firstOrFail();
+        $applicant = User::factory()->create([
+            'role_id' => $applicantRole->id,
+            'email' => 'reapply@applicant.test',
+        ]);
+
+        MemberApplication::query()->create([
+            'user_id' => $applicant->id,
+            'first_name' => 'Reapply',
+            'middle_name' => 'Flow',
+            'last_name' => 'Applicant',
+            'email' => 'reapply@applicant.test',
+            'membership_status' => 'applicant',
+            'status' => 'withdrawn',
+            'decision_status' => 'withdrawn',
+            'current_stage' => 'interview',
+            'is_login_blocked' => true,
+            'verification_token' => hash('sha256', 'reapply-old-token'),
+            'email_verified_at' => now(),
+            'reviewed_at' => now(),
+        ]);
+
+        $response = $this->postJson('/api/v1/member-applications/reapply', [
+            'email' => 'reapply@applicant.test',
+            'password' => 'Password123',
+            'password_confirmation' => 'Password123',
+        ]);
+
+        $response->assertStatus(201)
+            ->assertJsonFragment([
+                'message' => 'Reapplication started. Verify your email to continue to review.',
+            ]);
+
+        $newApplication = MemberApplication::query()
+            ->where('email', 'reapply@applicant.test')
+            ->latest('id')
+            ->firstOrFail();
+
+        $this->assertSame('pending_verification', $newApplication->status);
+        $this->assertSame('pending', $newApplication->decision_status);
+        $this->assertFalse($newApplication->is_login_blocked);
+        $this->assertNotSame('reapply-old-token', $newApplication->verification_token);
+
+        Notification::assertSentTo($applicant->fresh(), MemberApplicationVerificationToken::class);
+    }
+
+    public function test_reapplication_is_rejected_when_open_application_exists(): void
+    {
+        $applicantRole = Role::query()->where('name', 'applicant')->firstOrFail();
+        $applicant = User::factory()->create([
+            'role_id' => $applicantRole->id,
+            'email' => 'reapply-open@applicant.test',
+        ]);
+
+        MemberApplication::query()->create([
+            'user_id' => $applicant->id,
+            'first_name' => 'Reapply',
+            'middle_name' => 'Open',
+            'last_name' => 'Applicant',
+            'email' => 'reapply-open@applicant.test',
+            'membership_status' => 'applicant',
+            'status' => 'under_review',
+            'decision_status' => 'pending',
+            'current_stage' => 'interview',
+            'is_login_blocked' => false,
+            'verification_token' => hash('sha256', 'reapply-open-token'),
+            'email_verified_at' => now(),
+        ]);
+
+        $this->postJson('/api/v1/member-applications/reapply', [
+            'email' => 'reapply-open@applicant.test',
+            'password' => 'Password123',
+            'password_confirmation' => 'Password123',
+        ])->assertStatus(422);
+    }
+
+    public function test_applicant_can_withdraw_own_open_application(): void
+    {
+        $applicantRole = Role::query()->where('name', 'applicant')->firstOrFail();
+        $applicant = User::factory()->create([
+            'role_id' => $applicantRole->id,
+            'email' => 'withdraw-self@applicant.test',
+        ]);
+
+        $application = \App\Models\MemberApplication::query()->create([
+            'user_id' => $applicant->id,
+            'first_name' => 'Withdraw',
+            'middle_name' => 'Self',
+            'last_name' => 'Applicant',
+            'email' => 'withdraw-self@applicant.test',
+            'membership_status' => 'applicant',
+            'status' => 'under_review',
+            'decision_status' => 'pending',
+            'current_stage' => 'interview',
+            'is_login_blocked' => false,
+            'verification_token' => hash('sha256', 'withdraw-self-token'),
+            'email_verified_at' => now(),
+        ]);
+
+        Sanctum::actingAs($applicant);
+
+        $this->postJson('/api/v1/member-applications/me/withdraw')
+            ->assertOk()
+            ->assertJsonPath('application.status', 'withdrawn')
+            ->assertJsonPath('application.decision_status', 'withdrawn');
+
+        $application->refresh();
+        $this->assertSame('withdrawn', $application->status);
+        $this->assertSame('withdrawn', $application->decision_status);
+        $this->assertTrue($application->is_login_blocked);
+    }
+
+    public function test_applicant_cannot_withdraw_activated_application(): void
+    {
+        $memberRole = Role::query()->where('name', 'member')->firstOrFail();
+        $memberUser = User::factory()->create([
+            'role_id' => $memberRole->id,
+            'email' => 'archive-member@applicant.test',
+        ]);
+
+        $member = Member::query()->create([
+            'member_number' => 'LGEC-2026-00021',
+            'first_name' => 'Archive',
+            'middle_name' => 'Member',
+            'last_name' => 'User',
+            'email' => 'archive-member@applicant.test',
+            'membership_status' => 'active',
+            'user_id' => $memberUser->id,
+        ]);
+
+        \App\Models\MemberApplication::query()->create([
+            'user_id' => $memberUser->id,
+            'member_id' => $member->id,
+            'first_name' => 'Archive',
+            'middle_name' => 'Member',
+            'last_name' => 'User',
+            'email' => 'archive-member@applicant.test',
+            'membership_status' => 'applicant',
+            'status' => 'activated',
+            'decision_status' => 'approved',
+            'current_stage' => 'induction',
+            'is_login_blocked' => false,
+            'verification_token' => hash('sha256', 'archive-member-token'),
+            'email_verified_at' => now(),
+            'activated_at' => now(),
+        ]);
+
+        Sanctum::actingAs($memberUser);
+
+        $this->postJson('/api/v1/member-applications/me/withdraw')
+            ->assertStatus(422);
+    }
+
+    public function test_activated_member_can_view_application_archive(): void
+    {
+        $memberRole = Role::query()->where('name', 'member')->firstOrFail();
+        $memberUser = User::factory()->create([
+            'role_id' => $memberRole->id,
+            'email' => 'archive-view@applicant.test',
+        ]);
+
+        $member = Member::query()->create([
+            'member_number' => 'LGEC-2026-00022',
+            'first_name' => 'Archive',
+            'middle_name' => 'View',
+            'last_name' => 'User',
+            'email' => 'archive-view@applicant.test',
+            'membership_status' => 'active',
+            'user_id' => $memberUser->id,
+        ]);
+
+        $application = \App\Models\MemberApplication::query()->create([
+            'user_id' => $memberUser->id,
+            'member_id' => $member->id,
+            'first_name' => 'Archive',
+            'middle_name' => 'View',
+            'last_name' => 'User',
+            'email' => 'archive-view@applicant.test',
+            'membership_status' => 'applicant',
+            'status' => 'activated',
+            'decision_status' => 'approved',
+            'current_stage' => 'induction',
+            'is_login_blocked' => false,
+            'verification_token' => hash('sha256', 'archive-view-token'),
+            'email_verified_at' => now(),
+            'activated_at' => now(),
+        ]);
+
+        Sanctum::actingAs($memberUser);
+
+        $this->getJson('/api/v1/member-applications/archive/me')
+            ->assertOk()
+            ->assertJsonPath('id', $application->id)
+            ->assertJsonPath('member_id', $member->id)
+            ->assertJsonPath('status', 'activated')
+            ->assertJsonPath('decision_status', 'approved');
+    }
+
+    public function test_internal_committee_notes_are_hidden_from_applicant_and_archive_views(): void
+    {
+        $applicantRole = Role::query()->where('name', 'applicant')->firstOrFail();
+        $chairmanRole = Role::query()->where('name', 'membership_chairman')->firstOrFail();
+
+        $applicant = User::factory()->create([
+            'role_id' => $applicantRole->id,
+            'email' => 'internal-note@applicant.test',
+        ]);
+        $chairman = User::factory()->create([
+            'role_id' => $chairmanRole->id,
+        ]);
+
+        $application = \App\Models\MemberApplication::query()->create([
+            'user_id' => $applicant->id,
+            'first_name' => 'Internal',
+            'middle_name' => 'Note',
+            'last_name' => 'Applicant',
+            'email' => 'internal-note@applicant.test',
+            'membership_status' => 'applicant',
+            'status' => 'under_review',
+            'decision_status' => 'pending',
+            'current_stage' => 'interview',
+            'is_login_blocked' => false,
+            'verification_token' => hash('sha256', 'internal-note-token'),
+            'email_verified_at' => now(),
+        ]);
+
+        \App\Models\ApplicationNotice::query()->create([
+            'member_application_id' => $application->id,
+            'notice_text' => 'Public applicant notice',
+            'visibility' => 'applicant',
+            'created_by_user_id' => $chairman->id,
+        ]);
+
+        \App\Models\ApplicationNotice::query()->create([
+            'member_application_id' => $application->id,
+            'notice_text' => 'Internal committee-only note',
+            'visibility' => 'internal',
+            'created_by_user_id' => $chairman->id,
+        ]);
+
+        Sanctum::actingAs($applicant);
+
+        $this->getJson('/api/v1/member-applications/me')
+            ->assertOk()
+            ->assertJsonCount(1, 'notices')
+            ->assertJsonMissing(['notice_text' => 'Internal committee-only note']);
+
+        $memberRole = Role::query()->where('name', 'member')->firstOrFail();
+        $applicant->update(['role_id' => $memberRole->id]);
+        $member = Member::query()->create([
+            'member_number' => 'LGEC-2026-00023',
+            'first_name' => 'Internal',
+            'middle_name' => 'Note',
+            'last_name' => 'Applicant',
+            'email' => 'internal-note@applicant.test',
+            'membership_status' => 'active',
+            'user_id' => $applicant->id,
+        ]);
+        $application->update([
+            'member_id' => $member->id,
+            'status' => 'activated',
+            'decision_status' => 'approved',
+            'reviewed_at' => now(),
+            'activated_at' => now(),
+        ]);
+
+        $this->getJson('/api/v1/member-applications/archive/me')
+            ->assertOk()
+            ->assertJsonCount(1, 'notices')
+            ->assertJsonMissing(['notice_text' => 'Internal committee-only note']);
+
+        Sanctum::actingAs($chairman);
+
+        $this->getJson("/api/v1/member-applications/{$application->id}")
+            ->assertOk()
+            ->assertJsonCount(2, 'notices');
     }
 
     public function test_direct_member_create_endpoint_is_disabled(): void
@@ -155,7 +555,6 @@ class MemberApplicationFlowTest extends TestCase
             'middle_name',
             'email',
             'password',
-            'membership_status',
         ]);
     }
 
@@ -254,7 +653,7 @@ class MemberApplicationFlowTest extends TestCase
             'last_name' => 'Applicant',
             'email' => 'stage-guard@applicant.test',
             'membership_status' => 'applicant',
-            'status' => 'pending_approval',
+            'status' => 'under_review',
             'decision_status' => 'pending',
             'current_stage' => 'interview',
             'is_login_blocked' => false,
@@ -280,7 +679,7 @@ class MemberApplicationFlowTest extends TestCase
             'last_name' => 'Applicant',
             'email' => 'notice-guard@applicant.test',
             'membership_status' => 'applicant',
-            'status' => 'pending_approval',
+            'status' => 'under_review',
             'decision_status' => 'pending',
             'current_stage' => 'interview',
             'is_login_blocked' => false,
@@ -306,7 +705,7 @@ class MemberApplicationFlowTest extends TestCase
             'last_name' => 'Applicant',
             'email' => 'fee-guard@applicant.test',
             'membership_status' => 'applicant',
-            'status' => 'pending_approval',
+            'status' => 'under_review',
             'decision_status' => 'pending',
             'current_stage' => 'interview',
             'is_login_blocked' => false,
@@ -334,7 +733,7 @@ class MemberApplicationFlowTest extends TestCase
             'last_name' => 'Applicant',
             'email' => 'fee-flow@applicant.test',
             'membership_status' => 'applicant',
-            'status' => 'pending_approval',
+            'status' => 'under_review',
             'decision_status' => 'pending',
             'current_stage' => 'interview',
             'is_login_blocked' => false,
@@ -375,7 +774,7 @@ class MemberApplicationFlowTest extends TestCase
             'last_name' => 'Applicant',
             'email' => 'reject-guard@applicant.test',
             'membership_status' => 'applicant',
-            'status' => 'pending_approval',
+            'status' => 'under_review',
             'decision_status' => 'pending',
             'current_stage' => 'interview',
             'is_login_blocked' => false,
@@ -401,7 +800,7 @@ class MemberApplicationFlowTest extends TestCase
             'last_name' => 'Applicant',
             'email' => 'probation-guard@applicant.test',
             'membership_status' => 'applicant',
-            'status' => 'pending_approval',
+            'status' => 'under_review',
             'decision_status' => 'pending',
             'current_stage' => 'interview',
             'is_login_blocked' => false,
@@ -426,7 +825,7 @@ class MemberApplicationFlowTest extends TestCase
             'last_name' => 'Applicant',
             'email' => 'document-guard@applicant.test',
             'membership_status' => 'applicant',
-            'status' => 'pending_approval',
+            'status' => 'under_review',
             'decision_status' => 'pending',
             'current_stage' => 'interview',
             'is_login_blocked' => false,
@@ -470,7 +869,7 @@ class MemberApplicationFlowTest extends TestCase
             'last_name' => 'Applicant',
             'email' => 'owner-upload@applicant.test',
             'membership_status' => 'applicant',
-            'status' => 'pending_approval',
+            'status' => 'under_review',
             'decision_status' => 'pending',
             'current_stage' => 'interview',
             'is_login_blocked' => false,
@@ -502,7 +901,7 @@ class MemberApplicationFlowTest extends TestCase
             'last_name' => 'Applicant',
             'email' => 'doc-owner@applicant.test',
             'membership_status' => 'applicant',
-            'status' => 'pending_approval',
+            'status' => 'under_review',
             'decision_status' => 'pending',
             'current_stage' => 'interview',
             'is_login_blocked' => false,
@@ -545,7 +944,7 @@ class MemberApplicationFlowTest extends TestCase
             'last_name' => 'Owner',
             'email' => 'doc-guard-owner@applicant.test',
             'membership_status' => 'applicant',
-            'status' => 'pending_approval',
+            'status' => 'under_review',
             'decision_status' => 'pending',
             'current_stage' => 'interview',
             'is_login_blocked' => false,

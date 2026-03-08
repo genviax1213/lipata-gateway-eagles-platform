@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\MemberApplication;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -47,6 +48,36 @@ class AuthSessionTest extends TestCase
 
         $token = (string) $login->json('token');
         $this->assertNotEmpty($token);
+    }
+
+    public function test_withdrawn_application_blocks_login(): void
+    {
+        $password = 'Password123';
+        $user = User::factory()->create([
+            'email' => 'withdrawn-login@example.com',
+            'password' => $password,
+        ]);
+
+        MemberApplication::query()->create([
+            'user_id' => $user->id,
+            'first_name' => 'Withdrawn',
+            'middle_name' => 'Login',
+            'last_name' => 'User',
+            'email' => 'withdrawn-login@example.com',
+            'membership_status' => 'applicant',
+            'status' => 'withdrawn',
+            'decision_status' => 'withdrawn',
+            'current_stage' => 'interview',
+            'is_login_blocked' => true,
+            'verification_token' => hash('sha256', 'withdrawn-login-token'),
+            'email_verified_at' => now(),
+        ]);
+
+        $this->postJson('/api/v1/login', [
+            'email' => 'withdrawn-login@example.com',
+            'password' => $password,
+        ])->assertStatus(403)
+            ->assertJsonPath('message', 'Your membership application was withdrawn. Login access is blocked.');
     }
 
     public function test_logout_revokes_current_access_token(): void

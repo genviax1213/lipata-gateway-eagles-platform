@@ -66,10 +66,38 @@
 - `FRONTEND_URL`
 - `SANCTUM_STATEFUL_DOMAINS`
 - `CORS_ALLOWED_ORIGINS`
+- `MAIL_MAILER`
+- `MAIL_HOST`
+- `MAIL_PORT`
+- `MAIL_USERNAME`
+- `MAIL_PASSWORD`
+- `MAIL_FROM_ADDRESS`
+- `MAIL_FROM_NAME`
 - `ADMIN_INITIAL_PASSWORD` (optional; if unset, seeder generates a random admin password)
 - `TEMP_LOGIN_PASSWORD` (required when running `TemporaryLoginSeeder`)
 - `ALLOW_MEMBER_HISTORY_SEEDER` (default `false`; set to `true` only when intentionally running member history seeding outside local/testing)
 - `ALLOW_FINANCE_WORKFLOW_DEMO_SEEDER` (default `false`; set to `true` only when intentionally running finance workflow demo seeding outside local/testing)
+
+### Mail delivery readiness
+
+- Local development currently uses `MAIL_MAILER=log`, so verification tokens are written to `backend/storage/logs/laravel.log` instead of being delivered to a real inbox.
+- Production/host delivery is SMTP-ready. Set these host env values before deployment:
+  - `APP_NAME="Lipata Gateway Eagles Club"`
+  - `APP_URL=https://lgec.org`
+  - `FRONTEND_URL=https://lgec.org`
+  - `MAIL_MAILER=smtp`
+  - `MAIL_SCHEME=tls`
+  - `MAIL_HOST=<your SMTP host>`
+  - `MAIL_PORT=<your SMTP port>`
+  - `MAIL_USERNAME=<your SMTP username>`
+  - `MAIL_PASSWORD=<your SMTP password>`
+  - `MAIL_FROM_ADDRESS=<verified sender address>`
+  - `MAIL_FROM_NAME="Lipata Gateway Eagles Club"`
+  - optional: `MAIL_EHLO_DOMAIN=<your mail domain>`
+- After those env changes are applied on the host, refresh Laravel config on deploy/host:
+  - `cd backend && php artisan optimize:clear`
+  - `cd backend && php artisan config:cache`
+- Verification emails for both `member-registration` and `applicant-registration` now read the frontend base URL from `config('app.frontend_url')`, so production links will follow `FRONTEND_URL` consistently.
 
 Seeder note:
 - `AdminSeeder` sets initial admin password only when admin account does not yet exist.

@@ -4,7 +4,9 @@ import api from "../services/api";
 import { useAuth } from "../contexts/useAuth";
 import { hasPermission, isAdminUser } from "../utils/auth";
 import { roleGlossary } from "../content/portalCopy";
+import type { MemberApplicationDecisionStatus, MemberApplicationStatus } from "../types/member";
 import TaskHierarchyCard from "../components/TaskHierarchyCard";
+import FileSelectionPreview from "../components/FileSelectionPreview";
 import {
   PORTAL_BUILTIN_THEMES,
   applyPortalTheme,
@@ -19,13 +21,22 @@ type DashboardView = "applicant" | "member" | "general";
 interface DashboardPayload {
   view: DashboardView;
   message?: string;
+  application_archive_available?: boolean;
+  can_manage_batch_applicant_contributions?: boolean;
 }
 
 interface ApplicationNotice {
   id: number;
   notice_text: string;
+  visibility?: "applicant" | "internal";
   created_at: string;
   created_by?: { id: number; name: string } | null;
+}
+
+interface ApplicantTimelineEvent {
+  event: string;
+  label: string;
+  occurred_at: string | null;
 }
 
 interface ApplicationDocument {
@@ -33,6 +44,52 @@ interface ApplicationDocument {
   original_name: string;
   status: "pending" | "approved" | "rejected";
   review_note: string | null;
+}
+
+interface ApplicantBatchDocument {
+  id: number;
+  original_name: string;
+  created_at: string;
+  uploaded_by?: { id: number; name: string } | null;
+}
+
+interface ApplicantBatchSummary {
+  id: number;
+  name: string;
+  description: string | null;
+  start_date: string | null;
+  target_completion_date: string | null;
+  batch_treasurer?: { id: number; name: string; email: string } | null;
+  documents: ApplicantBatchDocument[];
+}
+
+interface ApplicantBatchListRow {
+  id: number;
+  name: string;
+  description: string | null;
+  start_date: string | null;
+  target_completion_date: string | null;
+  applications_count: number;
+  batch_treasurer?: { id: number; name: string; email: string } | null;
+}
+
+interface BatchTreasurerCandidate {
+  application_id: number;
+  user_id: number;
+  full_name: string;
+  email: string;
+  status: MemberApplicationStatus;
+}
+
+interface ActivationReadiness {
+  eligible: boolean;
+  checks: {
+    approved_for_official_applicant: boolean;
+    stage_induction_complete: boolean;
+    documents_fully_approved: boolean;
+    requirements_fully_paid: boolean;
+    member_not_yet_activated: boolean;
+  };
 }
 
 interface ApplicationFeeRequirement {
@@ -56,12 +113,18 @@ interface ApplicationFeeRequirement {
 
 interface ApplicantDetails {
   id: number;
+  member_id?: number | null;
   full_name: string;
   email: string;
-  status: string;
-  decision_status: "pending" | "probation" | "approved" | "rejected";
+  status: MemberApplicationStatus;
+  decision_status: MemberApplicationDecisionStatus;
   current_stage: string | null;
   current_stage_label: string;
+  activation_eligible?: boolean;
+  activation_readiness?: ActivationReadiness;
+  activated_by?: { id: number; name: string } | null;
+  batch?: ApplicantBatchSummary | null;
+  timeline: ApplicantTimelineEvent[];
   notices: ApplicationNotice[];
   documents: ApplicationDocument[];
   fees: {
@@ -89,9 +152,10 @@ interface ApplicationRow {
   middle_name: string | null;
   last_name: string;
   email: string;
-  status: string;
-  decision_status: string;
+  status: MemberApplicationStatus;
+  decision_status: MemberApplicationDecisionStatus;
   current_stage: string | null;
+  batch?: { id: number; name: string } | null;
 }
 
 function money(value: number | string): string {
@@ -169,10 +233,13 @@ type PortalTab =
   | "applicant-notices"
   | "applicant-docs"
   | "applicant-fees"
+  | "batch-docs"
+  | "application-archive"
   | "my-contributions"
   | "committee";
 
 const PAGE_SIZE = 10;
+const READABLE_SELECT_CLASS = "rounded-md border border-gold/30 bg-offwhite px-2 py-1 text-ink focus:border-gold focus:outline-none";
 
 export default function PortalDashboard() {
   const { user } = useAuth();
@@ -189,17 +256,29 @@ export default function PortalDashboard() {
   const [activeTab, setActiveTab] = useState<PortalTab>("overview");
   const [dashboard, setDashboard] = useState<DashboardPayload | null>(null);
   const [applicantDetails, setApplicantDetails] = useState<ApplicantDetails | null>(null);
+  const [archiveDetails, setArchiveDetails] = useState<ApplicantDetails | null>(null);
+  const [archiveError, setArchiveError] = useState("");
   const [memberData, setMemberData] = useState<MemberContributionPayload | null>(null);
   const [applications, setApplications] = useState<ApplicationRow[]>([]);
   const [applicationsLoaded, setApplicationsLoaded] = useState(false);
   const [selectedApplicationId, setSelectedApplicationId] = useState<number | null>(null);
   const [selectedApplicationDetails, setSelectedApplicationDetails] = useState<ApplicantDetails | null>(null);
   const [noticeText, setNoticeText] = useState("");
+  const [noticeVisibility, setNoticeVisibility] = useState<"applicant" | "internal">("applicant");
   const [stageValue, setStageValue] = useState("interview");
   const [selectedContributionCategory, setSelectedContributionCategory] = useState<"project" | "community_service" | "fellowship" | "five_i_activities">("project");
   const [requiredAmount, setRequiredAmount] = useState("");
   const [paymentAmount, setPaymentAmount] = useState("");
   const [documentFile, setDocumentFile] = useState<File | null>(null);
+  const [batchDocumentFile, setBatchDocumentFile] = useState<File | null>(null);
+  const [batchName, setBatchName] = useState("");
+  const [batchDescription, setBatchDescription] = useState("");
+  const [batchStartDate, setBatchStartDate] = useState("");
+  const [batchTargetDate, setBatchTargetDate] = useState("");
+  const [batchTreasurerUserId, setBatchTreasurerUserId] = useState("");
+  const [batchIdToAssign, setBatchIdToAssign] = useState("");
+  const [batches, setBatches] = useState<ApplicantBatchListRow[]>([]);
+  const [batchCandidates, setBatchCandidates] = useState<BatchTreasurerCandidate[]>([]);
   const [selectedTab, setSelectedTab] = useState<"alalayang_agila_contribution" | "monthly_contribution" | "extra_contribution">("monthly_contribution");
   const [yearFilter, setYearFilter] = useState("");
   const [monthFilter, setMonthFilter] = useState("");
@@ -222,6 +301,7 @@ export default function PortalDashboard() {
   const [documentsPage, setDocumentsPage] = useState(1);
   const [feesPage, setFeesPage] = useState(1);
   const [committeeDocumentsPage, setCommitteeDocumentsPage] = useState(1);
+  const canBatchTreasurerManagePayments = Boolean(dashboard?.can_manage_batch_applicant_contributions);
 
   const parseError = useCallback((err: unknown, fallback: string): string => {
     if (!axios.isAxiosError(err)) return fallback;
@@ -248,12 +328,28 @@ export default function PortalDashboard() {
     try {
       const dashRes = await api.get<DashboardPayload>("/dashboard/me");
       setDashboard(dashRes.data);
+      setArchiveError("");
 
       if (dashRes.data.view === "applicant" && canViewApplicantDashboard) {
         const appRes = await api.get<ApplicantDetails>("/member-applications/me");
         setApplicantDetails(appRes.data);
+        setArchiveDetails(null);
+        setArchiveError("");
       } else {
         setApplicantDetails(null);
+        if (dashRes.data.application_archive_available) {
+          try {
+            const archiveRes = await api.get<ApplicantDetails>("/member-applications/archive/me");
+            setArchiveDetails(archiveRes.data);
+            setArchiveError("");
+          } catch (err) {
+            setArchiveDetails(null);
+            setArchiveError(parseError(err, "Application archive is temporarily unavailable."));
+          }
+        } else {
+          setArchiveDetails(null);
+          setArchiveError("");
+        }
       }
 
       if (dashRes.data.view !== "applicant") {
@@ -363,29 +459,33 @@ export default function PortalDashboard() {
     () => filteredRows.reduce((acc, row) => acc + Number(row.amount), 0),
     [filteredRows],
   );
+  const currentHistoryDetails = useMemo(
+    () => (activeTab === "application-archive" ? archiveDetails : applicantDetails),
+    [activeTab, applicantDetails, archiveDetails],
+  );
   const pagedContributionRows = useMemo(() => {
     const start = (contributionsPage - 1) * PAGE_SIZE;
     return filteredRows.slice(start, start + PAGE_SIZE);
   }, [contributionsPage, filteredRows]);
   const contributionsLastPage = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
   const pagedApplicantNotices = useMemo(() => {
-    const notices = applicantDetails?.notices ?? [];
+    const notices = currentHistoryDetails?.notices ?? [];
     const start = (noticesPage - 1) * PAGE_SIZE;
     return notices.slice(start, start + PAGE_SIZE);
-  }, [applicantDetails?.notices, noticesPage]);
-  const noticesLastPage = Math.max(1, Math.ceil((applicantDetails?.notices?.length ?? 0) / PAGE_SIZE));
+  }, [currentHistoryDetails?.notices, noticesPage]);
+  const noticesLastPage = Math.max(1, Math.ceil((currentHistoryDetails?.notices?.length ?? 0) / PAGE_SIZE));
   const pagedApplicantDocuments = useMemo(() => {
-    const documents = applicantDetails?.documents ?? [];
+    const documents = currentHistoryDetails?.documents ?? [];
     const start = (documentsPage - 1) * PAGE_SIZE;
     return documents.slice(start, start + PAGE_SIZE);
-  }, [applicantDetails?.documents, documentsPage]);
-  const documentsLastPage = Math.max(1, Math.ceil((applicantDetails?.documents?.length ?? 0) / PAGE_SIZE));
+  }, [currentHistoryDetails?.documents, documentsPage]);
+  const documentsLastPage = Math.max(1, Math.ceil((currentHistoryDetails?.documents?.length ?? 0) / PAGE_SIZE));
   const pagedFeeRequirements = useMemo(() => {
-    const requirements = applicantDetails?.fees.requirements ?? [];
+    const requirements = currentHistoryDetails?.fees.requirements ?? [];
     const start = (feesPage - 1) * PAGE_SIZE;
     return requirements.slice(start, start + PAGE_SIZE);
-  }, [applicantDetails?.fees.requirements, feesPage]);
-  const feesLastPage = Math.max(1, Math.ceil((applicantDetails?.fees.requirements?.length ?? 0) / PAGE_SIZE));
+  }, [currentHistoryDetails?.fees.requirements, feesPage]);
+  const feesLastPage = Math.max(1, Math.ceil((currentHistoryDetails?.fees.requirements?.length ?? 0) / PAGE_SIZE));
 
   const userFullName = useMemo(
     () => (typeof user?.name === "string" ? user.name : "Unknown User"),
@@ -446,13 +546,22 @@ export default function PortalDashboard() {
 
   const nextStepSummary = useMemo(() => {
     if (dashboard?.view === "applicant") {
-      return "Complete outstanding requirements and monitor chairman notices for the next interview/approval update.";
+      if (applicantDetails?.status === "withdrawn") {
+        return "This application has been withdrawn. The archive remains available for historical reference.";
+      }
+      if (applicantDetails?.status === "official_applicant" || applicantDetails?.status === "eligible_for_activation") {
+        return "Track your batch, 5I progress, documents, and requirement contributions until the chairman activates you as a member.";
+      }
+      return "Complete verification, monitor chairman notices, and withdraw only if you no longer wish to continue.";
     }
-    if (canChairmanReview || canChairmanSetContributionTarget || canChairmanLogContributionPayment) {
-      return "Review Application Committee Panel items with pending status and complete today’s required actions.";
+    if (archiveDetails) {
+      return "Review your archived application dossier for traceability while using your current member portal access.";
+    }
+    if (canChairmanReview || canChairmanSetContributionTarget || canChairmanLogContributionPayment || canBatchTreasurerManagePayments) {
+      return "Review official applicants, manage batch assignments, and complete contribution or activation actions for your scope.";
     }
     return "Review your latest contribution records and check back for new notices.";
-  }, [canChairmanLogContributionPayment, canChairmanReview, canChairmanSetContributionTarget, dashboard?.view]);
+  }, [applicantDetails?.status, archiveDetails, canBatchTreasurerManagePayments, canChairmanLogContributionPayment, canChairmanReview, canChairmanSetContributionTarget, dashboard?.view]);
 
   const pagedApplications = useMemo(() => {
     const start = (applicationsPage - 1) * PAGE_SIZE;
@@ -470,26 +579,46 @@ export default function PortalDashboard() {
     setError("");
     setNotice("");
     try {
-      const rows = await api.get<{ data: ApplicationRow[] }>("/member-applications", { params: { status: "all" } });
+      const rows = await api.get<{ data: ApplicationRow[] }>("/member-applications", {
+        params: {
+          status: canChairmanReview ? "all" : "official_applicant",
+        },
+      });
       setApplications(rows.data.data ?? []);
       setApplicationsLoaded(true);
       setApplicationsPage(1);
     } catch (err) {
       setError(parseError(err, "Failed to load application committee list."));
     }
-  }, [parseError]);
+  }, [canChairmanReview, parseError]);
+
+  const loadBatchSupportData = useCallback(async () => {
+    if (!canChairmanReview) return;
+
+    try {
+      const [batchRes, candidateRes] = await Promise.all([
+        api.get<{ data: ApplicantBatchListRow[] }>("/applicant-batches"),
+        api.get<{ data: BatchTreasurerCandidate[] }>("/applicant-batch-treasurer-candidates"),
+      ]);
+      setBatches(batchRes.data.data ?? []);
+      setBatchCandidates(candidateRes.data.data ?? []);
+    } catch (err) {
+      setError(parseError(err, "Failed to load batch support data."));
+    }
+  }, [canChairmanReview, parseError]);
 
   useEffect(() => {
     if (
       activeTab !== "committee"
       || applicationsLoaded
-      || !(canChairmanReview || canChairmanSetContributionTarget || canChairmanLogContributionPayment || canChairmanSetNotice || canChairmanSetStage || canChairmanReviewDocs)
+      || !(canChairmanReview || canChairmanSetContributionTarget || canChairmanLogContributionPayment || canChairmanSetNotice || canChairmanSetStage || canChairmanReviewDocs || canBatchTreasurerManagePayments)
     ) {
       return;
     }
 
     const timer = window.setTimeout(() => {
       void loadCommitteeApplications();
+      void loadBatchSupportData();
     }, 0);
     return () => window.clearTimeout(timer);
   }, [
@@ -501,6 +630,8 @@ export default function PortalDashboard() {
     canChairmanSetContributionTarget,
     canChairmanSetNotice,
     canChairmanSetStage,
+    canBatchTreasurerManagePayments,
+    loadBatchSupportData,
     loadCommitteeApplications,
   ]);
 
@@ -527,6 +658,24 @@ export default function PortalDashboard() {
     }
   };
 
+  const withdrawApplication = async () => {
+    if (!applicantDetails) return;
+    if (!window.confirm("Withdraw this membership application? The record will be archived and future login access will be blocked.")) {
+      return;
+    }
+
+    setError("");
+    setNotice("");
+
+    try {
+      const res = await api.post<{ message?: string }>("/member-applications/me/withdraw");
+      setNotice(res.data?.message ?? "Application withdrawn.");
+      await loadDashboard();
+    } catch (err) {
+      setError(parseError(err, "Failed to withdraw application."));
+    }
+  };
+
   const chairmanAction = async (path: string, payload?: Record<string, unknown>) => {
     if (!selectedApplication) return;
     setError("");
@@ -549,9 +698,11 @@ export default function PortalDashboard() {
     try {
       await api.post(`/member-applications/${selectedApplication.id}/notice`, {
         notice_text: noticeText.trim(),
+        visibility: noticeVisibility,
       });
-      setNotice("Notice posted.");
+      setNotice(noticeVisibility === "internal" ? "Internal committee note saved." : "Notice posted.");
       setNoticeText("");
+      setNoticeVisibility("applicant");
       await loadDashboard();
     } catch (err) {
       setError(parseError(err, "Failed to post notice."));
@@ -611,6 +762,86 @@ export default function PortalDashboard() {
     }
   };
 
+  const createApplicantBatch = async () => {
+    if (!batchName.trim()) return;
+    setError("");
+    setNotice("");
+    try {
+      const response = await api.post<{ batch?: { id: number; name: string } }>("/applicant-batches", {
+        name: batchName.trim(),
+        description: batchDescription.trim() || null,
+        start_date: batchStartDate || null,
+        target_completion_date: batchTargetDate || null,
+        batch_treasurer_user_id: batchTreasurerUserId ? Number(batchTreasurerUserId) : null,
+      });
+      if (response.data?.batch?.id) {
+        setBatchIdToAssign(String(response.data.batch.id));
+      }
+      setNotice(`Applicant batch created${response.data?.batch?.id ? ` (#${response.data.batch.id})` : ""}.`);
+      setBatchName("");
+      setBatchDescription("");
+      setBatchStartDate("");
+      setBatchTargetDate("");
+      setBatchTreasurerUserId("");
+      await loadCommitteeApplications();
+      await loadBatchSupportData();
+    } catch (err) {
+      setError(parseError(err, "Failed to create applicant batch."));
+    }
+  };
+
+  const assignBatchToApplication = async () => {
+    if (!selectedApplication || !batchIdToAssign) return;
+    setError("");
+    setNotice("");
+    try {
+      await api.post(`/member-applications/${selectedApplication.id}/assign-batch`, {
+        batch_id: Number(batchIdToAssign),
+      });
+      setNotice("Applicant batch assigned.");
+      setBatchIdToAssign("");
+      await loadDashboard();
+      await loadBatchSupportData();
+    } catch (err) {
+      setError(parseError(err, "Failed to assign applicant batch."));
+    }
+  };
+
+  const uploadSharedBatchDocument = async () => {
+    if (!selectedApplicationDetails?.batch?.id || !batchDocumentFile) return;
+    setError("");
+    setNotice("");
+    try {
+      const payload = new FormData();
+      payload.append("document", batchDocumentFile);
+      await api.post(`/applicant-batches/${selectedApplicationDetails.batch.id}/documents`, payload, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      setNotice("Batch document uploaded.");
+      setBatchDocumentFile(null);
+      if (selectedApplicationId) {
+        const res = await api.get<ApplicantDetails>(`/member-applications/${selectedApplicationId}`);
+        setSelectedApplicationDetails(res.data);
+      }
+      await loadDashboard();
+    } catch (err) {
+      setError(parseError(err, "Failed to upload batch document."));
+    }
+  };
+
+  const activateApplicantAsMember = async () => {
+    if (!selectedApplication) return;
+    setError("");
+    setNotice("");
+    try {
+      const res = await api.post<{ message?: string }>(`/member-applications/${selectedApplication.id}/activate`);
+      setNotice(res.data?.message ?? "Official applicant activated as member.");
+      await loadDashboard();
+    } catch (err) {
+      setError(parseError(err, "Failed to activate applicant as member."));
+    }
+  };
+
   const reviewDocument = async (documentId: number, status: "approved" | "rejected") => {
     setError("");
     setNotice("");
@@ -658,6 +889,23 @@ export default function PortalDashboard() {
     }
   };
 
+  const viewBatchDocument = async (documentId: number, originalName: string) => {
+    setError("");
+    try {
+      const response = await api.get(`/applicant-batches/documents/${documentId}/view`, {
+        responseType: "blob",
+      });
+      const blobUrl = window.URL.createObjectURL(response.data as Blob);
+      const tab = window.open(blobUrl, "_blank", "noopener,noreferrer");
+      if (!tab) {
+        setError("Popup blocked. Allow popups to view the document.");
+      }
+      setTimeout(() => window.URL.revokeObjectURL(blobUrl), 60_000);
+    } catch (err) {
+      setError(parseError(err, `Failed to open ${originalName}.`));
+    }
+  };
+
   return (
     <section>
       <h1 className="mb-2 font-heading text-4xl text-offwhite">Portal Dashboard</h1>
@@ -667,14 +915,16 @@ export default function PortalDashboard() {
 
       <div className="mb-6 flex flex-wrap gap-2">
         <button type="button" onClick={() => setActiveTab("overview")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "overview" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Overview</button>
-        {dashboard?.view === "applicant" && applicantDetails && <button type="button" onClick={() => setActiveTab("applicant-status")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "applicant-status" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Applicant Status</button>}
+        {dashboard?.view === "applicant" && applicantDetails && <button type="button" onClick={() => setActiveTab("applicant-status")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "applicant-status" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Application Status</button>}
         {dashboard?.view === "applicant" && applicantDetails && <button type="button" onClick={() => setActiveTab("applicant-notices")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "applicant-notices" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Notices</button>}
         {dashboard?.view === "applicant" && applicantDetails && <button type="button" onClick={() => setActiveTab("applicant-docs")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "applicant-docs" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Documents</button>}
-        {dashboard?.view === "applicant" && applicantDetails && <button type="button" onClick={() => setActiveTab("applicant-fees")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "applicant-fees" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Applicant Fees</button>}
+        {dashboard?.view === "applicant" && applicantDetails && <button type="button" onClick={() => setActiveTab("applicant-fees")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "applicant-fees" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Requirements</button>}
+        {dashboard?.view === "applicant" && applicantDetails?.batch && <button type="button" onClick={() => setActiveTab("batch-docs")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "batch-docs" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Batch Materials</button>}
+        {dashboard?.application_archive_available && <button type="button" onClick={() => setActiveTab("application-archive")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "application-archive" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Application Archive</button>}
         {dashboard?.view !== "applicant" && <button type="button" onClick={() => setActiveTab("my-contributions")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "my-contributions" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>My Contributions</button>}
         {isAdmin && <button type="button" onClick={() => setActiveTab("themes")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "themes" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Themes</button>}
         {isAdmin && <button type="button" onClick={() => setActiveTab("glossary")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "glossary" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Glossary</button>}
-        {(canChairmanReview || canChairmanSetContributionTarget || canChairmanLogContributionPayment || canChairmanSetNotice || canChairmanSetStage || canChairmanReviewDocs) && <button type="button" onClick={() => setActiveTab("committee")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "committee" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Committee</button>}
+        {(canChairmanReview || canChairmanSetContributionTarget || canChairmanLogContributionPayment || canChairmanSetNotice || canChairmanSetStage || canChairmanReviewDocs || canBatchTreasurerManagePayments) && <button type="button" onClick={() => setActiveTab("committee")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "committee" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Application Review</button>}
       </div>
 
       {error && <p className="mb-4 rounded-md border border-red-300/30 bg-red-400/10 px-4 py-2 text-sm text-red-200" role="alert" aria-live="polite">{error}</p>}
@@ -787,10 +1037,34 @@ export default function PortalDashboard() {
 
       {activeTab === "applicant-status" && dashboard?.view === "applicant" && applicantDetails && (
         <div className="rounded-xl border border-white/20 bg-white/10 p-4">
-          <h2 className="mb-2 font-heading text-2xl text-offwhite">Applicant Status</h2>
+          <h2 className="mb-2 font-heading text-2xl text-offwhite">Application Status</h2>
           <p className="text-sm text-mist/85">Decision: <span className="text-gold-soft">{applicantDetails.decision_status}</span></p>
           <p className="text-sm text-mist/85">Workflow: <span className="text-offwhite">{applicantDetails.current_stage_label}</span></p>
-          <p className="text-sm text-mist/85">Verification State: <span className="text-offwhite">{applicantDetails.status}</span></p>
+          <p className="text-sm text-mist/85">Applicant Status: <span className="text-offwhite">{applicantDetails.status}</span></p>
+          {applicantDetails.batch && (
+            <p className="text-sm text-mist/85">Batch: <span className="text-offwhite">{applicantDetails.batch.name}</span></p>
+          )}
+          {(applicantDetails.status === "pending_verification" || applicantDetails.status === "under_review" || applicantDetails.status === "official_applicant" || applicantDetails.status === "eligible_for_activation") && (
+            <div className="mt-4 rounded-xl border border-amber-300/25 bg-amber-400/10 p-4">
+              <h3 className="mb-2 font-heading text-lg text-offwhite">Official Applicant Progress</h3>
+              <p className="text-sm text-mist/85">
+                Your applicant dossier remains active through training and requirements. The membership committee chairman activates you as a member only after the 5I flow, documents, and applicant contributions are all complete.
+              </p>
+              {applicantDetails.activation_readiness && (
+                <ul className="mt-3 space-y-1 text-xs text-mist/85">
+                  <li>Approval: {applicantDetails.activation_readiness.checks.approved_for_official_applicant ? "Ready" : "Pending"}</li>
+                  <li>Induction Stage: {applicantDetails.activation_readiness.checks.stage_induction_complete ? "Ready" : "Pending"}</li>
+                  <li>Documents: {applicantDetails.activation_readiness.checks.documents_fully_approved ? "Ready" : "Pending"}</li>
+                  <li>Requirements Paid: {applicantDetails.activation_readiness.checks.requirements_fully_paid ? "Ready" : "Pending"}</li>
+                </ul>
+              )}
+              {(applicantDetails.status === "pending_verification" || applicantDetails.status === "under_review") && (
+                <button type="button" className="mt-3 rounded-md border border-amber-300/40 px-4 py-2 text-sm text-amber-100 transition hover:bg-amber-400/10" onClick={() => void withdrawApplication()}>
+                  Withdraw Application
+                </button>
+              )}
+            </div>
+          )}
           <div className="mt-4 rounded-xl border border-white/20 bg-white/5 p-4">
             <h2 className="mb-2 font-heading text-xl text-offwhite">Five I&apos;s Stage</h2>
             <p className="text-sm text-mist/85">
@@ -827,17 +1101,19 @@ export default function PortalDashboard() {
         <div className="rounded-xl border border-white/20 bg-white/10 p-4">
           <h2 className="mb-2 font-heading text-2xl text-offwhite">Required Documents</h2>
           {canUploadApplicantDocs && (
-            <div className="mb-3 flex flex-wrap items-center gap-3">
-              <label htmlFor="applicant-document-upload" className="text-xs font-semibold text-mist/85">Upload Document</label>
-              <input
+            <div className="mb-4 space-y-3">
+              <FileSelectionPreview
                 id="applicant-document-upload"
-                type="file"
+                label="Upload Document"
                 accept=".jpg,.jpeg,.png,.webp,.pdf"
                 capture="environment"
-                onChange={(e) => setDocumentFile(e.target.files?.[0] ?? null)}
+                file={documentFile}
+                buttonLabel="Choose or Scan File"
+                helperText="On Android, this can open camera/scanner or file picker depending on your browser."
+                onChange={setDocumentFile}
+                onClear={() => setDocumentFile(null)}
               />
               <button className="btn-secondary" onClick={() => void uploadDocument()} disabled={!documentFile}>Upload</button>
-              <p className="text-xs text-mist/70">On Android, this can open camera/scanner or file picker depending on your browser.</p>
             </div>
           )}
           <div className="space-y-2">
@@ -868,7 +1144,7 @@ export default function PortalDashboard() {
 
       {activeTab === "applicant-fees" && dashboard?.view === "applicant" && applicantDetails && (
         <div className="rounded-xl border border-white/20 bg-white/10 p-4">
-          <h2 className="mb-2 font-heading text-2xl text-offwhite">Applicant Journey Contributions</h2>
+          <h2 className="mb-2 font-heading text-2xl text-offwhite">Application Requirements</h2>
           <p className="text-sm text-mist/85">Target Total: <span className="text-offwhite">{money(applicantDetails.fees.required_total)}</span></p>
           <p className="text-sm text-mist/85">Partial/Full Paid Total: <span className="text-offwhite">{money(applicantDetails.fees.paid_total)}</span></p>
           <p className="text-sm text-mist/85">Variance: <span className="text-gold-soft">{money(applicantDetails.fees.variance_total ?? applicantDetails.fees.balance)}</span></p>
@@ -889,6 +1165,141 @@ export default function PortalDashboard() {
               <button type="button" className="btn-secondary" disabled={feesPage >= feesLastPage} onClick={() => setFeesPage((current) => Math.min(feesLastPage, current + 1))}>Next</button>
             </div>
           </div>
+        </div>
+      )}
+
+      {activeTab === "batch-docs" && dashboard?.view === "applicant" && applicantDetails?.batch && (
+        <div className="rounded-xl border border-white/20 bg-white/10 p-4">
+          <h2 className="mb-2 font-heading text-2xl text-offwhite">Batch Materials</h2>
+          <p className="text-sm text-mist/85">Batch: <span className="text-offwhite">{applicantDetails.batch.name}</span></p>
+          {applicantDetails.batch.batch_treasurer && (
+            <p className="text-sm text-mist/85">Batch Treasurer: <span className="text-offwhite">{applicantDetails.batch.batch_treasurer.name}</span></p>
+          )}
+          <p className="mt-2 text-sm text-mist/85">{applicantDetails.batch.description ?? "Shared schedule, references, and documents for your applicant batch."}</p>
+          <div className="mt-4 space-y-2">
+            {applicantDetails.batch.documents.map((doc) => (
+              <div key={doc.id} className="rounded-md border border-white/20 bg-white/5 px-3 py-2 text-sm text-mist/85">
+                <p>{doc.original_name}</p>
+                <button className="mt-2 rounded border border-white/30 px-2 py-1 text-xs text-offwhite" onClick={() => void viewBatchDocument(doc.id, doc.original_name)}>
+                  View
+                </button>
+              </div>
+            ))}
+            {applicantDetails.batch.documents.length === 0 && <p className="text-sm text-mist/70">No shared batch materials yet.</p>}
+          </div>
+        </div>
+      )}
+
+      {activeTab === "application-archive" && dashboard?.application_archive_available && (
+        <div className="space-y-4">
+          {!archiveDetails && (
+            <div className="rounded-xl border border-white/20 bg-white/10 p-4">
+              <h2 className="mb-2 font-heading text-2xl text-offwhite">Application Archive</h2>
+              <p className="text-sm text-mist/85">
+                {archiveError || "Archive details are loading or temporarily unavailable. Refresh the dashboard to try again."}
+              </p>
+            </div>
+          )}
+
+          {archiveDetails && (
+            <>
+          <div className="rounded-xl border border-white/20 bg-white/10 p-4">
+            <h2 className="mb-2 font-heading text-2xl text-offwhite">Application Archive</h2>
+            <p className="text-sm text-mist/85">This dossier preserves your submitted membership application, related documents, notices, and requirement records after lifecycle completion.</p>
+            <div className="mt-3 grid gap-2 md:grid-cols-2">
+              <p className="text-sm text-mist/85">Archive Status: <span className="text-offwhite">{archiveDetails.status}</span></p>
+              <p className="text-sm text-mist/85">Decision: <span className="text-gold-soft">{archiveDetails.decision_status}</span></p>
+              <p className="text-sm text-mist/85">Final Stage: <span className="text-offwhite">{archiveDetails.current_stage_label}</span></p>
+              <p className="text-sm text-mist/85">Linked Member Profile: <span className="text-offwhite">{archiveDetails.member_id ? `#${archiveDetails.member_id}` : "Not linked"}</span></p>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-white/20 bg-white/10 p-4">
+            <h3 className="mb-2 font-heading text-xl text-offwhite">Lifecycle Timeline</h3>
+            <div className="space-y-2">
+              {archiveDetails.timeline.map((item) => (
+                <div key={`${item.event}-${item.occurred_at ?? "unknown"}`} className="rounded-md border border-white/20 bg-white/5 px-3 py-2">
+                  <p className="text-sm text-offwhite">{item.label}</p>
+                  <p className="text-xs text-mist/75">{item.occurred_at ? new Date(item.occurred_at).toLocaleString() : "Timestamp unavailable"}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+            </>
+          )}
+
+          {archiveDetails && (
+            <>
+              <div className="rounded-xl border border-white/20 bg-white/10 p-4">
+                <h3 className="mb-2 font-heading text-xl text-offwhite">Archive Notices</h3>
+                {pagedApplicantNotices.map((item) => (
+                  <div key={item.id} className="mb-2 rounded-md border border-white/20 bg-white/5 p-3 text-sm text-mist/85">
+                    <p>{item.notice_text}</p>
+                    <p className="mt-1 text-xs text-mist/70">{new Date(item.created_at).toLocaleString()} by {item.created_by?.name ?? "System"}</p>
+                  </div>
+                ))}
+                {archiveDetails.notices.length === 0 && <p className="text-sm text-mist/70">No archived notices.</p>}
+                <div className="mt-4 flex items-center justify-between text-xs text-mist/80">
+                  <span>Page {noticesPage} of {noticesLastPage} | Total {archiveDetails.notices.length}</span>
+                  <div className="flex gap-2">
+                    <button type="button" className="btn-secondary" disabled={noticesPage <= 1} onClick={() => setNoticesPage((current) => Math.max(1, current - 1))}>Prev</button>
+                    <button type="button" className="btn-secondary" disabled={noticesPage >= noticesLastPage} onClick={() => setNoticesPage((current) => Math.min(noticesLastPage, current + 1))}>Next</button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-white/20 bg-white/10 p-4">
+                <h3 className="mb-2 font-heading text-xl text-offwhite">Archive Documents</h3>
+                <div className="space-y-2">
+                  {pagedApplicantDocuments.map((doc) => (
+                    <div key={doc.id} className="rounded-md border border-white/20 bg-white/5 px-3 py-2 text-sm text-mist/85">
+                      <p>
+                        {doc.original_name} - <span className="text-gold-soft">{doc.status}</span> {doc.review_note ? `(${doc.review_note})` : ""}
+                      </p>
+                      <button
+                        className="mt-2 rounded border border-white/30 px-2 py-1 text-xs text-offwhite"
+                        onClick={() => void viewDocument(doc.id, doc.original_name)}
+                      >
+                        View
+                      </button>
+                    </div>
+                  ))}
+                  {archiveDetails.documents.length === 0 && <p className="text-sm text-mist/70">No archived documents.</p>}
+                </div>
+                <div className="mt-4 flex items-center justify-between text-xs text-mist/80">
+                  <span>Page {documentsPage} of {documentsLastPage} | Total {archiveDetails.documents.length}</span>
+                  <div className="flex gap-2">
+                    <button type="button" className="btn-secondary" disabled={documentsPage <= 1} onClick={() => setDocumentsPage((current) => Math.max(1, current - 1))}>Prev</button>
+                    <button type="button" className="btn-secondary" disabled={documentsPage >= documentsLastPage} onClick={() => setDocumentsPage((current) => Math.min(documentsLastPage, current + 1))}>Next</button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-white/20 bg-white/10 p-4">
+                <h3 className="mb-2 font-heading text-xl text-offwhite">Archive Requirements</h3>
+                <p className="text-sm text-mist/85">Target Total: <span className="text-offwhite">{money(archiveDetails.fees.required_total)}</span></p>
+                <p className="text-sm text-mist/85">Paid Total: <span className="text-offwhite">{money(archiveDetails.fees.paid_total)}</span></p>
+                <p className="text-sm text-mist/85">Variance: <span className="text-gold-soft">{money(archiveDetails.fees.variance_total ?? archiveDetails.fees.balance)}</span></p>
+                {pagedFeeRequirements.map((req) => (
+                  <div key={req.category} className="mt-2 rounded-md border border-white/20 bg-white/5 p-3">
+                    <p className="text-sm text-offwhite">{req.category_label}</p>
+                    <p className="text-xs text-mist/70">Target: {money(req.target_payment)} | Paid: {money(req.partial_payment_total)} | Variance: {money(req.variance)}</p>
+                    <p className="text-xs text-mist/70">{req.note ?? "-"}</p>
+                    {req.payments.map((p) => (
+                      <p key={p.id} className="text-xs text-mist/80">{p.payment_date} - {money(p.amount)} by {p.encoded_by?.name ?? "Membership Chairman"}</p>
+                    ))}
+                  </div>
+                ))}
+                <div className="mt-4 flex items-center justify-between text-xs text-mist/80">
+                  <span>Page {feesPage} of {feesLastPage} | Total {archiveDetails.fees.requirements.length}</span>
+                  <div className="flex gap-2">
+                    <button type="button" className="btn-secondary" disabled={feesPage <= 1} onClick={() => setFeesPage((current) => Math.max(1, current - 1))}>Prev</button>
+                    <button type="button" className="btn-secondary" disabled={feesPage >= feesLastPage} onClick={() => setFeesPage((current) => Math.min(feesLastPage, current + 1))}>Next</button>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -988,15 +1399,15 @@ export default function PortalDashboard() {
         </div>
       )}
 
-      {activeTab === "committee" && (canChairmanReview || canChairmanSetContributionTarget || canChairmanLogContributionPayment || canChairmanSetNotice || canChairmanSetStage || canChairmanReviewDocs) && (
+      {activeTab === "committee" && (canChairmanReview || canChairmanSetContributionTarget || canChairmanLogContributionPayment || canChairmanSetNotice || canChairmanSetStage || canChairmanReviewDocs || canBatchTreasurerManagePayments) && (
         <div className="mt-6 rounded-xl border border-white/20 bg-white/10 p-4">
-          <h2 className="mb-3 font-heading text-2xl text-offwhite">Application Committee Panel</h2>
+          <h2 className="mb-3 font-heading text-2xl text-offwhite">Application Review Panel</h2>
           <div className="mb-3">
             <button type="button" className="btn-secondary" onClick={() => void loadCommitteeApplications()}>Search</button>
           </div>
           {!applicationsLoaded ? (
             <div className="rounded-md border border-white/20 bg-white/5 px-4 py-8 text-center text-sm text-mist/80">
-              Loading committee applications...
+              Loading applications under review...
             </div>
           ) : (
             <>
@@ -1035,19 +1446,81 @@ export default function PortalDashboard() {
           {selectedApplication && (
             <div className="space-y-3">
               <p className="text-sm text-mist/85">Selected: <span className="text-offwhite">{appName(selectedApplication)}</span></p>
+              {selectedApplicationDetails?.batch && (
+                <p className="text-sm text-mist/85">Assigned Batch: <span className="text-offwhite">{selectedApplicationDetails.batch.name}</span></p>
+              )}
 
               {canChairmanReview && (
                 <div className="flex flex-wrap gap-2">
                   <button className="btn-secondary" onClick={() => void chairmanAction("approve")}>Approve</button>
+                  {selectedApplicationDetails?.activation_eligible && (
+                    <button className="btn-secondary" onClick={() => void activateApplicantAsMember()}>Activate as Member</button>
+                  )}
                   <button className="btn-secondary" onClick={() => void chairmanAction("probation")}>Set Probation</button>
                   <button className="btn-secondary" onClick={() => void chairmanAction("reject", { reason: "Rejected by chairman review." })}>Reject</button>
+                </div>
+              )}
+
+              {canChairmanReview && (
+                <div className="rounded-lg border border-white/20 bg-white/5 p-3">
+                  <p className="mb-2 text-sm text-offwhite">Applicant Batch</p>
+                  {batches.length > 0 ? (
+                    <div className="mb-3 overflow-x-auto rounded-lg border border-white/15">
+                      <table className="min-w-full text-xs text-offwhite">
+                        <thead className="bg-navy/70 text-gold-soft">
+                          <tr>
+                            <th className="px-3 py-2 text-left">Batch</th>
+                            <th className="px-3 py-2 text-left">Treasurer</th>
+                            <th className="px-3 py-2 text-left">Applicants</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {batches.map((batch) => (
+                            <tr key={batch.id} className="border-b border-white/10">
+                              <td className="px-3 py-2">#{batch.id} {batch.name}</td>
+                              <td className="px-3 py-2">{batch.batch_treasurer?.name ?? "Unassigned"}</td>
+                              <td className="px-3 py-2">{batch.applications_count}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <p className="mb-3 text-xs text-mist/75">No applicant batches yet.</p>
+                  )}
+                  <div className="grid gap-2 md:grid-cols-2">
+                    <input value={batchName} onChange={(e) => setBatchName(e.target.value)} placeholder="Batch name" className="rounded-md border border-white/25 bg-white/10 px-2 py-1 text-offwhite" />
+                    <select value={batchTreasurerUserId} onChange={(e) => setBatchTreasurerUserId(e.target.value)} className={READABLE_SELECT_CLASS}>
+                      <option value="">Select batch treasurer</option>
+                      {batchCandidates.map((candidate) => (
+                        <option key={candidate.user_id} value={String(candidate.user_id)}>
+                          {candidate.full_name} ({candidate.email})
+                        </option>
+                      ))}
+                    </select>
+                    <input value={batchStartDate} onChange={(e) => setBatchStartDate(e.target.value)} type="date" className="rounded-md border border-white/25 bg-white/10 px-2 py-1 text-offwhite" />
+                    <input value={batchTargetDate} onChange={(e) => setBatchTargetDate(e.target.value)} type="date" className="rounded-md border border-white/25 bg-white/10 px-2 py-1 text-offwhite" />
+                    <textarea value={batchDescription} onChange={(e) => setBatchDescription(e.target.value)} placeholder="Batch description" className="min-h-[80px] rounded-md border border-white/25 bg-white/10 px-2 py-1 text-offwhite md:col-span-2" />
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button className="btn-secondary" onClick={() => void createApplicantBatch()}>Create Batch</button>
+                    <select value={batchIdToAssign} onChange={(e) => setBatchIdToAssign(e.target.value)} className={READABLE_SELECT_CLASS}>
+                      <option value="">Select batch to assign</option>
+                      {batches.map((batch) => (
+                        <option key={batch.id} value={String(batch.id)}>
+                          #{batch.id} {batch.name}
+                        </option>
+                      ))}
+                    </select>
+                    <button className="btn-secondary" onClick={() => void assignBatchToApplication()}>Assign Batch</button>
+                  </div>
                 </div>
               )}
 
               {canChairmanSetStage && (
                 <div className="flex flex-wrap items-center gap-2">
                   <label htmlFor="committee-stage" className="text-xs font-semibold text-mist/85">Set Stage</label>
-                  <select id="committee-stage" value={stageValue} onChange={(e) => setStageValue(e.target.value)} className="rounded-md border border-white/25 bg-white/10 px-2 py-1 text-offwhite">
+                  <select id="committee-stage" value={stageValue} onChange={(e) => setStageValue(e.target.value)} className={READABLE_SELECT_CLASS}>
                     <option value="interview" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Interview</option>
                     <option value="introduction" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Introduction</option>
                     <option value="indoctrination_initiation" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Indoctrination (Initiation)</option>
@@ -1062,18 +1535,27 @@ export default function PortalDashboard() {
                 <div className="flex flex-wrap items-center gap-2">
                   <label htmlFor="committee-notice" className="text-xs font-semibold text-mist/85">Notice Text</label>
                   <input id="committee-notice" value={noticeText} onChange={(e) => setNoticeText(e.target.value)} placeholder="Chairman notice text" className="min-w-[20rem] rounded-md border border-white/25 bg-white/10 px-2 py-1 text-offwhite" />
+                  <select
+                    aria-label="Notice visibility"
+                    value={noticeVisibility}
+                    onChange={(e) => setNoticeVisibility(e.target.value as "applicant" | "internal")}
+                    className={READABLE_SELECT_CLASS}
+                  >
+                    <option value="applicant" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Applicant Visible</option>
+                    <option value="internal" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Internal Only</option>
+                  </select>
                   <button className="btn-secondary" onClick={() => void setNoticeForApplicant()}>Post Notice</button>
                 </div>
               )}
 
-              {(canChairmanSetContributionTarget || canChairmanLogContributionPayment) && (
+              {(canChairmanSetContributionTarget || canChairmanLogContributionPayment || canBatchTreasurerManagePayments) && (
                 <div className="flex flex-wrap items-center gap-2">
                   <label htmlFor="committee-contribution-category" className="text-xs font-semibold text-mist/85">Category</label>
                   <select
                     id="committee-contribution-category"
                     value={selectedContributionCategory}
                     onChange={(e) => setSelectedContributionCategory(e.target.value as "project" | "community_service" | "fellowship" | "five_i_activities")}
-                    className="rounded-md border border-white/25 bg-white/10 px-2 py-1 text-offwhite"
+                    className={READABLE_SELECT_CLASS}
                   >
                     <option value="project" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Projects</option>
                     <option value="community_service" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Community Service</option>
@@ -1087,7 +1569,7 @@ export default function PortalDashboard() {
                       <button className="btn-secondary" onClick={() => void setFeeRequirement()}>Set Target</button>
                     </>
                   )}
-                  {canChairmanLogContributionPayment && (
+                  {(canChairmanLogContributionPayment || canBatchTreasurerManagePayments) && (
                     <>
                       <label htmlFor="committee-payment-amount" className="text-xs font-semibold text-mist/85">Partial/Full Payment</label>
                       <input id="committee-payment-amount" value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} type="number" step="0.01" placeholder="Amount paid" className="rounded-md border border-white/25 bg-white/10 px-2 py-1 text-offwhite" />
@@ -1097,8 +1579,52 @@ export default function PortalDashboard() {
                 </div>
               )}
 
+              {selectedApplicationDetails && (
+                <div className="rounded-lg border border-white/20 bg-white/5 p-3">
+                  <p className="mb-2 text-sm text-offwhite">Application Notes</p>
+                  {selectedApplicationDetails.notices.map((item) => (
+                    <div key={item.id} className="mb-2 rounded border border-white/20 px-2 py-2 text-xs text-mist/85">
+                      <p>{item.notice_text}</p>
+                      <p className="mt-1 text-mist/70">
+                        {item.visibility === "internal" ? "Internal Only" : "Applicant Visible"} | {new Date(item.created_at).toLocaleString()} by {item.created_by?.name ?? "System"}
+                      </p>
+                    </div>
+                  ))}
+                  {selectedApplicationDetails.notices.length === 0 && <p className="text-xs text-mist/70">No notices or internal notes yet.</p>}
+                </div>
+              )}
+
+              {selectedApplicationDetails?.batch && canChairmanReview && (
+                <div className="rounded-lg border border-white/20 bg-white/5 p-3">
+                  <p className="mb-2 text-sm text-offwhite">Batch Documents</p>
+                  <div className="mb-3 space-y-3">
+                    <FileSelectionPreview
+                      id="batch-document-upload"
+                      label="Shared Batch Document"
+                      accept=".jpg,.jpeg,.png,.webp,.pdf"
+                      file={batchDocumentFile}
+                      buttonLabel="Choose Batch File"
+                      helperText="Image files render a thumbnail here before upload. PDFs stay readable through file details."
+                      onChange={setBatchDocumentFile}
+                      onClear={() => setBatchDocumentFile(null)}
+                    />
+                    <button className="btn-secondary" onClick={() => void uploadSharedBatchDocument()} disabled={!batchDocumentFile}>Upload Batch Doc</button>
+                  </div>
+                  {selectedApplicationDetails.batch.documents.map((doc) => (
+                    <div key={doc.id} className="mb-2 rounded border border-white/20 px-2 py-2 text-xs text-mist/85">
+                      <p>{doc.original_name}</p>
+                      <button className="mt-2 rounded border border-white/30 px-2 py-1 text-offwhite" onClick={() => void viewBatchDocument(doc.id, doc.original_name)}>View</button>
+                    </div>
+                  ))}
+                  {selectedApplicationDetails.batch.documents.length === 0 && <p className="text-xs text-mist/70">No shared batch documents yet.</p>}
+                </div>
+              )}
+
               {canChairmanReviewDocs && selectedApplicationDetails && (
                 <div className="rounded-lg border border-white/20 bg-white/5 p-3">
+                  <div className="mb-3 rounded-md border border-white/15 bg-white/5 px-3 py-2 text-xs text-mist/75">
+                    Applicant-facing history includes only notices marked <span className="text-gold-soft">Applicant Visible</span>. Internal committee notes remain confined to this review workspace.
+                  </div>
                   <p className="mb-2 text-sm text-offwhite">Applicant Documents</p>
                   {pagedCommitteeDocuments.map((doc) => (
                     <div key={doc.id} className="mb-2 rounded border border-white/20 px-2 py-2 text-xs text-mist/85">

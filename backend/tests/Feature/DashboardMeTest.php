@@ -37,7 +37,7 @@ class DashboardMeTest extends TestCase
             'last_name' => 'User',
             'email' => 'dashboard-applicant@example.com',
             'membership_status' => 'applicant',
-            'status' => 'pending_approval',
+            'status' => 'under_review',
             'decision_status' => 'pending',
             'current_stage' => 'interview',
             'is_login_blocked' => false,
@@ -51,7 +51,7 @@ class DashboardMeTest extends TestCase
 
         $response->assertOk()
             ->assertJsonPath('view', 'applicant')
-            ->assertJsonPath('application.status', 'pending_approval');
+            ->assertJsonPath('application.status', 'under_review');
     }
 
     public function test_member_with_profile_sees_member_dashboard_view(): void
@@ -89,6 +89,113 @@ class DashboardMeTest extends TestCase
         $response->assertOk()
             ->assertJsonPath('view', 'member')
             ->assertJsonPath('member.member_number', 'M-DASH-001');
+    }
+
+    public function test_member_dashboard_reports_application_archive_availability(): void
+    {
+        $memberRole = Role::query()->where('name', 'member')->firstOrFail();
+        $memberUser = User::factory()->create([
+            'role_id' => $memberRole->id,
+            'email' => 'dashboard-archive@example.com',
+        ]);
+
+        $member = Member::query()->create([
+            'member_number' => 'M-DASH-ARCHIVE',
+            'first_name' => 'Dashboard',
+            'middle_name' => 'Archive',
+            'last_name' => 'User',
+            'email' => 'dashboard-archive@example.com',
+            'membership_status' => 'active',
+            'user_id' => $memberUser->id,
+        ]);
+
+        MemberApplication::query()->create([
+            'user_id' => $memberUser->id,
+            'member_id' => $member->id,
+            'first_name' => 'Dashboard',
+            'middle_name' => 'Archive',
+            'last_name' => 'User',
+            'email' => 'dashboard-archive@example.com',
+            'membership_status' => 'applicant',
+            'status' => 'activated',
+            'decision_status' => 'approved',
+            'current_stage' => 'induction',
+            'is_login_blocked' => false,
+            'verification_token' => hash('sha256', 'dashboard-archive-token'),
+            'email_verified_at' => now(),
+            'activated_at' => now(),
+        ]);
+
+        Sanctum::actingAs($memberUser);
+
+        $this->getJson('/api/v1/dashboard/me')
+            ->assertOk()
+            ->assertJsonPath('view', 'member')
+            ->assertJsonPath('application_archive_available', true);
+    }
+
+    public function test_archived_applicant_application_does_not_reopen_applicant_dashboard(): void
+    {
+        $applicantRole = Role::query()->where('name', 'applicant')->firstOrFail();
+        $applicant = User::factory()->create([
+            'role_id' => $applicantRole->id,
+            'email' => 'dashboard-archived-applicant@example.com',
+        ]);
+
+        MemberApplication::query()->create([
+            'user_id' => $applicant->id,
+            'first_name' => 'Archived',
+            'middle_name' => 'Applicant',
+            'last_name' => 'User',
+            'email' => 'dashboard-archived-applicant@example.com',
+            'membership_status' => 'applicant',
+            'status' => 'withdrawn',
+            'decision_status' => 'withdrawn',
+            'current_stage' => 'interview',
+            'is_login_blocked' => true,
+            'verification_token' => hash('sha256', 'dashboard-archived-applicant-token'),
+            'email_verified_at' => now(),
+            'reviewed_at' => now(),
+        ]);
+
+        Sanctum::actingAs($applicant);
+
+        $this->getJson('/api/v1/dashboard/me')
+            ->assertOk()
+            ->assertJsonPath('view', 'general')
+            ->assertJsonPath('application_archive_available', true);
+    }
+
+    public function test_official_applicant_stays_in_applicant_dashboard_until_activation(): void
+    {
+        $applicantRole = Role::query()->where('name', 'applicant')->firstOrFail();
+        $applicant = User::factory()->create([
+            'role_id' => $applicantRole->id,
+            'email' => 'dashboard-official@applicant.test',
+        ]);
+
+        MemberApplication::query()->create([
+            'user_id' => $applicant->id,
+            'first_name' => 'Official',
+            'middle_name' => 'Applicant',
+            'last_name' => 'User',
+            'email' => 'dashboard-official@applicant.test',
+            'membership_status' => 'applicant',
+            'status' => 'official_applicant',
+            'decision_status' => 'approved',
+            'current_stage' => 'incubation',
+            'is_login_blocked' => false,
+            'verification_token' => hash('sha256', 'dashboard-official-token'),
+            'email_verified_at' => now(),
+            'reviewed_at' => now(),
+        ]);
+
+        Sanctum::actingAs($applicant);
+
+        $this->getJson('/api/v1/dashboard/me')
+            ->assertOk()
+            ->assertJsonPath('view', 'applicant')
+            ->assertJsonPath('application.status', 'official_applicant');
     }
 
     public function test_user_without_application_or_member_profile_sees_general_dashboard_view(): void

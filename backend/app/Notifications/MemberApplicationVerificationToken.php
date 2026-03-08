@@ -31,11 +31,11 @@ class MemberApplicationVerificationToken extends Notification
 
     public function toMail(object $notifiable): MailMessage
     {
-        $frontendUrl = rtrim((string) env('FRONTEND_URL', 'http://127.0.0.1:5173'), '/');
-        $verifyPage = $frontendUrl . '/member-application';
+        $frontendUrl = rtrim((string) config('app.frontend_url', 'http://127.0.0.1:5173'), '/');
+        $verifyPage = $frontendUrl . '/applicant-registration';
 
         return (new MailMessage)
-            ->subject('Member Application Verification Token')
+            ->subject('Application Verification Token')
             ->line('Use this verification token to continue your application review workflow.')
             ->line('Email: ' . $this->email)
             ->line('Verification Token: ' . $this->token)

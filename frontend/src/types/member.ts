@@ -1,3 +1,19 @@
+export type MemberApplicationStatus =
+  | "pending_verification"
+  | "under_review"
+  | "official_applicant"
+  | "eligible_for_activation"
+  | "activated"
+  | "rejected"
+  | "withdrawn";
+
+export type MemberApplicationDecisionStatus =
+  | "pending"
+  | "probation"
+  | "approved"
+  | "rejected"
+  | "withdrawn";
+
 export interface Member {
   id: number;
   member_number: string;
@@ -11,7 +27,7 @@ export interface Member {
   date_of_birth: string | null;
   batch: string | null;
   induction_date: string | null;
-  membership_status: "active" | "inactive" | "applicant";
+  membership_status: "active" | "inactive";
   email_verified: boolean;
   password_set: boolean;
 }
@@ -39,12 +55,14 @@ export interface MemberApplication {
   middle_name: string | null;
   last_name: string;
   email: string;
-  membership_status: Member["membership_status"];
-  status: "pending_verification" | "pending_approval" | "approved" | "rejected";
+  membership_status: "applicant";
+  member_id?: number | null;
+  status: MemberApplicationStatus;
   email_verified_at: string | null;
   reviewed_at: string | null;
   reviewed_by_user_id: number | null;
   rejection_reason: string | null;
+  decision_status?: MemberApplicationDecisionStatus;
 }
 
 export type ValidationErrors = Record<string, string[]>;

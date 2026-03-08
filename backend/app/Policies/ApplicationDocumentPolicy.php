@@ -22,7 +22,7 @@ class ApplicationDocumentPolicy
         }
 
         return $user->hasPermission('applications.docs.review')
-            || $user->hasPermission('members.view');
+            || $user->hasPermission('applications.review');
     }
 
     public function review(User $user, ApplicationDocument $document): bool

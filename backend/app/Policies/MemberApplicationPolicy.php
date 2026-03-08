@@ -4,6 +4,7 @@ namespace App\Policies;
 
 use App\Models\MemberApplication;
 use App\Models\User;
+use App\Support\Permissions;
 
 class MemberApplicationPolicy
 {
@@ -37,7 +38,14 @@ class MemberApplicationPolicy
 
     public function recordFeePayment(User $user, MemberApplication $memberApplication): bool
     {
-        return $user->hasPermission('applications.fee.pay');
+        if ($user->hasPermission(Permissions::APPLICATIONS_FEE_PAY)) {
+            return true;
+        }
+
+        $memberApplication->loadMissing('batch');
+
+        return $memberApplication->batch !== null
+            && (int) $memberApplication->batch->batch_treasurer_user_id === (int) $user->id;
     }
 
     public function reviewDecision(User $user, MemberApplication $memberApplication): bool

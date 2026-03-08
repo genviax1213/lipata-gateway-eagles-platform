@@ -77,7 +77,7 @@ class MemberController extends Controller
             'first_name' => 'required|string|max:120',
             'middle_name' => ['required', 'string', 'min:2', 'max:120', 'not_regex:/\./'],
             'last_name' => 'required|string|max:120',
-            'membership_status' => 'sometimes|required|in:active,inactive,applicant',
+            'membership_status' => 'sometimes|required|in:active,inactive',
             'email_verified' => 'sometimes|boolean',
             'password_set' => 'sometimes|boolean',
             'spouse_name' => 'nullable|string|max:120',

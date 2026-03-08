@@ -6,15 +6,20 @@ use App\Models\ApplicationDocument;
 use App\Models\ApplicationFeePayment;
 use App\Models\ApplicationFeeRequirement;
 use App\Models\ApplicationNotice;
+use App\Models\ApplicantBatch;
+use App\Models\ApplicantBatchDocument;
 use App\Models\Member;
 use App\Models\MemberApplication;
+use App\Models\MemberRegistration;
 use App\Models\Role;
 use App\Models\User;
 use App\Notifications\MemberApplicationVerificationToken;
 use App\Support\ImageUploadOptimizer;
+use App\Support\Permissions;
 use App\Support\TextCase;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -22,6 +27,54 @@ use Illuminate\Support\Str;
 
 class MemberApplicationController extends Controller
 {
+    private function createApplicantAccountAndApplication(
+        string $email,
+        string $firstName,
+        string $middleName,
+        string $lastName,
+        string $password
+    ): array {
+        $applicantRole = Role::query()->where('name', 'applicant')->first();
+        $applicantUser = User::query()->updateOrCreate(
+            ['email' => $email],
+            [
+                'name' => trim($firstName . ' ' . $middleName . ' ' . $lastName),
+                'password' => Hash::make($password),
+                'role_id' => $applicantRole?->id,
+                'finance_role' => null,
+                'forum_role' => null,
+            ]
+        );
+
+        $token = Str::random(48);
+
+        $application = MemberApplication::query()->create([
+            'user_id' => $applicantUser->id,
+            'first_name' => $firstName,
+            'middle_name' => $middleName,
+            'last_name' => $lastName,
+            'email' => $email,
+            'membership_status' => 'applicant',
+            'status' => 'pending_verification',
+            'decision_status' => 'pending',
+            'current_stage' => 'interview',
+            'verification_token' => hash('sha256', $token),
+            'is_login_blocked' => false,
+        ]);
+
+        $applicantUser->notify(new MemberApplicationVerificationToken($token, $email));
+
+        return [$applicantUser, $application];
+    }
+
+    private function resolveOwnedApplication(User $user): ?MemberApplication
+    {
+        return MemberApplication::query()
+            ->ownedByUser($user)
+            ->latest('id')
+            ->first();
+    }
+
     private function applicantContributionCategoryLabels(): array
     {
         return ApplicationFeeRequirement::CATEGORY_LABELS;
@@ -76,14 +129,81 @@ class MemberApplicationController extends Controller
         return $labels[$stage ?? ''] ?? 'Not Set';
     }
 
-    private function applicantPayload(MemberApplication $application): array
+    private function lifecycleTimeline(MemberApplication $application): array
+    {
+        $timeline = [
+            [
+                'event' => 'submitted',
+                'label' => 'Application Submitted',
+                'occurred_at' => optional($application->created_at)?->toISOString(),
+            ],
+        ];
+
+        if ($application->email_verified_at) {
+            $timeline[] = [
+                'event' => 'email_verified',
+                'label' => 'Email Verified',
+                'occurred_at' => $application->email_verified_at?->toISOString(),
+            ];
+        }
+
+        if ($application->reviewed_at && $application->decision_status === 'approved') {
+            $timeline[] = [
+                'event' => 'official_applicant',
+                'label' => 'Applicant Approved For Official Applicant Workflow',
+                'occurred_at' => $application->reviewed_at?->toISOString(),
+            ];
+        } elseif ($application->reviewed_at && $application->decision_status === 'rejected') {
+            $timeline[] = [
+                'event' => 'rejected',
+                'label' => 'Application Rejected',
+                'occurred_at' => $application->reviewed_at?->toISOString(),
+            ];
+        } elseif ($application->reviewed_at && $application->decision_status === 'withdrawn') {
+            $timeline[] = [
+                'event' => 'withdrawn',
+                'label' => 'Application Withdrawn',
+                'occurred_at' => $application->reviewed_at?->toISOString(),
+            ];
+        } elseif ($application->reviewed_at && $application->decision_status === 'probation') {
+            $timeline[] = [
+                'event' => 'probation',
+                'label' => 'Application Moved To Probation',
+                'occurred_at' => $application->reviewed_at?->toISOString(),
+            ];
+        }
+
+        if ($application->status === MemberApplication::STATUS_ELIGIBLE_FOR_ACTIVATION) {
+            $timeline[] = [
+                'event' => 'eligible_for_activation',
+                'label' => 'Eligible For Member Activation',
+                'occurred_at' => $application->reviewed_at?->toISOString(),
+            ];
+        }
+
+        if ($application->member && $application->member_id) {
+            $timeline[] = [
+                'event' => 'member_activated',
+                'label' => 'Activated As Member',
+                'occurred_at' => optional($application->activated_at)?->toISOString() ?? optional($application->member->created_at)?->toISOString(),
+            ];
+        }
+
+        return $timeline;
+    }
+
+    private function applicantPayload(MemberApplication $application, bool $includeInternalNotices = false): array
     {
         $application->loadMissing([
             'reviewer:id,name',
+            'activatedBy:id,name',
             'notices.createdBy:id,name',
             'documents.reviewedBy:id,name',
             'feeRequirements.setBy:id,name',
             'feeRequirements.payments.encodedBy:id,name',
+            'member:id,created_at',
+            'batch.batchTreasurer:id,name,email',
+            'batch.documents.uploadedBy:id,name',
         ]);
 
         $requiredAmount = 0.0;
@@ -128,6 +248,7 @@ class MemberApplicationController extends Controller
 
         return [
             'id' => $application->id,
+            'member_id' => $application->member_id,
             'full_name' => trim($application->first_name . ' ' . ($application->middle_name ? $application->middle_name . ' ' : '') . $application->last_name),
             'email' => $application->email,
             'status' => $application->status,
@@ -135,13 +256,40 @@ class MemberApplicationController extends Controller
             'current_stage' => $application->current_stage,
             'current_stage_label' => $this->fiveIStageLabel($application->current_stage),
             'is_login_blocked' => $application->is_login_blocked,
+            'activation_eligible' => $this->determineActivationEligibility($application)['eligible'],
+            'activation_readiness' => $this->determineActivationEligibility($application),
             'reviewer' => $application->reviewer ? ['id' => $application->reviewer->id, 'name' => $application->reviewer->name] : null,
+            'activated_by' => $application->activatedBy ? ['id' => $application->activatedBy->id, 'name' => $application->activatedBy->name] : null,
+            'timeline' => $this->lifecycleTimeline($application),
+            'batch' => $application->batch ? [
+                'id' => $application->batch->id,
+                'name' => $application->batch->name,
+                'description' => $application->batch->description,
+                'start_date' => optional($application->batch->start_date)?->toDateString(),
+                'target_completion_date' => optional($application->batch->target_completion_date)?->toDateString(),
+                'batch_treasurer' => $application->batch->batchTreasurer ? [
+                    'id' => $application->batch->batchTreasurer->id,
+                    'name' => $application->batch->batchTreasurer->name,
+                    'email' => $application->batch->batchTreasurer->email,
+                ] : null,
+                'documents' => $application->batch->documents
+                    ->sortByDesc('id')
+                    ->values()
+                    ->map(fn (ApplicantBatchDocument $doc) => [
+                        'id' => $doc->id,
+                        'original_name' => $doc->original_name,
+                        'uploaded_by' => $doc->uploadedBy ? ['id' => $doc->uploadedBy->id, 'name' => $doc->uploadedBy->name] : null,
+                        'created_at' => optional($doc->created_at)?->toISOString(),
+                    ]),
+            ] : null,
             'notices' => $application->notices
+                ->filter(fn (ApplicationNotice $notice) => $includeInternalNotices || $notice->visibility === 'applicant')
                 ->sortByDesc('id')
                 ->values()
                 ->map(fn (ApplicationNotice $notice) => [
                     'id' => $notice->id,
                     'notice_text' => $notice->notice_text,
+                    'visibility' => $notice->visibility,
                     'created_at' => optional($notice->created_at)?->toISOString(),
                     'created_by' => $notice->createdBy ? ['id' => $notice->createdBy->id, 'name' => $notice->createdBy->name] : null,
                 ]),
@@ -167,6 +315,92 @@ class MemberApplicationController extends Controller
         ];
     }
 
+    private function determineActivationEligibility(MemberApplication $application): array
+    {
+        $application->loadMissing([
+            'documents',
+            'feeRequirements.payments',
+        ]);
+
+        $stageReady = $application->current_stage === 'induction';
+        $documentsCount = $application->documents->count();
+        $documentsApproved = $documentsCount > 0
+            && $application->documents->every(fn (ApplicationDocument $document) => $document->status === 'approved');
+
+        $requirements = $application->feeRequirements;
+        $requirementsCount = $requirements->count();
+        $paymentsSatisfied = $requirementsCount > 0
+            && $requirements->every(function (ApplicationFeeRequirement $requirement): bool {
+                $paid = (float) $requirement->payments->sum('amount');
+                return $paid >= (float) $requirement->required_amount;
+            });
+
+        $approved = $application->decision_status === 'approved';
+        $noMemberLinked = $application->member_id === null;
+        $eligible = $approved && $noMemberLinked && $stageReady && $documentsApproved && $paymentsSatisfied;
+
+        return [
+            'eligible' => $eligible,
+            'checks' => [
+                'approved_for_official_applicant' => $approved,
+                'stage_induction_complete' => $stageReady,
+                'documents_fully_approved' => $documentsApproved,
+                'requirements_fully_paid' => $paymentsSatisfied,
+                'member_not_yet_activated' => $noMemberLinked,
+            ],
+        ];
+    }
+
+    private function syncOfficialApplicantStatus(MemberApplication $application): void
+    {
+        if ($application->decision_status !== 'approved' || $application->member_id !== null) {
+            return;
+        }
+
+        $readiness = $this->determineActivationEligibility($application);
+        $targetStatus = $readiness['eligible']
+            ? MemberApplication::STATUS_ELIGIBLE_FOR_ACTIVATION
+            : MemberApplication::STATUS_OFFICIAL_APPLICANT;
+
+        if ($application->status !== $targetStatus) {
+            $application->status = $targetStatus;
+            $application->save();
+        }
+    }
+
+    private function isBatchTreasurer(User $user, MemberApplication $application): bool
+    {
+        $application->loadMissing('batch');
+
+        return $application->batch !== null
+            && (int) $application->batch->batch_treasurer_user_id === (int) $user->id;
+    }
+
+    private function canReviewApplication(User $user, MemberApplication $application): bool
+    {
+        return $user->hasPermission(Permissions::APPLICATIONS_REVIEW)
+            || $this->isBatchTreasurer($user, $application);
+    }
+
+    private function applicantListQueryFor(User $user): Builder
+    {
+        $query = MemberApplication::query()
+            ->with('reviewer:id,name')
+            ->with('batch:id,name,batch_treasurer_user_id')
+            ->withCount([
+                'documents as approved_documents_count' => fn ($q) => $q->where('status', 'approved'),
+                'documents as pending_documents_count' => fn ($q) => $q->where('status', 'pending'),
+            ]);
+
+        if ($user->hasPermission(Permissions::APPLICATIONS_REVIEW)) {
+            return $query;
+        }
+
+        return $query->whereHas('batch', function (Builder $batchQuery) use ($user): void {
+            $batchQuery->where('batch_treasurer_user_id', $user->id);
+        });
+    }
+
     public function submit(Request $request)
     {
         $validated = $request->validate([
@@ -175,7 +409,7 @@ class MemberApplicationController extends Controller
             'last_name' => ['required', 'string', 'min:2', 'max:120', 'regex:/^(?=.*[A-Za-z])[A-Za-z\s\'\-]+$/'],
             'email' => 'required|email|max:255',
             'password' => 'required|string|min:8|confirmed',
-            'membership_status' => 'required|in:active,inactive,applicant',
+            'membership_status' => 'nullable|in:applicant',
         ]);
 
         $normalizedEmail = $this->normalizeEmail($validated['email']);
@@ -206,12 +440,21 @@ class MemberApplicationController extends Controller
             );
         }
 
+        $existingMemberRegistration = MemberRegistration::query()
+            ->whereRaw('LOWER(TRIM(email)) = ?', [$normalizedEmail])
+            ->first();
+        if ($existingMemberRegistration) {
+            return response()->json([
+                'message' => 'This email is already in use by the member registration flow.',
+            ], 422);
+        }
+
         $existingApplicationByName = $this->applyPersonMatch(
             MemberApplication::query(),
             $normalizedFirstName,
             $normalizedMiddleName,
             $normalizedLastName
-        )->whereIn('status', ['pending_verification', 'pending_approval', 'approved'])
+        )->whereIn('status', MemberApplication::OPEN_STATUSES)
             ->first();
         if ($existingApplicationByName) {
             return response()->json(
@@ -222,7 +465,7 @@ class MemberApplicationController extends Controller
 
         $existingApplicationByEmail = MemberApplication::query()
             ->whereRaw('LOWER(TRIM(email)) = ?', [$normalizedEmail])
-            ->whereIn('status', ['pending_verification', 'pending_approval', 'approved'])
+            ->whereIn('status', MemberApplication::OPEN_STATUSES)
             ->first();
         if ($existingApplicationByEmail) {
             return response()->json(
@@ -231,38 +474,80 @@ class MemberApplicationController extends Controller
             );
         }
 
-        $applicantRole = Role::query()->where('name', 'applicant')->first();
-        $applicantUser = User::query()->updateOrCreate(
-            ['email' => $normalizedEmail],
-            [
-                'name' => trim($normalizedFirstName . ' ' . $normalizedMiddleName . ' ' . $normalizedLastName),
-                'password' => Hash::make($validated['password']),
-                'role_id' => $applicantRole?->id,
-                'finance_role' => null,
-                'forum_role' => null,
-            ]
+        [, $application] = $this->createApplicantAccountAndApplication(
+            $normalizedEmail,
+            $normalizedFirstName,
+            $normalizedMiddleName,
+            $normalizedLastName,
+            (string) $validated['password']
         );
 
-        $token = Str::random(48);
+        return response()->json([
+            'message' => 'Application submitted. Verify your email to continue to review.',
+            'application_id' => $application->id,
+        ], 201);
+    }
 
-        $application = MemberApplication::query()->create([
-            'user_id' => $applicantUser->id,
-            'first_name' => $normalizedFirstName,
-            'middle_name' => $normalizedMiddleName,
-            'last_name' => $normalizedLastName,
-            'email' => $normalizedEmail,
-            'membership_status' => $validated['membership_status'],
-            'status' => 'pending_verification',
-            'decision_status' => 'pending',
-            'current_stage' => 'interview',
-            'verification_token' => hash('sha256', $token),
-            'is_login_blocked' => false,
+    public function reapply(Request $request)
+    {
+        $validated = $request->validate([
+            'email' => 'required|email|max:255',
+            'password' => 'required|string|min:8|confirmed',
         ]);
 
-        $applicantUser->notify(new MemberApplicationVerificationToken($token, $normalizedEmail));
+        $normalizedEmail = $this->normalizeEmail($validated['email']);
+
+        $archivedApplication = MemberApplication::query()
+            ->whereRaw('LOWER(TRIM(email)) = ?', [$normalizedEmail])
+            ->whereIn('status', MemberApplication::ARCHIVED_STATUSES)
+            ->latest('id')
+            ->first();
+
+        if (!$archivedApplication) {
+            return response()->json([
+                'message' => 'No archived application eligible for reapplication was found for this email.',
+            ], 422);
+        }
+
+        $openOrApprovedApplication = MemberApplication::query()
+            ->whereRaw('LOWER(TRIM(email)) = ?', [$normalizedEmail])
+            ->whereIn('status', MemberApplication::OPEN_STATUSES)
+            ->exists();
+
+        if ($openOrApprovedApplication) {
+            return response()->json([
+                'message' => 'An open or approved application already exists for this email.',
+            ], 422);
+        }
+
+        $existingMemberByEmail = Member::query()
+            ->whereRaw('LOWER(TRIM(email)) = ?', [$normalizedEmail])
+            ->exists();
+
+        if ($existingMemberByEmail) {
+            return response()->json(
+                $this->duplicateIdentityGuidance('This email is already linked to an existing member record.'),
+                422
+            );
+        }
+
+        [, $application] = $this->createApplicantAccountAndApplication(
+            $normalizedEmail,
+            (string) $archivedApplication->first_name,
+            (string) $archivedApplication->middle_name,
+            (string) $archivedApplication->last_name,
+            (string) $validated['password']
+        );
+
+        Log::info('application.reapplied', [
+            'previous_application_id' => $archivedApplication->id,
+            'new_application_id' => $application->id,
+            'email' => $normalizedEmail,
+            'ip' => $request->ip(),
+        ]);
 
         return response()->json([
-            'message' => 'Application submitted. Verify your email to continue to chairman review.',
+            'message' => 'Reapplication started. Verify your email to continue to review.',
             'application_id' => $application->id,
         ], 201);
     }
@@ -289,29 +574,36 @@ class MemberApplicationController extends Controller
         }
 
         $application->email_verified_at = now();
-        $application->status = 'pending_approval';
+        $application->status = MemberApplication::STATUS_UNDER_REVIEW;
         $application->decision_status = 'pending';
         $application->save();
 
         return response()->json([
-            'message' => 'Email verified. Your application is now pending membership chairman review.',
+            'message' => 'Email verified. Your application is now under review.',
         ]);
     }
 
     public function index(Request $request)
     {
-        $status = (string) $request->query('status', 'pending_approval');
-        $allowed = ['pending_verification', 'pending_approval', 'approved', 'rejected', 'all'];
+        /** @var User $user */
+        $user = $request->user();
+
+        $status = (string) $request->query('status', MemberApplication::STATUS_UNDER_REVIEW);
+        $allowed = [
+            MemberApplication::STATUS_PENDING_VERIFICATION,
+            MemberApplication::STATUS_UNDER_REVIEW,
+            MemberApplication::STATUS_OFFICIAL_APPLICANT,
+            MemberApplication::STATUS_ELIGIBLE_FOR_ACTIVATION,
+            MemberApplication::STATUS_ACTIVATED,
+            MemberApplication::STATUS_REJECTED,
+            MemberApplication::STATUS_WITHDRAWN,
+            'all',
+        ];
         if (!in_array($status, $allowed, true)) {
-            $status = 'pending_approval';
+            $status = MemberApplication::STATUS_UNDER_REVIEW;
         }
 
-        $query = MemberApplication::query()
-            ->with('reviewer:id,name')
-            ->withCount([
-                'documents as approved_documents_count' => fn ($q) => $q->where('status', 'approved'),
-                'documents as pending_documents_count' => fn ($q) => $q->where('status', 'pending'),
-            ]);
+        $query = $this->applicantListQueryFor($user);
 
         if ($status !== 'all') {
             $query->where('status', $status);
@@ -325,14 +617,24 @@ class MemberApplicationController extends Controller
         /** @var User $user */
         $user = $request->user();
 
-        $application = MemberApplication::query()
-            ->where('user_id', $user->id)
-            ->orWhereRaw('LOWER(TRIM(email)) = ?', [strtolower(trim((string) $user->email))])
-            ->latest('id')
-            ->first();
+        $application = $this->resolveOwnedApplication($user);
 
-        if (!$application) {
+        if (!$application || !in_array($application->status, MemberApplication::OPEN_STATUSES, true)) {
             return response()->json(['message' => 'No application found for this account.'], 404);
+        }
+
+        return response()->json($this->applicantPayload($application));
+    }
+
+    public function myArchive(Request $request)
+    {
+        /** @var User $user */
+        $user = $request->user();
+
+        $application = $this->resolveOwnedApplication($user);
+
+        if (!$application || !in_array($application->status, MemberApplication::ARCHIVED_STATUSES, true)) {
+            return response()->json(['message' => 'No archived application found for this account.'], 404);
         }
 
         return response()->json($this->applicantPayload($application));
@@ -340,7 +642,16 @@ class MemberApplicationController extends Controller
 
     public function show(Request $request, MemberApplication $memberApplication)
     {
-        return response()->json($this->applicantPayload($memberApplication));
+        /** @var User $user */
+        $user = $request->user();
+
+        if (!$this->canReviewApplication($user, $memberApplication)) {
+            abort(403);
+        }
+
+        $includeInternal = $user->hasPermission(Permissions::APPLICATIONS_REVIEW);
+
+        return response()->json($this->applicantPayload($memberApplication, $includeInternal));
     }
 
     public function uploadDocument(Request $request, MemberApplication $memberApplication)
@@ -386,6 +697,7 @@ class MemberApplicationController extends Controller
         $document->reviewed_by_user_id = $request->user()->id;
         $document->reviewed_at = now();
         $document->save();
+        $this->syncOfficialApplicantStatus($document->application);
 
         Log::info('application.document_reviewed', [
             'actor_user_id' => $request->user()->id,
@@ -423,6 +735,7 @@ class MemberApplicationController extends Controller
 
         $memberApplication->current_stage = $validated['current_stage'];
         $memberApplication->save();
+        $this->syncOfficialApplicantStatus($memberApplication);
 
         Log::info('application.stage_updated', [
             'actor_user_id' => $request->user()->id,
@@ -443,11 +756,13 @@ class MemberApplicationController extends Controller
 
         $validated = $request->validate([
             'notice_text' => 'required|string|min:3|max:3000',
+            'visibility' => 'nullable|in:applicant,internal',
         ]);
 
         $notice = ApplicationNotice::query()->create([
             'member_application_id' => $memberApplication->id,
             'notice_text' => trim($validated['notice_text']),
+            'visibility' => $validated['visibility'] ?? 'applicant',
             'created_by_user_id' => $request->user()->id,
         ]);
 
@@ -459,7 +774,9 @@ class MemberApplicationController extends Controller
         ]);
 
         return response()->json([
-            'message' => 'Notice posted for applicant.',
+            'message' => $notice->visibility === 'internal'
+                ? 'Internal committee note saved.'
+                : 'Notice posted for applicant.',
             'notice' => $notice->fresh(),
         ], 201);
     }
@@ -487,6 +804,7 @@ class MemberApplicationController extends Controller
             'set_by_user_id' => $request->user()->id,
             ]
         );
+        $this->syncOfficialApplicantStatus($memberApplication);
 
         Log::info('application.fee_requirement_set', [
             'actor_user_id' => $request->user()->id,
@@ -520,6 +838,7 @@ class MemberApplicationController extends Controller
             'note' => $validated['note'] ?? null,
             'encoded_by_user_id' => $request->user()->id,
         ]);
+        $this->syncOfficialApplicantStatus($applicationFeeRequirement->memberApplication);
 
         Log::info('application.fee_payment_recorded', [
             'actor_user_id' => $request->user()->id,
@@ -565,6 +884,7 @@ class MemberApplicationController extends Controller
             'note' => $validated['note'] ?? null,
             'encoded_by_user_id' => $request->user()->id,
         ]);
+        $this->syncOfficialApplicantStatus($memberApplication);
 
         Log::info('application.fee_payment_recorded', [
             'actor_user_id' => $request->user()->id,
@@ -587,70 +907,71 @@ class MemberApplicationController extends Controller
     {
         $this->authorize('reviewDecision', $memberApplication);
 
-        if ($memberApplication->status !== 'pending_approval' || !$memberApplication->email_verified_at) {
+        if ($memberApplication->status !== 'under_review' || !$memberApplication->email_verified_at) {
             return response()->json([
-                'message' => 'Only verified applications pending approval can be approved.',
+                'message' => 'Only verified applications under review can be approved.',
             ], 422);
         }
 
-        $existingMemberByName = $this->applyPersonMatch(
-            Member::query(),
-            $memberApplication->first_name,
-            $memberApplication->middle_name,
-            $memberApplication->last_name
-        )->first();
-        if ($existingMemberByName) {
-            return response()->json(
-                $this->duplicateIdentityGuidance('A member record with the same full name already exists.'),
-                422
-            );
-        }
-
-        $existingMemberByEmail = Member::query()
-            ->whereRaw('LOWER(TRIM(email)) = ?', [$this->normalizeEmail((string) $memberApplication->email)])
-            ->first();
-        if ($existingMemberByEmail) {
-            return response()->json(
-                $this->duplicateIdentityGuidance('This email is already used by another member record.'),
-                422
-            );
-        }
-
-        $member = Member::query()->create([
-            'member_number' => $this->generateMemberNumber(),
-            'first_name' => $memberApplication->first_name,
-            'middle_name' => $memberApplication->middle_name,
-            'last_name' => $memberApplication->last_name,
-            'email' => $memberApplication->email,
-            'email_verified' => true,
-            'password_set' => true,
-            'membership_status' => 'active',
-            'user_id' => $memberApplication->user_id,
-        ]);
-
-        $memberRole = Role::query()->where('name', 'member')->first();
-        if ($memberRole && $memberApplication->user_id) {
-            User::query()->where('id', $memberApplication->user_id)->update(['role_id' => $memberRole->id]);
-        }
-
-        $memberApplication->status = 'approved';
+        $memberApplication->status = MemberApplication::STATUS_OFFICIAL_APPLICANT;
         $memberApplication->decision_status = 'approved';
+        $memberApplication->member_id = null;
         $memberApplication->is_login_blocked = false;
         $memberApplication->reviewed_by_user_id = $request->user()->id;
         $memberApplication->reviewed_at = now();
         $memberApplication->rejection_reason = null;
         $memberApplication->save();
+        $this->syncOfficialApplicantStatus($memberApplication);
 
         Log::info('application.approved', [
             'actor_user_id' => $request->user()->id,
             'application_id' => $memberApplication->id,
-            'member_id' => $member->id,
+            'outcome' => 'official_applicant',
             'ip' => $request->ip(),
         ]);
 
         return response()->json([
-            'message' => 'Application approved and member record created.',
-            'member' => $member,
+            'message' => 'Application approved. The applicant is now an official applicant and continues through the 5I and requirement workflow.',
+            'application' => $memberApplication->fresh(),
+        ]);
+    }
+
+    public function withdraw(Request $request)
+    {
+        /** @var User $user */
+        $user = $request->user();
+
+        $memberApplication = $this->resolveOwnedApplication($user);
+
+        if (!$memberApplication) {
+            return response()->json(['message' => 'No application found for this account.'], 404);
+        }
+
+        if (!in_array($memberApplication->status, [
+            MemberApplication::STATUS_PENDING_VERIFICATION,
+            MemberApplication::STATUS_UNDER_REVIEW,
+            MemberApplication::STATUS_OFFICIAL_APPLICANT,
+            MemberApplication::STATUS_ELIGIBLE_FOR_ACTIVATION,
+        ], true)) {
+            return response()->json([
+                'message' => 'Only open membership applications can be withdrawn.',
+            ], 422);
+        }
+
+        $memberApplication->status = MemberApplication::STATUS_WITHDRAWN;
+        $memberApplication->decision_status = 'withdrawn';
+        $memberApplication->is_login_blocked = true;
+        $memberApplication->reviewed_at = now();
+        $memberApplication->save();
+
+        Log::info('application.withdrawn', [
+            'actor_user_id' => $user->id,
+            'application_id' => $memberApplication->id,
+            'ip' => $request->ip(),
+        ]);
+
+        return response()->json([
+            'message' => 'Application withdrawn. The record is preserved as archive history.',
             'application' => $memberApplication->fresh(),
         ]);
     }
@@ -659,14 +980,14 @@ class MemberApplicationController extends Controller
     {
         $this->authorize('reviewDecision', $memberApplication);
 
-        if (!in_array($memberApplication->status, ['pending_verification', 'pending_approval'], true)) {
+        if (!in_array($memberApplication->status, [MemberApplication::STATUS_PENDING_VERIFICATION, MemberApplication::STATUS_UNDER_REVIEW], true)) {
             return response()->json([
                 'message' => 'Only pending applications can be moved to probation.',
             ], 422);
         }
 
         $memberApplication->decision_status = 'probation';
-        $memberApplication->status = 'pending_approval';
+        $memberApplication->status = 'under_review';
         $memberApplication->is_login_blocked = false;
         $memberApplication->reviewed_by_user_id = $request->user()->id;
         $memberApplication->reviewed_at = now();
@@ -688,7 +1009,7 @@ class MemberApplicationController extends Controller
     {
         $this->authorize('reviewDecision', $memberApplication);
 
-        if (!in_array($memberApplication->status, ['pending_approval', 'pending_verification'], true)) {
+        if (!in_array($memberApplication->status, [MemberApplication::STATUS_UNDER_REVIEW, MemberApplication::STATUS_PENDING_VERIFICATION], true)) {
             return response()->json([
                 'message' => 'This application has already been reviewed.',
             ], 422);
@@ -698,7 +1019,7 @@ class MemberApplicationController extends Controller
             'reason' => 'nullable|string|max:255',
         ]);
 
-        $memberApplication->status = 'rejected';
+        $memberApplication->status = MemberApplication::STATUS_REJECTED;
         $memberApplication->decision_status = 'rejected';
         $memberApplication->is_login_blocked = true;
         $memberApplication->reviewed_by_user_id = $request->user()->id;
@@ -719,18 +1040,224 @@ class MemberApplicationController extends Controller
         ]);
     }
 
-    private function resolveDocumentDisk(ApplicationDocument $document): string
+    public function createBatch(Request $request)
     {
-        // Backward compatible: existing records may still point to legacy public storage.
-        if (Storage::disk('local')->exists($document->file_path)) {
-            return 'local';
+        $validated = $request->validate([
+            'name' => 'required|string|min:2|max:120',
+            'description' => 'nullable|string|max:3000',
+            'start_date' => 'nullable|date',
+            'target_completion_date' => 'nullable|date|after_or_equal:start_date',
+            'batch_treasurer_user_id' => 'nullable|integer|exists:users,id',
+        ]);
+
+        if (!empty($validated['batch_treasurer_user_id'])) {
+            $isOfficialApplicant = MemberApplication::query()
+                ->where('user_id', (int) $validated['batch_treasurer_user_id'])
+                ->whereIn('status', [
+                    MemberApplication::STATUS_OFFICIAL_APPLICANT,
+                    MemberApplication::STATUS_ELIGIBLE_FOR_ACTIVATION,
+                ])
+                ->exists();
+
+            if (!$isOfficialApplicant) {
+                return response()->json([
+                    'message' => 'Batch treasurer must be selected from official applicants.',
+                ], 422);
+            }
         }
 
-        if (Storage::disk('public')->exists($document->file_path)) {
-            return 'public';
+        $batch = ApplicantBatch::query()->create([
+            'name' => trim((string) $validated['name']),
+            'description' => isset($validated['description']) ? trim((string) $validated['description']) : null,
+            'start_date' => $validated['start_date'] ?? null,
+            'target_completion_date' => $validated['target_completion_date'] ?? null,
+            'batch_treasurer_user_id' => $validated['batch_treasurer_user_id'] ?? null,
+            'created_by_user_id' => $request->user()->id,
+        ]);
+
+        return response()->json([
+            'message' => 'Applicant batch created.',
+            'batch' => $batch->load('batchTreasurer:id,name,email'),
+        ], 201);
+    }
+
+    public function listBatches()
+    {
+        $batches = ApplicantBatch::query()
+            ->with('batchTreasurer:id,name,email')
+            ->withCount('applications')
+            ->orderBy('name')
+            ->get()
+            ->map(fn (ApplicantBatch $batch) => [
+                'id' => $batch->id,
+                'name' => $batch->name,
+                'description' => $batch->description,
+                'start_date' => optional($batch->start_date)?->toDateString(),
+                'target_completion_date' => optional($batch->target_completion_date)?->toDateString(),
+                'applications_count' => $batch->applications_count,
+                'batch_treasurer' => $batch->batchTreasurer ? [
+                    'id' => $batch->batchTreasurer->id,
+                    'name' => $batch->batchTreasurer->name,
+                    'email' => $batch->batchTreasurer->email,
+                ] : null,
+            ]);
+
+        return response()->json(['data' => $batches]);
+    }
+
+    public function batchTreasurerCandidates()
+    {
+        $rows = MemberApplication::query()
+            ->with('user:id,name,email')
+            ->whereIn('status', [
+                MemberApplication::STATUS_OFFICIAL_APPLICANT,
+                MemberApplication::STATUS_ELIGIBLE_FOR_ACTIVATION,
+            ])
+            ->orderBy('last_name')
+            ->orderBy('first_name')
+            ->get()
+            ->map(fn (MemberApplication $application) => [
+                'application_id' => $application->id,
+                'user_id' => $application->user_id,
+                'full_name' => trim($application->first_name . ' ' . ($application->middle_name ? $application->middle_name . ' ' : '') . $application->last_name),
+                'email' => $application->email,
+                'status' => $application->status,
+            ]);
+
+        return response()->json(['data' => $rows]);
+    }
+
+    public function assignBatch(Request $request, MemberApplication $memberApplication)
+    {
+        $this->authorize('reviewDecision', $memberApplication);
+
+        $validated = $request->validate([
+            'batch_id' => 'required|integer|exists:applicant_batches,id',
+        ]);
+
+        $memberApplication->batch_id = (int) $validated['batch_id'];
+        $memberApplication->save();
+        $this->syncOfficialApplicantStatus($memberApplication);
+
+        return response()->json([
+            'message' => 'Applicant batch assigned.',
+            'application' => $this->applicantPayload($memberApplication->fresh(), true),
+        ]);
+    }
+
+    public function uploadBatchDocument(Request $request, ApplicantBatch $applicantBatch)
+    {
+        $validated = $request->validate([
+            'document' => 'required|file|mimes:jpg,jpeg,png,webp,pdf|max:10240',
+        ]);
+
+        $uploadedFile = $request->file('document');
+        $path = ImageUploadOptimizer::storeOptimizedOrOriginal(
+            $uploadedFile,
+            'applicant-batch-docs',
+            'local',
+            2000,
+            2000,
+            82,
+            false
+        );
+
+        $document = ApplicantBatchDocument::query()->create([
+            'applicant_batch_id' => $applicantBatch->id,
+            'file_path' => $path,
+            'original_name' => $uploadedFile->getClientOriginalName(),
+            'uploaded_by_user_id' => $request->user()->id,
+        ]);
+
+        return response()->json([
+            'message' => 'Batch document uploaded.',
+            'document' => $document->fresh(),
+        ], 201);
+    }
+
+    public function viewBatchDocument(Request $request, ApplicantBatchDocument $document)
+    {
+        /** @var User $user */
+        $user = $request->user();
+        $document->loadMissing('batch');
+
+        $canView = $user->hasPermission(Permissions::APPLICATIONS_REVIEW)
+            || ((int) $document->batch?->batch_treasurer_user_id === (int) $user->id)
+            || MemberApplication::query()
+                ->ownedByUser($user)
+                ->where('batch_id', $document->applicant_batch_id)
+                ->whereIn('status', MemberApplication::OPEN_STATUSES)
+                ->exists();
+
+        if (!$canView) {
+            abort(403);
         }
 
-        return 'local';
+        if (!Storage::disk('local')->exists($document->file_path)) {
+            abort(404, 'Document file not found.');
+        }
+
+        return Storage::disk('local')->response($document->file_path, $document->original_name);
+    }
+
+    public function activate(Request $request, MemberApplication $memberApplication)
+    {
+        $this->authorize('reviewDecision', $memberApplication);
+
+        if ($memberApplication->status !== MemberApplication::STATUS_ELIGIBLE_FOR_ACTIVATION) {
+            return response()->json([
+                'message' => 'Only eligible official applicants can be activated as members.',
+            ], 422);
+        }
+
+        $readiness = $this->determineActivationEligibility($memberApplication);
+        if (!$readiness['eligible']) {
+            $this->syncOfficialApplicantStatus($memberApplication);
+            return response()->json([
+                'message' => 'Applicant is not yet eligible for member activation.',
+                'activation_readiness' => $readiness,
+            ], 422);
+        }
+
+        $memberRole = Role::query()->where('name', 'member')->firstOrFail();
+
+        DB::transaction(function () use ($memberApplication, $memberRole, $request): void {
+            $user = $memberApplication->user()->firstOrFail();
+            $user->role_id = $memberRole->id;
+            $user->save();
+
+            $member = Member::query()->create([
+                'member_number' => $this->generateMemberNumber(),
+                'first_name' => $memberApplication->first_name,
+                'middle_name' => $memberApplication->middle_name,
+                'last_name' => $memberApplication->last_name,
+                'email' => $memberApplication->email,
+                'email_verified' => $memberApplication->email_verified_at !== null,
+                'password_set' => !empty($user->password),
+                'membership_status' => 'active',
+                'batch' => $memberApplication->batch?->name,
+                'user_id' => $user->id,
+            ]);
+
+            $memberApplication->member_id = $member->id;
+            $memberApplication->status = MemberApplication::STATUS_ACTIVATED;
+            $memberApplication->activated_at = now();
+            $memberApplication->activated_by_user_id = $request->user()->id;
+            $memberApplication->is_login_blocked = false;
+            $memberApplication->save();
+        });
+
+        Log::info('application.activated', [
+            'actor_user_id' => $request->user()->id,
+            'application_id' => $memberApplication->id,
+            'member_id' => $memberApplication->fresh()->member_id,
+            'ip' => $request->ip(),
+        ]);
+
+        return response()->json([
+            'message' => 'Official applicant activated as member.',
+            'application' => $this->applicantPayload($memberApplication->fresh(), true),
+        ]);
     }
 
     private function generateMemberNumber(): string
@@ -745,5 +1272,19 @@ class MemberApplicationController extends Controller
         } while ($exists);
 
         return $candidate;
+    }
+
+    private function resolveDocumentDisk(ApplicationDocument $document): string
+    {
+        // Backward compatible: existing records may still point to legacy public storage.
+        if (Storage::disk('local')->exists($document->file_path)) {
+            return 'local';
+        }
+
+        if (Storage::disk('public')->exists($document->file_path)) {
+            return 'public';
+        }
+
+        return 'local';
     }
 }

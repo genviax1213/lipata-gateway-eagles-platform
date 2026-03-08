@@ -5,6 +5,7 @@ import api from "../services/api";
 import type { CmsPost } from "../types/cms";
 import { useAuth } from "../contexts/useAuth";
 import { hasPermission } from "../utils/auth";
+import FileSelectionPreview from "../components/FileSelectionPreview";
 import RichTextEditor from "../components/RichTextEditor";
 import { htmlToPlainText, sanitizeRichHtml } from "../utils/richText";
 
@@ -963,25 +964,29 @@ export default function CmsPosts() {
             <span className="ml-2 text-gold-soft">(Rich text enabled: headings, links, lists, inline images)</span>
           </p>
 
-          <label className="md:col-span-2 text-sm text-offwhite">
+          <div className="md:col-span-2 text-sm text-offwhite">
             <span className="mb-2 block font-medium">Upload Cover Image</span>
             <span className="mb-3 block text-xs text-mist/75">
               This image is used as the post card/header image. Inline article images should be inserted from the rich text editor toolbar.
             </span>
-            <input
-              aria-label="Post cover image upload"
-              type="file"
+            <FileSelectionPreview
+              id="post-cover-image-upload"
+              label="Cover Image File"
               accept="image/*"
-              onChange={(e) => {
-                const file = e.target.files?.[0] ?? null;
+              file={sourceImage?.file ?? null}
+              buttonLabel="Choose Cover Image"
+              helperText="After selection, drag inside the crop frame below to choose the visible area before saving."
+              onChange={(file) => {
                 if (file) {
                   setForm((prev) => ({ ...prev, selected_image_path: "" }));
                 }
                 void handleImageChange(file);
               }}
-              className="w-full rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+              onClear={() => {
+                void handleImageChange(null);
+              }}
             />
-          </label>
+          </div>
           {selectedLibraryImage && (
             <div className="md:col-span-2 rounded-lg border border-gold/30 bg-gold/10 p-3">
               <div className="flex flex-wrap items-center gap-3">

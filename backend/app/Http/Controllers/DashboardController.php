@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Contribution;
+use App\Models\ApplicantBatch;
 use App\Models\Member;
 use App\Models\MemberApplication;
 use App\Models\User;
@@ -18,19 +19,27 @@ class DashboardController extends Controller
         $user = $request->user()->loadMissing('role.permissions:id,name');
 
         $application = MemberApplication::query()
-            ->where('user_id', $user->id)
-            ->orWhereRaw('LOWER(TRIM(email)) = ?', [strtolower(trim((string) $user->email))])
+            ->ownedByUser($user)
             ->latest('id')
             ->first();
+        $applicationArchiveAvailable = $application
+            && in_array($application->status, MemberApplication::ARCHIVED_STATUSES, true);
+        $hasOpenApplication = $application
+            && in_array($application->status, MemberApplication::OPEN_STATUSES, true);
+        $canManageBatchApplicantContributions = ApplicantBatch::query()
+            ->where('batch_treasurer_user_id', $user->id)
+            ->exists();
 
-        if ($application && $user->hasPermission(Permissions::APPLICATIONS_DASHBOARD_VIEW)) {
+        if ($hasOpenApplication && $user->hasPermission(Permissions::APPLICATIONS_DASHBOARD_VIEW)) {
             return response()->json([
                 'view' => 'applicant',
                 'can_upload_documents' => $user->hasPermission(Permissions::APPLICATIONS_DOCS_UPLOAD),
                 'can_review_applications' => RoleHierarchy::canReviewApplications(optional($user->role)->name ?? ''),
                 'can_set_fee' => $user->hasPermission(Permissions::APPLICATIONS_FEE_SET),
+                'can_manage_batch_applicant_contributions' => $canManageBatchApplicantContributions,
                 'application' => [
                     'id' => $application->id,
+                    'member_id' => $application->member_id,
                     'status' => $application->status,
                     'decision_status' => $application->decision_status,
                     'current_stage' => $application->current_stage,
@@ -43,6 +52,8 @@ class DashboardController extends Controller
             return response()->json([
                 'view' => 'general',
                 'message' => 'No linked member profile found.',
+                'application_archive_available' => $applicationArchiveAvailable,
+                'can_manage_batch_applicant_contributions' => $canManageBatchApplicantContributions,
             ]);
         }
 
@@ -65,6 +76,8 @@ class DashboardController extends Controller
 
         return response()->json([
             'view' => 'member',
+            'application_archive_available' => $applicationArchiveAvailable,
+            'can_manage_batch_applicant_contributions' => $canManageBatchApplicantContributions,
             'member' => [
                 'id' => $member->id,
                 'member_number' => $member->member_number,

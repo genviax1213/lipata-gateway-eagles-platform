@@ -71,7 +71,7 @@ class AuditLoggingTest extends TestCase
             'last_name' => 'Case',
             'email' => 'notice-audit@applicant.test',
             'membership_status' => 'applicant',
-            'status' => 'pending_approval',
+            'status' => 'under_review',
             'decision_status' => 'pending',
             'current_stage' => 'interview',
             'is_login_blocked' => false,
@@ -108,7 +108,7 @@ class AuditLoggingTest extends TestCase
             'last_name' => 'Case',
             'email' => 'probation-audit@applicant.test',
             'membership_status' => 'applicant',
-            'status' => 'pending_approval',
+            'status' => 'under_review',
             'decision_status' => 'pending',
             'current_stage' => 'interview',
             'is_login_blocked' => false,
@@ -143,7 +143,7 @@ class AuditLoggingTest extends TestCase
             'last_name' => 'Case',
             'email' => 'stage-audit@applicant.test',
             'membership_status' => 'applicant',
-            'status' => 'pending_approval',
+            'status' => 'under_review',
             'decision_status' => 'pending',
             'current_stage' => 'interview',
             'is_login_blocked' => false,
@@ -180,7 +180,7 @@ class AuditLoggingTest extends TestCase
             'last_name' => 'Case',
             'email' => 'document-audit@applicant.test',
             'membership_status' => 'applicant',
-            'status' => 'pending_approval',
+            'status' => 'under_review',
             'decision_status' => 'pending',
             'current_stage' => 'interview',
             'is_login_blocked' => false,
@@ -338,7 +338,7 @@ class AuditLoggingTest extends TestCase
             'last_name' => 'Audit',
             'email' => 'fee-requirement-audit@applicant.test',
             'membership_status' => 'applicant',
-            'status' => 'pending_approval',
+            'status' => 'under_review',
             'decision_status' => 'pending',
             'current_stage' => 'interview',
             'is_login_blocked' => false,
@@ -379,7 +379,7 @@ class AuditLoggingTest extends TestCase
             'last_name' => 'Audit',
             'email' => 'fee-payment-audit@applicant.test',
             'membership_status' => 'applicant',
-            'status' => 'pending_approval',
+            'status' => 'under_review',
             'decision_status' => 'pending',
             'current_stage' => 'interview',
             'is_login_blocked' => false,
@@ -436,7 +436,7 @@ class AuditLoggingTest extends TestCase
             'last_name' => 'Case',
             'email' => 'approve-audit@applicant.test',
             'membership_status' => 'applicant',
-            'status' => 'pending_approval',
+            'status' => 'under_review',
             'decision_status' => 'pending',
             'current_stage' => 'interview',
             'is_login_blocked' => false,
@@ -454,7 +454,7 @@ class AuditLoggingTest extends TestCase
                 return $event === 'application.approved'
                     && (int) ($context['actor_user_id'] ?? 0) === (int) $chairman->id
                     && (int) ($context['application_id'] ?? 0) === (int) $application->id
-                    && isset($context['member_id']);
+                    && ($context['outcome'] ?? null) === 'official_applicant';
             })
             ->once();
     }
@@ -472,7 +472,7 @@ class AuditLoggingTest extends TestCase
             'last_name' => 'Case',
             'email' => 'reject-audit@applicant.test',
             'membership_status' => 'applicant',
-            'status' => 'pending_approval',
+            'status' => 'under_review',
             'decision_status' => 'pending',
             'current_stage' => 'interview',
             'is_login_blocked' => false,
@@ -492,6 +492,92 @@ class AuditLoggingTest extends TestCase
                     && (int) ($context['actor_user_id'] ?? 0) === (int) $chairman->id
                     && (int) ($context['application_id'] ?? 0) === (int) $application->id
                     && ($context['reason'] ?? null) === 'Insufficient documentary requirements';
+            })
+            ->once();
+    }
+
+    public function test_withdrawing_application_emits_audit_log(): void
+    {
+        Log::spy();
+
+        $applicantRole = Role::query()->where('name', 'applicant')->firstOrFail();
+        $applicant = User::factory()->create([
+            'role_id' => $applicantRole->id,
+            'email' => 'withdraw-audit@applicant.test',
+        ]);
+
+        $application = MemberApplication::query()->create([
+            'user_id' => $applicant->id,
+            'first_name' => 'Withdraw',
+            'middle_name' => 'Audit',
+            'last_name' => 'Case',
+            'email' => 'withdraw-audit@applicant.test',
+            'membership_status' => 'applicant',
+            'status' => 'under_review',
+            'decision_status' => 'pending',
+            'current_stage' => 'interview',
+            'is_login_blocked' => false,
+            'verification_token' => hash('sha256', 'withdraw-audit-token'),
+            'email_verified_at' => now(),
+        ]);
+
+        Sanctum::actingAs($applicant);
+
+        $this->postJson('/api/v1/member-applications/me/withdraw')
+            ->assertOk();
+
+        Log::shouldHaveReceived('info')
+            ->withArgs(function (string $event, array $context) use ($applicant, $application) {
+                return $event === 'application.withdrawn'
+                    && (int) ($context['actor_user_id'] ?? 0) === (int) $applicant->id
+                    && (int) ($context['application_id'] ?? 0) === (int) $application->id;
+            })
+            ->once();
+    }
+
+    public function test_reapplying_emits_audit_log(): void
+    {
+        Log::spy();
+
+        $applicantRole = Role::query()->where('name', 'applicant')->firstOrFail();
+        $applicant = User::factory()->create([
+            'role_id' => $applicantRole->id,
+            'email' => 'reapply-audit@applicant.test',
+        ]);
+
+        $archived = MemberApplication::query()->create([
+            'user_id' => $applicant->id,
+            'first_name' => 'Reapply',
+            'middle_name' => 'Audit',
+            'last_name' => 'Case',
+            'email' => 'reapply-audit@applicant.test',
+            'membership_status' => 'applicant',
+            'status' => 'withdrawn',
+            'decision_status' => 'withdrawn',
+            'current_stage' => 'interview',
+            'is_login_blocked' => true,
+            'verification_token' => hash('sha256', 'reapply-audit-old-token'),
+            'email_verified_at' => now(),
+            'reviewed_at' => now(),
+        ]);
+
+        $this->postJson('/api/v1/member-applications/reapply', [
+            'email' => 'reapply-audit@applicant.test',
+            'password' => 'Password123',
+            'password_confirmation' => 'Password123',
+        ])->assertStatus(201);
+
+        $newApplication = MemberApplication::query()
+            ->where('email', 'reapply-audit@applicant.test')
+            ->latest('id')
+            ->firstOrFail();
+
+        Log::shouldHaveReceived('info')
+            ->withArgs(function (string $event, array $context) use ($archived, $newApplication) {
+                return $event === 'application.reapplied'
+                    && (int) ($context['previous_application_id'] ?? 0) === (int) $archived->id
+                    && (int) ($context['new_application_id'] ?? 0) === (int) $newApplication->id
+                    && ($context['email'] ?? null) === 'reapply-audit@applicant.test';
             })
             ->once();
     }
