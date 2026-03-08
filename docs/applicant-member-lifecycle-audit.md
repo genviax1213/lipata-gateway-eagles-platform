@@ -486,9 +486,13 @@ Mapping summary:
 ## Progress Log
 
 ### Slice 6: Applicant Queue Visibility Split
-- Added a dedicated read-only applicant visibility permission for `admin` and `superadmin`.
-- Kept applicant lifecycle decisions (`approve`, `activate`, `probation`, `reject`, batch assignment) under `applications.review`.
-- Membership chairman retains decision authority; `admin` and `superadmin` can now inspect applicant queue entries without inheriting chairman-only actions.
+- Added a dedicated read-only applicant queue permission for internal visibility.
+- Added a separate document/dossier visibility permission for `admin` and `superadmin`.
+- Restricted `applications.review` to membership-chairman workflow authority only.
+- Final access model:
+  - `membership_chairman`: queue + dossier/documents + workflow decisions
+  - `admin` / `superadmin`: queue + dossier/documents, no workflow decisions
+  - other internal non-chairman roles with applicant visibility: queue only
 
 ### 2026-03-08 - Local implementation slice 1
 

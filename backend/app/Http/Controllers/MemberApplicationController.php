@@ -383,9 +383,18 @@ class MemberApplicationController extends Controller
             || $this->isBatchTreasurer($user, $application);
     }
 
-    private function canViewApplication(User $user, MemberApplication $application): bool
+    private function canViewApplicationQueue(User $user): bool
     {
         return $user->hasPermission(Permissions::APPLICATIONS_VIEW)
+            || $user->hasPermission(Permissions::APPLICATIONS_REVIEW)
+            || ApplicantBatch::query()
+                ->where('batch_treasurer_user_id', $user->id)
+                ->exists();
+    }
+
+    private function canViewApplication(User $user, MemberApplication $application): bool
+    {
+        return $user->hasPermission(Permissions::APPLICATIONS_DOCS_VIEW)
             || $this->canReviewApplication($user, $application);
     }
 
@@ -399,7 +408,7 @@ class MemberApplicationController extends Controller
                 'documents as pending_documents_count' => fn ($q) => $q->where('status', 'pending'),
             ]);
 
-        if ($user->hasPermission(Permissions::APPLICATIONS_VIEW) || $user->hasPermission(Permissions::APPLICATIONS_REVIEW)) {
+        if ($this->canViewApplicationQueue($user)) {
             return $query;
         }
 
@@ -596,13 +605,7 @@ class MemberApplicationController extends Controller
         /** @var User $user */
         $user = $request->user();
 
-        $canViewApplicantQueue = $user->hasPermission(Permissions::APPLICATIONS_VIEW)
-            || $user->hasPermission(Permissions::APPLICATIONS_REVIEW)
-            || ApplicantBatch::query()
-                ->where('batch_treasurer_user_id', $user->id)
-                ->exists();
-
-        if (!$canViewApplicantQueue) {
+        if (!$this->canViewApplicationQueue($user)) {
             abort(403);
         }
 
@@ -1199,7 +1202,7 @@ class MemberApplicationController extends Controller
         $user = $request->user();
         $document->loadMissing('batch');
 
-        $canView = $user->hasPermission(Permissions::APPLICATIONS_VIEW)
+        $canView = $user->hasPermission(Permissions::APPLICATIONS_DOCS_VIEW)
             || $user->hasPermission(Permissions::APPLICATIONS_REVIEW)
             || ((int) $document->batch?->batch_treasurer_user_id === (int) $user->id)
             || MemberApplication::query()

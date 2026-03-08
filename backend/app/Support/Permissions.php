@@ -26,6 +26,7 @@ class Permissions
 
     // Applications & Fees Permissions
     public const APPLICATIONS_VIEW = 'applications.view';
+    public const APPLICATIONS_DOCS_VIEW = 'applications.docs.view';
     public const APPLICATIONS_FEE_SET = 'applications.fee.set';
     public const APPLICATIONS_FEE_PAY = 'applications.fee.pay';
     public const APPLICATIONS_REVIEW = 'applications.review';
@@ -101,6 +102,7 @@ class Permissions
             'finance' => self::finance(),
             'applications' => [
                 self::APPLICATIONS_VIEW,
+                self::APPLICATIONS_DOCS_VIEW,
                 self::APPLICATIONS_REVIEW,
                 self::APPLICATIONS_NOTICE_VIEW,
                 self::APPLICATIONS_NOTICE_SET,

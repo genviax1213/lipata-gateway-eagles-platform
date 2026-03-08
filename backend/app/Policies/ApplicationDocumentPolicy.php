@@ -21,7 +21,7 @@ class ApplicationDocumentPolicy
             return true;
         }
 
-        return $user->hasPermission('applications.view')
+        return $user->hasPermission('applications.docs.view')
             || $user->hasPermission('applications.docs.review')
             || $user->hasPermission('applications.review');
     }

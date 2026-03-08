@@ -205,6 +205,119 @@ class RolePermissionAuthorizationTest extends TestCase
             ->assertJsonPath('data.0.email', 'queued-superadmin-view@applicant.test');
     }
 
+    public function test_officer_can_view_applicant_queue_but_not_dossier(): void
+    {
+        $officerRole = Role::query()->where('name', 'officer')->firstOrFail();
+        $officer = User::factory()->create(['role_id' => $officerRole->id]);
+
+        $application = MemberApplication::query()->create([
+            'first_name' => 'Queued',
+            'middle_name' => 'Applicant',
+            'last_name' => 'Officer View',
+            'email' => 'queued-officer-view@applicant.test',
+            'membership_status' => 'applicant',
+            'status' => 'under_review',
+            'decision_status' => 'pending',
+            'current_stage' => 'interview',
+            'is_login_blocked' => false,
+            'verification_token' => hash('sha256', 'queued-officer-view-token'),
+            'email_verified_at' => now(),
+        ]);
+
+        Sanctum::actingAs($officer);
+
+        $this->getJson('/api/v1/member-applications')
+            ->assertOk()
+            ->assertJsonPath('data.0.email', 'queued-officer-view@applicant.test');
+
+        $this->getJson("/api/v1/member-applications/{$application->id}")
+            ->assertStatus(403);
+    }
+
+    public function test_treasurer_can_view_applicant_queue_but_not_dossier(): void
+    {
+        $treasurerRole = Role::query()->where('name', 'treasurer')->firstOrFail();
+        $treasurer = User::factory()->create(['role_id' => $treasurerRole->id]);
+
+        $application = MemberApplication::query()->create([
+            'first_name' => 'Queued',
+            'middle_name' => 'Applicant',
+            'last_name' => 'Treasurer View',
+            'email' => 'queued-treasurer-view@applicant.test',
+            'membership_status' => 'applicant',
+            'status' => 'under_review',
+            'decision_status' => 'pending',
+            'current_stage' => 'interview',
+            'is_login_blocked' => false,
+            'verification_token' => hash('sha256', 'queued-treasurer-view-token'),
+            'email_verified_at' => now(),
+        ]);
+
+        Sanctum::actingAs($treasurer);
+
+        $this->getJson('/api/v1/member-applications')
+            ->assertOk()
+            ->assertJsonPath('data.0.email', 'queued-treasurer-view@applicant.test');
+
+        $this->getJson("/api/v1/member-applications/{$application->id}")
+            ->assertStatus(403);
+    }
+
+    public function test_admin_can_view_applicant_dossier(): void
+    {
+        $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
+        $admin = User::factory()->create(['role_id' => $adminRole->id]);
+
+        $application = MemberApplication::query()->create([
+            'first_name' => 'Queued',
+            'middle_name' => 'Applicant',
+            'last_name' => 'Admin Dossier',
+            'email' => 'queued-admin-dossier@applicant.test',
+            'membership_status' => 'applicant',
+            'status' => 'under_review',
+            'decision_status' => 'pending',
+            'current_stage' => 'interview',
+            'is_login_blocked' => false,
+            'verification_token' => hash('sha256', 'queued-admin-dossier-token'),
+            'email_verified_at' => now(),
+        ]);
+
+        Sanctum::actingAs($admin);
+
+        $this->getJson("/api/v1/member-applications/{$application->id}")
+            ->assertOk()
+            ->assertJsonPath('email', 'queued-admin-dossier@applicant.test');
+    }
+
+    public function test_superadmin_can_view_applicant_dossier_but_cannot_review_decisions(): void
+    {
+        $superadminRole = Role::query()->where('name', 'superadmin')->firstOrFail();
+        $superadmin = User::factory()->create(['role_id' => $superadminRole->id]);
+
+        $application = MemberApplication::query()->create([
+            'first_name' => 'Queued',
+            'middle_name' => 'Applicant',
+            'last_name' => 'Superadmin Dossier',
+            'email' => 'queued-superadmin-dossier@applicant.test',
+            'membership_status' => 'applicant',
+            'status' => 'under_review',
+            'decision_status' => 'pending',
+            'current_stage' => 'interview',
+            'is_login_blocked' => false,
+            'verification_token' => hash('sha256', 'queued-superadmin-dossier-token'),
+            'email_verified_at' => now(),
+        ]);
+
+        Sanctum::actingAs($superadmin);
+
+        $this->getJson("/api/v1/member-applications/{$application->id}")
+            ->assertOk()
+            ->assertJsonPath('email', 'queued-superadmin-dossier@applicant.test');
+
+        $this->postJson("/api/v1/member-applications/{$application->id}/approve")
+            ->assertStatus(403);
+    }
+
     public function test_officer_can_view_cms_posts_list(): void
     {
         $officerRole = Role::query()->where('name', 'officer')->firstOrFail();
