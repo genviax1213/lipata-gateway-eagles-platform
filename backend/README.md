@@ -86,7 +86,8 @@
   - `APP_URL=https://lgec.org`
   - `FRONTEND_URL=https://lgec.org`
   - `MAIL_MAILER=smtp`
-  - `MAIL_SCHEME=tls`
+  - `MAIL_SCHEME=smtp`
+  - optional `MAIL_ENCRYPTION=tls`
   - `MAIL_HOST=<your SMTP host>`
   - `MAIL_PORT=<your SMTP port>`
   - `MAIL_USERNAME=<your SMTP username>`
@@ -94,6 +95,9 @@
   - `MAIL_FROM_ADDRESS=<verified sender address>`
   - `MAIL_FROM_NAME="Lipata Gateway Eagles Club"`
   - optional: `MAIL_EHLO_DOMAIN=<your mail domain>`
+- The app normalizes common legacy values automatically:
+  - `MAIL_SCHEME=tls` is treated as SMTP with TLS negotiation
+  - `MAIL_SCHEME=ssl` is treated as SMTPS
 - After those env changes are applied on the host, refresh Laravel config on deploy/host:
   - `cd backend && php artisan optimize:clear`
   - `cd backend && php artisan config:cache`
