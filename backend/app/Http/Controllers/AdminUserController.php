@@ -401,6 +401,18 @@ class AdminUserController extends Controller
         $actor = $request->user();
         $this->authorize('resetUserPassword', [User::class, $user]);
 
+        if ($this->normalizeEmail((string) $user->email) === $this->bootstrapEmail()) {
+            Log::warning('admin.user_password_reset_blocked_bootstrap', [
+                'actor_user_id' => $actor->id,
+                'target_user_id' => $user->id,
+                'ip' => $request->ip(),
+            ]);
+
+            return response()->json([
+                'message' => 'Bootstrap password reset is only available through the protected recovery flow.',
+            ], 403);
+        }
+
         $validated = $request->validate([
             'password' => 'required|string|min:8|confirmed|max:255',
         ]);

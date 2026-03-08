@@ -129,6 +129,8 @@ Seeder note:
   - `POST /api/v1/rll/verify`
   - `POST /api/v1/rll/reset`
 - These are intentionally not exposed in the UI and send recovery mail only to the configured bootstrap recovery email.
+- The bootstrap superadmin is excluded from the generic forgot/reset-password routes and from the admin user-password reset endpoint.
+- Bootstrap password recovery is only supported through the protected `/api/v1/rll*` flow, while authenticated password change remains available to the signed-in bootstrap account.
 - `MemberContributionHistorySeeder` is restricted to `local`/`testing` by default and will throw outside those environments unless `ALLOW_MEMBER_HISTORY_SEEDER=true`.
 - `FinanceWorkflowDemoSeeder` is restricted to `local`/`testing` by default and seeds Treasurer/Auditor workflow examples, including opening balances, expenses, and follow-up notes.
 - Workflow reference: [docs/finance-workflows.md](/mnt/rll/projects/lipata-gateway-eagles-platform/docs/finance-workflows.md)

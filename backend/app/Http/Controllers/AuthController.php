@@ -21,6 +21,16 @@ class AuthController extends Controller
         return Str::of($value)->lower()->trim()->value();
     }
 
+    private function bootstrapEmail(): string
+    {
+        return $this->normalizeEmail((string) config('app.bootstrap_superadmin_email', 'admin@lipataeagles.ph'));
+    }
+
+    private function isBootstrapEmail(?string $email): bool
+    {
+        return $this->normalizeEmail((string) $email) === $this->bootstrapEmail();
+    }
+
     public function login(Request $request)
     {
         $credentials = $request->validate([
@@ -112,9 +122,21 @@ class AuthController extends Controller
         $validated['email'] = $this->normalizeEmail((string) $validated['email']);
 
         $user = User::query()->where('email', $validated['email'])->first();
-        if ($user) {
+        if ($user && !$this->isBootstrapEmail($user->email)) {
             $token = Password::broker()->createToken($user);
             $user->sendPasswordResetNotification($token);
+            Log::info('auth.password_reset_requested', [
+                'user_id' => $user->id,
+                'email' => $validated['email'],
+                'ip' => $request->ip(),
+            ]);
+        } elseif ($user) {
+            Log::warning('auth.password_reset_blocked_bootstrap', [
+                'user_id' => $user->id,
+                'email' => $validated['email'],
+                'ip' => $request->ip(),
+                'path' => 'forgot_password',
+            ]);
         }
 
         return response()->json([
@@ -131,6 +153,21 @@ class AuthController extends Controller
         ]);
         $validated['email'] = $this->normalizeEmail((string) $validated['email']);
 
+        if ($this->isBootstrapEmail($validated['email'])) {
+            $bootstrapUser = User::query()->where('email', $validated['email'])->first();
+
+            Log::warning('auth.password_reset_blocked_bootstrap', [
+                'user_id' => $bootstrapUser?->id,
+                'email' => $validated['email'],
+                'ip' => $request->ip(),
+                'path' => 'reset_password',
+            ]);
+
+            return response()->json([
+                'message' => 'Bootstrap password reset is only available through the protected recovery flow.',
+            ], 403);
+        }
+
         $status = Password::reset(
             $validated,
             function (User $user, string $password) {
@@ -144,10 +181,23 @@ class AuthController extends Controller
         );
 
         if ($status !== Password::PASSWORD_RESET) {
+            Log::warning('auth.password_reset_failed', [
+                'email' => $validated['email'],
+                'ip' => $request->ip(),
+                'status' => $status,
+            ]);
+
             return response()->json([
                 'message' => __($status),
             ], 422);
         }
+
+        $resetUser = User::query()->where('email', $validated['email'])->first();
+        Log::info('auth.password_reset_completed', [
+            'user_id' => $resetUser?->id,
+            'email' => $validated['email'],
+            'ip' => $request->ip(),
+        ]);
 
         return response()->json([
             'message' => 'Password reset successful. You can now log in with your new password.',

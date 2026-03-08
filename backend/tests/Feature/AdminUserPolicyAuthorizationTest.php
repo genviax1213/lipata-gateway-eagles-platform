@@ -241,6 +241,32 @@ class AdminUserPolicyAuthorizationTest extends TestCase
         $this->assertTrue(Hash::check('NewPass456', (string) $target->fresh()->password));
     }
 
+    public function test_superadmin_cannot_reset_bootstrap_superadmin_password_via_admin_endpoint(): void
+    {
+        config()->set('app.bootstrap_superadmin_email', 'admin@lipataeagles.ph');
+
+        $superadminRole = Role::query()->where('name', 'superadmin')->firstOrFail();
+        $actor = User::factory()->create([
+            'role_id' => $superadminRole->id,
+            'email' => 'second-superadmin@example.com',
+        ]);
+        $bootstrap = User::factory()->create([
+            'role_id' => $superadminRole->id,
+            'email' => 'admin@lipataeagles.ph',
+            'password' => Hash::make('Intent$0811'),
+        ]);
+
+        Sanctum::actingAs($actor);
+
+        $this->putJson("/api/v1/admin/users/{$bootstrap->id}/password", [
+            'password' => 'NewPass456',
+            'password_confirmation' => 'NewPass456',
+        ])->assertStatus(403)
+            ->assertJsonPath('message', 'Bootstrap password reset is only available through the protected recovery flow.');
+
+        $this->assertTrue(Hash::check('Intent$0811', (string) $bootstrap->fresh()->password));
+    }
+
     public function test_bootstrap_superadmin_email_cannot_be_changed_via_user_update(): void
     {
         config()->set('app.bootstrap_superadmin_email', 'admin@lipataeagles.ph');
