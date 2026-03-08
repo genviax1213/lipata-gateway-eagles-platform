@@ -17,7 +17,8 @@ export default function Members() {
   const canEditMembers = hasPermission(user, "members.update");
   const canDeleteMembers = hasPermission(user, "members.delete");
 
-  const [activeTab, setActiveTab] = useState<MembersTab>("members");
+  const [activeTab, setActiveTab] = useState<MembersTab>(() => (canViewMembers ? "members" : "applications"));
+  const effectiveActiveTab: MembersTab = !canViewMembers && canViewApplications ? "applications" : activeTab;
   const [members, setMembers] = useState<Member[]>([]);
   const [applications, setApplications] = useState<Applicant[]>([]);
   const [membersLoaded, setMembersLoaded] = useState(false);
@@ -58,7 +59,7 @@ export default function Members() {
 
   const fetchApplications = useCallback(async (page = 1) => {
     if (!canViewApplications) return;
-    const res = await api.get("/applicants", { params: { status: "under_review", page } });
+    const res = await api.get("/applicants", { params: { status: "all", page } });
     setApplications((res.data?.data ?? []) as Applicant[]);
     setApplicationsPage(Number(res.data?.current_page ?? 1));
     setApplicationsLastPage(Number(res.data?.last_page ?? 1));
@@ -68,15 +69,14 @@ export default function Members() {
   const refreshVisibleData = useCallback(() => {
     if (!isWindowVisible) return;
 
-    if (activeTab === "members" && canViewMembers && membersLoaded && !editing && !deleting) {
+    if (effectiveActiveTab === "members" && canViewMembers && membersLoaded && !editing && !deleting) {
       void fetchMembers(currentPage);
     }
 
-    if (activeTab === "applications" && canViewApplications && applicationsLoaded) {
+    if (effectiveActiveTab === "applications" && canViewApplications && applicationsLoaded) {
       void fetchApplications(applicationsPage);
     }
   }, [
-    activeTab,
     applicationsLoaded,
     applicationsPage,
     canViewApplications,
@@ -84,6 +84,7 @@ export default function Members() {
     currentPage,
     deleting,
     editing,
+    effectiveActiveTab,
     fetchApplications,
     fetchMembers,
     isWindowVisible,
@@ -99,12 +100,12 @@ export default function Members() {
   }, [canViewMembers, fetchMembers, membersLoaded]);
 
   useEffect(() => {
-    if (activeTab !== "applications" || !canViewApplications || applicationsLoaded) return;
+    if (effectiveActiveTab !== "applications" || !canViewApplications || applicationsLoaded) return;
     const timer = window.setTimeout(() => {
       void fetchApplications(1);
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [activeTab, applicationsLoaded, canViewApplications, fetchApplications]);
+  }, [applicationsLoaded, canViewApplications, effectiveActiveTab, fetchApplications]);
 
   useEffect(() => {
     const handleFocus = () => {
@@ -204,12 +205,12 @@ export default function Members() {
     }
   }
 
-  if (!canViewMembers) {
+  if (!canViewMembers && !canViewApplications) {
     return (
       <section>
         <h1 className="mb-3 font-heading text-4xl text-offwhite">Members Management</h1>
         <p className="rounded-md border border-red-400/40 bg-red-400/10 px-4 py-3 text-sm text-red-200">
-          You do not have permission to view members.
+          You do not have permission to view members or applicants.
         </p>
       </section>
     );
@@ -218,7 +219,7 @@ export default function Members() {
   return (
     <div>
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-        <h1 className="font-heading text-4xl text-offwhite">Members Management</h1>
+        <h1 className="font-heading text-4xl text-offwhite">{canViewMembers ? "Members Management" : "Applicants"}</h1>
       </div>
 
       {error && (
@@ -234,25 +235,27 @@ export default function Members() {
       )}
 
       <div className="mb-6 flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={() => setActiveTab("members")}
-          className={`rounded-md border px-4 py-2 text-sm ${activeTab === "members" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}
-        >
-          Members
-        </button>
+        {canViewMembers && (
+          <button
+            type="button"
+            onClick={() => setActiveTab("members")}
+            className={`rounded-md border px-4 py-2 text-sm ${activeTab === "members" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}
+          >
+            Members
+          </button>
+        )}
         {canViewApplications && (
           <button
             type="button"
             onClick={() => setActiveTab("applications")}
             className={`rounded-md border px-4 py-2 text-sm ${activeTab === "applications" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}
           >
-            Applicant Review
+            Applicants
           </button>
         )}
       </div>
 
-      {activeTab === "members" && (
+      {effectiveActiveTab === "members" && canViewMembers && (
         <>
           <div className="mb-6 grid gap-4 rounded-xl border border-white/20 bg-white/10 p-4 md:grid-cols-[1fr_220px_220px_auto]">
             <input
@@ -380,7 +383,7 @@ export default function Members() {
         </>
       )}
 
-      {activeTab === "applications" && canViewApplications && (
+      {effectiveActiveTab === "applications" && canViewApplications && (
         <>
           <div className="mb-6 rounded-xl border border-white/20 bg-white/10 p-4">
             <button
@@ -394,17 +397,17 @@ export default function Members() {
 
           {!applicationsLoaded && (
             <div className="rounded-xl border border-white/20 bg-white/10 px-4 py-8 text-center text-sm text-mist/80">
-              Loading applicant review queue...
+              Loading applicants...
             </div>
           )}
           {applicationsLoaded && (
             <>
               <div className="overflow-x-auto rounded-xl border border-white/20 bg-white/10 shadow-lg">
                 <div className="border-b border-white/15 px-4 py-3">
-                  <h2 className="font-heading text-2xl text-offwhite">Applicants Under Review</h2>
+                  <h2 className="font-heading text-2xl text-offwhite">Registered Applicants</h2>
                   {!canApproveApplications && (
                     <p className="mt-2 text-sm text-mist/80">
-                      Read-only queue. Decisions remain restricted to the membership committee review workflow.
+                      Read-only applicant list. Documents and workflow decisions remain restricted by role.
                     </p>
                   )}
                 </div>
@@ -413,7 +416,10 @@ export default function Members() {
                     <tr>
                       <th className="px-4 py-3 text-left">Name</th>
                       <th className="px-4 py-3 text-left">Email</th>
-                      <th className="px-4 py-3 text-left">Application Status</th>
+                      <th className="px-4 py-3 text-left">Batch</th>
+                      <th className="px-4 py-3 text-left">Registered</th>
+                      <th className="px-4 py-3 text-left">Stage</th>
+                      <th className="px-4 py-3 text-left">Applicant Status</th>
                       <th className="px-4 py-3 text-left">{canApproveApplications ? "Actions" : "Access"}</th>
                     </tr>
                   </thead>
@@ -422,6 +428,9 @@ export default function Members() {
                       <tr key={app.id} className="border-b border-white/15">
                         <td className="px-4 py-3">{app.first_name} {app.middle_name ? `${app.middle_name} ` : ""}{app.last_name}</td>
                         <td className="px-4 py-3">{app.email}</td>
+                        <td className="px-4 py-3">{app.batch?.name ?? "Unassigned"}</td>
+                        <td className="px-4 py-3">{app.created_at ? new Date(app.created_at).toLocaleDateString() : "—"}</td>
+                        <td className="px-4 py-3 capitalize">{(app.current_stage ?? "interview").replace(/_/g, " ")}</td>
                         <td className="px-4 py-3 capitalize">{app.status.replace(/_/g, " ")}</td>
                         <td className="px-4 py-3 space-x-3">
                           {canApproveApplications ? (
@@ -440,14 +449,14 @@ export default function Members() {
                               </button>
                             </>
                           ) : (
-                            <span className="text-xs text-mist/80">View only</span>
+                            <span className="text-xs text-mist/80">List only</span>
                           )}
                         </td>
                       </tr>
                     ))}
                     {applications.length === 0 && (
                       <tr>
-                        <td colSpan={4} className="px-4 py-6 text-center text-mist/80">No applicants are currently under review.</td>
+                        <td colSpan={7} className="px-4 py-6 text-center text-mist/80">No registered applicants found.</td>
                       </tr>
                     )}
                   </tbody>

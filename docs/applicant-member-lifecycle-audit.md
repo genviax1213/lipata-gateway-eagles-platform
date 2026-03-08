@@ -715,3 +715,22 @@ Portal access and role-assignment guardrails:
 - the `applicant` role is lifecycle-managed and must not be manually assigned through generic admin/user role-management screens or endpoints
 - existing members must enter the applicant workflow only through `applicant-registration`, not by changing a member role to `applicant`
 - applicant dashboard features such as 5I tracking, notices, documents, requirements, and batch materials depend on a real applicant dossier, not on role reassignment alone
+
+### 2026-03-08 - Applicant list visibility refinement
+
+Implemented behavior:
+- ordinary authenticated `member` users can now open the applicant list
+- ordinary members can see list-only applicant information such as:
+  - name
+  - batch
+  - registration/submission date
+  - current stage
+  - applicant status
+- ordinary members cannot open applicant dossiers or view applicant documents
+- `admin` and `superadmin` retain applicant dossier/document visibility without applicant review authority
+- `membership_chairman` retains full applicant review authority
+
+Navigation/UI effect:
+- the portal members section is now visible to applicant-list viewers even when they do not have `members.view`
+- for ordinary members, the page opens directly on the applicant list rather than the member-management tab
+- the applicant list now includes newly registered applicants by loading all applicant statuses instead of only `under_review`

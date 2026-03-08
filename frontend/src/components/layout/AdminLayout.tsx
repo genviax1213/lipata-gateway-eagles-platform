@@ -38,6 +38,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const isApplicant = roleName === "applicant";
   const showRoleDelegation = isAdminUser(user) || hasPermission(user, "roles.delegate");
   const canViewMembers = isAdminUser(user) || roleName === "membership_chairman";
+  const canViewApplicantList = hasPermission(user, "applications.view") || hasPermission(user, "applications.review");
+  const canOpenMembersSection = canViewMembers || canViewApplicantList;
   const canManageCmsPosts = hasPermission(user, "posts.create");
   const canViewFinance = hasPermission(user, "finance.view");
   const canViewForum = !isApplicant;
@@ -64,7 +66,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const navItems = useMemo(
     () => [
       { to: "/portal", label: "Dashboard", icon: "dashboard", show: true, end: true },
-      { to: "/portal/members", label: "Members", icon: "members", show: canViewMembers },
+      { to: "/portal/members", label: canViewMembers ? "Members" : "Applicants", icon: "members", show: canOpenMembersSection },
       { to: "/portal/contributions", label: canViewFinance ? "Finance" : "My Contributions", icon: "finance", show: true },
       { to: "/portal/forum", label: "Forum", icon: "forum", show: canViewForum },
       { to: "/portal/posts", label: "CMS Posts", icon: "cms", show: canManageCmsPosts },
@@ -72,7 +74,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       { to: "/portal/logs", label: "Logs", icon: "logs", show: canViewMembers },
       { to: "/portal/security", label: "Security Settings", icon: "security", show: true },
     ],
-    [canManageCmsPosts, canViewFinance, canViewForum, canViewMembers, showRoleDelegation],
+    [canManageCmsPosts, canOpenMembersSection, canViewFinance, canViewForum, canViewMembers, showRoleDelegation],
   );
 
   const renderIcon = (icon: string) => {

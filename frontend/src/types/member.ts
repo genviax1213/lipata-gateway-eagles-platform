@@ -63,6 +63,15 @@ export interface Applicant {
   reviewed_by_user_id: number | null;
   rejection_reason: string | null;
   decision_status?: ApplicantDecisionStatus;
+  created_at?: string | null;
+  current_stage?: string | null;
+  batch?: {
+    id: number;
+    name: string;
+    description?: string | null;
+    start_date?: string | null;
+    target_completion_date?: string | null;
+  } | null;
 }
 
 export type ValidationErrors = Record<string, string[]>;

@@ -129,6 +129,35 @@ class RolePermissionAuthorizationTest extends TestCase
         $response->assertStatus(403);
     }
 
+    public function test_member_can_view_applicant_queue_but_not_dossier(): void
+    {
+        $memberRole = Role::query()->where('name', 'member')->firstOrFail();
+        $member = User::factory()->create(['role_id' => $memberRole->id]);
+
+        $application = Applicant::query()->create([
+            'first_name' => 'Queued',
+            'middle_name' => 'Applicant',
+            'last_name' => 'Member View',
+            'email' => 'queued-member-view@applicant.test',
+            'membership_status' => 'applicant',
+            'status' => 'pending_verification',
+            'decision_status' => 'pending',
+            'current_stage' => 'interview',
+            'is_login_blocked' => false,
+            'verification_token' => hash('sha256', 'queued-member-view-token'),
+            'email_verified_at' => null,
+        ]);
+
+        Sanctum::actingAs($member);
+
+        $this->getJson('/api/v1/applicants?status=all')
+            ->assertOk()
+            ->assertJsonPath('data.0.email', 'queued-member-view@applicant.test');
+
+        $this->getJson("/api/v1/applicants/{$application->id}")
+            ->assertStatus(403);
+    }
+
     public function test_officer_cannot_access_admin_users_list(): void
     {
         $officerRole = Role::query()->where('name', 'officer')->firstOrFail();
