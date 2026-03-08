@@ -10,6 +10,7 @@ use App\Models\MemberApplication;
 use App\Models\Role;
 use App\Models\User;
 use App\Notifications\MemberApplicationVerificationToken;
+use App\Support\VerificationToken;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -52,6 +53,8 @@ class MemberApplicationFlowTest extends TestCase
             return true;
         });
         $this->assertNotEmpty($token);
+        $this->assertSame(VerificationToken::LENGTH, strlen($token));
+        $this->assertMatchesRegularExpression('/^[A-Z0-9]{' . VerificationToken::LENGTH . '}$/', $token);
 
         $verify = $this->postJson('/api/v1/applicant-registrations/verify', [
             'email' => 'juan@applicant.test',
@@ -580,6 +583,8 @@ class MemberApplicationFlowTest extends TestCase
             $token = $notification->token();
             return true;
         });
+        $this->assertSame(VerificationToken::LENGTH, strlen($token));
+        $this->assertMatchesRegularExpression('/^[A-Z0-9]{' . VerificationToken::LENGTH . '}$/', $token);
         $this->assertNotEmpty($token);
 
         $this->postJson('/api/v1/applicant-registrations/verify', [
@@ -617,6 +622,8 @@ class MemberApplicationFlowTest extends TestCase
             $token = $notification->token();
             return true;
         });
+        $this->assertSame(VerificationToken::LENGTH, strlen($token));
+        $this->assertMatchesRegularExpression('/^[A-Z0-9]{' . VerificationToken::LENGTH . '}$/', $token);
         $this->assertNotEmpty($token);
 
         $this->postJson('/api/v1/applicant-registrations/verify', [

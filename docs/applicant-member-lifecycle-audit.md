@@ -684,3 +684,8 @@ Data handling rule:
 - applicant personal documents stay attached to the applicant dossier
 - shared batch materials stay attached to the applicant batch
 - activation creates the member profile but does not flatten or overwrite the applicant dossier history
+
+Verification token refinement:
+- applicant and member registration verification now use fixed 10-character uppercase alphanumeric tokens
+- verification inputs normalize tokens to uppercase in the UI before submission
+- backend verification normalizes token case before hashing and matching

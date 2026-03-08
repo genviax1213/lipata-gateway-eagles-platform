@@ -27,6 +27,10 @@ function normalizeEmail(value: string): string {
   return value.trim().toLowerCase();
 }
 
+function normalizeVerificationToken(value: string): string {
+  return value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10);
+}
+
 export default function MemberRegistration() {
   const [activeTab, setActiveTab] = useState<MemberRegistrationTab>("register");
   const [form, setForm] = useState<RegistrationForm>(initialForm);
@@ -124,7 +128,7 @@ export default function MemberRegistration() {
     try {
       await api.post("/member-registrations/verify", {
         email: normalizeEmail(verificationEmail),
-        verification_token: verificationToken.trim(),
+        verification_token: normalizeVerificationToken(verificationToken),
       });
       setNotice("Verification successful. Your member account is now active.");
       setVerificationToken("");
@@ -194,13 +198,13 @@ export default function MemberRegistration() {
           <div className="rounded-lg border border-white/20 bg-white/5 p-4">
             <h2 className="mb-2 font-heading text-2xl text-offwhite">Verify Member Registration Email</h2>
             <p className="mb-3 text-xs text-mist/80">
-              Enter the email address and token sent to the registered member email. Verification activates the member portal account.
+              Enter the email address and 10-character verification token sent to the registered member email. Verification activates the member portal account.
             </p>
             <div className="grid gap-3 md:grid-cols-2">
               <label htmlFor="member-registration-verify-email" className="text-xs font-semibold text-mist/85 md:col-span-2">Email Address</label>
               <input id="member-registration-verify-email" placeholder="Email used during registration" type="email" value={verificationEmail} onChange={(e) => setVerificationEmail(e.target.value)} className="rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite" />
               <label htmlFor="member-registration-verify-token" className="text-xs font-semibold text-mist/85 md:col-span-2">Verification Token</label>
-              <input id="member-registration-verify-token" placeholder="Verification token" value={verificationToken} onChange={(e) => setVerificationToken(e.target.value)} className="rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite" />
+              <input id="member-registration-verify-token" placeholder="Verification token" value={verificationToken} onChange={(e) => setVerificationToken(normalizeVerificationToken(e.target.value))} className="rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite uppercase tracking-[0.2em]" maxLength={10} />
             </div>
             <div className="mt-4">
               <button onClick={() => void verifyRegistration()} disabled={saving} className="btn-primary">

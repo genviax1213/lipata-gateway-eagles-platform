@@ -9,10 +9,10 @@ use App\Models\Role;
 use App\Models\User;
 use App\Notifications\MemberRegistrationVerificationToken;
 use App\Support\TextCase;
+use App\Support\VerificationToken;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Str;
 
 class MemberRegistrationController extends Controller
 {
@@ -76,7 +76,7 @@ class MemberRegistrationController extends Controller
             return response()->json(['message' => 'A member record with the same full name already exists.'], 422);
         }
 
-        $token = Str::random(48);
+        $token = VerificationToken::generate();
 
         $registration = MemberRegistration::query()->create([
             'first_name' => $firstName,
@@ -100,14 +100,15 @@ class MemberRegistrationController extends Controller
     {
         $validated = $request->validate([
             'email' => 'required|email|max:255',
-            'verification_token' => 'required|string|min:12|max:120',
+            'verification_token' => VerificationToken::validationRules(),
         ]);
 
         $normalizedEmail = $this->normalizeEmail($validated['email']);
+        $normalizedToken = VerificationToken::normalize((string) $validated['verification_token']);
 
         $registration = MemberRegistration::query()
             ->whereRaw('LOWER(TRIM(email)) = ?', [$normalizedEmail])
-            ->where('verification_token', hash('sha256', (string) $validated['verification_token']))
+            ->where('verification_token', hash('sha256', $normalizedToken))
             ->where('status', MemberRegistration::STATUS_PENDING_VERIFICATION)
             ->first();
 

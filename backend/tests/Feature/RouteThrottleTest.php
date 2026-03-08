@@ -92,7 +92,7 @@ class RouteThrottleTest extends TestCase
         for ($i = 0; $i < 5; $i++) {
             $response = $this->postJson('/api/v1/applicant-registrations/verify', [
                 'email' => $email,
-                'verification_token' => 'invalid-token-value',
+                'verification_token' => 'INVALID123',
             ]);
 
             $this->assertSame(422, $response->status());
@@ -100,7 +100,7 @@ class RouteThrottleTest extends TestCase
 
         $blocked = $this->postJson('/api/v1/applicant-registrations/verify', [
             'email' => $email,
-            'verification_token' => 'invalid-token-value',
+            'verification_token' => 'INVALID123',
         ]);
 
         $blocked->assertStatus(429);

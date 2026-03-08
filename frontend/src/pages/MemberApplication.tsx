@@ -28,6 +28,10 @@ function normalizeEmail(value: string): string {
   return value.trim().toLowerCase();
 }
 
+function normalizeVerificationToken(value: string): string {
+  return value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10);
+}
+
 export default function MemberApplication() {
   const [activeTab, setActiveTab] = useState<MemberApplicationTab>("apply");
   const [form, setForm] = useState<ApplicationForm>(initialForm);
@@ -127,7 +131,7 @@ export default function MemberApplication() {
     try {
       await api.post("/applicant-registrations/verify", {
         email: normalizeEmail(verificationEmail),
-        verification_token: verificationToken.trim(),
+        verification_token: normalizeVerificationToken(verificationToken),
       });
       setNotice(microcopy.success.applicationVerified);
       setVerificationToken("");
@@ -351,7 +355,7 @@ export default function MemberApplication() {
         <div className="rounded-lg border border-white/20 bg-white/5 p-4">
           <h2 className="mb-2 font-heading text-2xl text-offwhite">Verify Applicant Email</h2>
           <p className="mb-3 text-xs text-mist/80">
-            Enter your email and verification token to move your application into committee review.
+            Enter your email and 10-character verification token to move your application into committee review.
           </p>
 
           <div className="grid gap-3 md:grid-cols-2">
@@ -369,8 +373,9 @@ export default function MemberApplication() {
               id="verification-token"
               placeholder="Verification token"
               value={verificationToken}
-              onChange={(e) => setVerificationToken(e.target.value)}
-              className="rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite"
+              onChange={(e) => setVerificationToken(normalizeVerificationToken(e.target.value))}
+              className="rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite uppercase tracking-[0.2em]"
+              maxLength={10}
             />
             <div className="md:col-span-2">
               <button onClick={() => void verifyApplication()} disabled={saving} className="btn-secondary">
