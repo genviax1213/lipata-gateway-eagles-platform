@@ -176,6 +176,23 @@ jobs:
           git checkout "${DEPLOY_BRANCH}"
           git pull --ff-only origin "${DEPLOY_BRANCH}"
 
+          # Keep internal planning, governance, and runbook docs off the host.
+          rm -rf "\$APP_DIR/lgec"
+          rm -f "\$APP_DIR/.github/PULL_REQUEST_TEMPLATE.md"
+          rm -f "\$APP_DIR/AGENTS.md"
+          rm -f "\$APP_DIR/ARCHITECTURE_IMPROVEMENTS.md"
+          rm -f "\$APP_DIR/BUILD_SPEC.DRAFT.md"
+          rm -f "\$APP_DIR/BUILD_SPEC.md"
+          rm -f "\$APP_DIR/CLAUDE.md"
+          rm -f "\$APP_DIR/CLAUDE_CODE_ANALYSIS.md"
+          rm -f "\$APP_DIR/CONTINUITY_"*.md
+          rm -f "\$APP_DIR/HOST_SECURITY_SCAN.md"
+          rm -f "\$APP_DIR/MODIFICATIONS_IMPROVEMENTS_REVISIONS.md"
+          rm -f "\$APP_DIR/SECURITY_IMPROVEMENTS.md"
+          rm -f "\$APP_DIR/docs/codex-session-scope-agreement.md"
+          rm -f "\$APP_DIR/docs/finance-workflows.md"
+          rm -f "\$APP_DIR/docs/software-engineering-standards.md"
+
           cd "\$BACKEND_DIR"
           if [ ! -f .env ]; then
             cp .env.example .env

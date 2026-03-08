@@ -14,3 +14,17 @@ id_ed25519.pub
 BLOCKCHAIN_*.md
 frontend-dist-deploy.tgz
 frontend/dist/
+.private-docs/
+.github/PULL_REQUEST_TEMPLATE.md
+docs/codex-session-scope-agreement.md
+docs/finance-workflows.md
+docs/software-engineering-standards.md
+ARCHITECTURE_IMPROVEMENTS.md
+BUILD_SPEC.DRAFT.md
+BUILD_SPEC.md
+CLAUDE_CODE_ANALYSIS.md
+CONTINUITY_*.md
+HOST_SECURITY_SCAN.md
+MODIFICATIONS_IMPROVEMENTS_REVISIONS.md
+SECURITY_IMPROVEMENTS.md
+lgec/
