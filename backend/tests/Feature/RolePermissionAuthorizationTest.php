@@ -182,6 +182,120 @@ class RolePermissionAuthorizationTest extends TestCase
         $response->assertStatus(200);
     }
 
+    public function test_superadmin_user_list_hides_bootstrap_email_but_shows_other_superadmin_emails(): void
+    {
+        $superadminRole = Role::query()->where('name', 'superadmin')->firstOrFail();
+
+        $viewer = User::factory()->create([
+            'role_id' => $superadminRole->id,
+            'email' => 'viewer-superadmin@test.local',
+        ]);
+        $bootstrap = User::factory()->create([
+            'role_id' => $superadminRole->id,
+            'email' => 'admin@lipataeagles.ph',
+        ]);
+        $managed = User::factory()->create([
+            'role_id' => $superadminRole->id,
+            'email' => 'managed-superadmin@test.local',
+        ]);
+
+        Sanctum::actingAs($viewer);
+
+        $response = $this->getJson('/api/v1/admin/users')
+            ->assertOk();
+
+        $rows = collect($response->json('data'));
+
+        $this->assertNull($rows->firstWhere('id', $bootstrap->id)['email'] ?? null);
+        $this->assertSame('managed-superadmin@test.local', $rows->firstWhere('id', $managed->id)['email'] ?? null);
+    }
+
+    public function test_admin_user_list_hides_all_superadmin_emails(): void
+    {
+        $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
+        $superadminRole = Role::query()->where('name', 'superadmin')->firstOrFail();
+
+        $viewer = User::factory()->create(['role_id' => $adminRole->id]);
+        $bootstrap = User::factory()->create([
+            'role_id' => $superadminRole->id,
+            'email' => 'admin@lipataeagles.ph',
+        ]);
+        $managed = User::factory()->create([
+            'role_id' => $superadminRole->id,
+            'email' => 'managed-superadmin@test.local',
+        ]);
+
+        Sanctum::actingAs($viewer);
+
+        $response = $this->getJson('/api/v1/admin/users')
+            ->assertOk();
+
+        $rows = collect($response->json('data'));
+
+        $this->assertNull($rows->firstWhere('id', $bootstrap->id)['email'] ?? null);
+        $this->assertNull($rows->firstWhere('id', $managed->id)['email'] ?? null);
+    }
+
+    public function test_officer_member_directory_hides_bootstrap_and_superadmin_emails(): void
+    {
+        $officerRole = Role::query()->where('name', 'officer')->firstOrFail();
+        $superadminRole = Role::query()->where('name', 'superadmin')->firstOrFail();
+        $memberRole = Role::query()->where('name', 'member')->firstOrFail();
+
+        $viewer = User::factory()->create(['role_id' => $officerRole->id]);
+        $bootstrapUser = User::factory()->create([
+            'role_id' => $superadminRole->id,
+            'email' => 'admin@lipataeagles.ph',
+        ]);
+        $managedSuperadminUser = User::factory()->create([
+            'role_id' => $superadminRole->id,
+            'email' => 'managed-superadmin@test.local',
+        ]);
+        $memberUser = User::factory()->create([
+            'role_id' => $memberRole->id,
+            'email' => 'visible-member@test.local',
+        ]);
+
+        $bootstrapMember = Member::query()->create([
+            'member_number' => 'BOOTSTRAP-001',
+            'first_name' => 'Bootstrap',
+            'middle_name' => 'Root',
+            'last_name' => 'Admin',
+            'email' => 'admin@lipataeagles.ph',
+            'membership_status' => 'active',
+            'user_id' => $bootstrapUser->id,
+        ]);
+        $managedSuperadminMember = Member::query()->create([
+            'member_number' => 'SUPERADMIN-002',
+            'first_name' => 'Managed',
+            'middle_name' => 'Peer',
+            'last_name' => 'Admin',
+            'email' => 'managed-superadmin@test.local',
+            'membership_status' => 'active',
+            'user_id' => $managedSuperadminUser->id,
+        ]);
+        $normalMember = Member::query()->create([
+            'member_number' => 'MEMBER-003',
+            'first_name' => 'Visible',
+            'middle_name' => 'Regular',
+            'last_name' => 'Member',
+            'email' => 'visible-member@test.local',
+            'membership_status' => 'active',
+            'user_id' => $memberUser->id,
+        ]);
+
+        Sanctum::actingAs($viewer);
+
+        $response = $this->getJson('/api/v1/members')
+            ->assertOk();
+
+        $rows = collect($response->json('data'));
+
+        $this->assertNull($rows->firstWhere('id', $bootstrapMember->id)['email'] ?? null);
+        $this->assertNull($rows->firstWhere('id', $managedSuperadminMember->id)['email'] ?? null);
+        $this->assertSame('visible-member@test.local', $rows->firstWhere('id', $normalMember->id)['email'] ?? null);
+    }
+
     public function test_admin_cannot_change_member_batch_through_member_update(): void
     {
         $adminRole = Role::query()->where('name', 'admin')->firstOrFail();

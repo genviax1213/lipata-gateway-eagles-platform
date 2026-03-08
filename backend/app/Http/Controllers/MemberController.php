@@ -6,6 +6,7 @@ use App\Models\Member;
 use App\Models\Applicant;
 use App\Models\MemberRegistration;
 use App\Models\User;
+use App\Support\ProtectedEmailVisibility;
 use App\Support\RoleHierarchy;
 use App\Support\TextCase;
 use Illuminate\Database\QueryException;
@@ -28,6 +29,8 @@ class MemberController extends Controller
     public function index(Request $request)
     {
         $this->authorize('viewMemberDirectory', Member::class);
+        /** @var User $viewer */
+        $viewer = $request->user()->loadMissing('role:id,name');
 
         $search = (string) $request->query('search', '');
         $status = (string) $request->query('status', '');
@@ -60,9 +63,14 @@ class MemberController extends Controller
             $query->where('password_set', filter_var($passwordSet, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? false);
         }
 
-        return response()->json(
-            $query->orderBy('last_name')->orderBy('first_name')->paginate(10)
-        );
+        $members = $query->orderBy('last_name')->orderBy('first_name')->paginate(10);
+        $members->setCollection($members->getCollection()->map(function (Member $member) use ($viewer) {
+            $member->email = ProtectedEmailVisibility::forMember($viewer, $member);
+
+            return $member;
+        }));
+
+        return response()->json($members);
     }
 
     public function store(Request $request)

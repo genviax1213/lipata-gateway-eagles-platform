@@ -6,6 +6,7 @@ use App\Models\Member;
 use App\Models\Applicant;
 use App\Models\Role;
 use App\Models\User;
+use App\Support\ProtectedEmailVisibility;
 use App\Support\RoleHierarchy;
 use App\Support\TextCase;
 use Illuminate\Http\Request;
@@ -48,6 +49,8 @@ class AdminUserController extends Controller
     {
         $this->authorize('manageAdminUsers', [User::class, 'users.view']);
         $search = (string) $request->query('search', '');
+        /** @var User $viewer */
+        $viewer = $request->user()->loadMissing('role:id,name');
 
         $users = User::query()
             ->with('role:id,name')
@@ -60,6 +63,12 @@ class AdminUserController extends Controller
             })
             ->orderBy('name')
             ->paginate(20);
+
+        $users->setCollection($users->getCollection()->map(function (User $user) use ($viewer) {
+            $user->email = ProtectedEmailVisibility::forUser($viewer, $user, $user->email);
+
+            return $user;
+        }));
 
         return response()->json($users);
     }
@@ -80,6 +89,8 @@ class AdminUserController extends Controller
     {
         $this->authorize('manageAdminUsers', [User::class, 'users.view']);
         $search = (string) $request->query('search', '');
+        /** @var User $viewer */
+        $viewer = $request->user()->loadMissing('role:id,name');
         $query = Member::query()
             ->with(['user.role:id,name'])
             ->select(['id', 'member_number', 'first_name', 'middle_name', 'last_name', 'email', 'membership_status', 'email_verified', 'password_set', 'user_id'])
@@ -96,7 +107,14 @@ class AdminUserController extends Controller
             });
         }
 
-        return response()->json($query->paginate(20));
+        $members = $query->paginate(20);
+        $members->setCollection($members->getCollection()->map(function (Member $member) use ($viewer) {
+            $member->email = ProtectedEmailVisibility::forMember($viewer, $member);
+
+            return $member;
+        }));
+
+        return response()->json($members);
     }
 
     public function assignRoleToMember(Request $request, Member $member)
