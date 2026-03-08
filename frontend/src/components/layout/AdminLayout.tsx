@@ -5,6 +5,7 @@ import axios from "axios";
 import { useAuth } from "../../contexts/useAuth";
 import { hasPermission, isAdminUser } from "../../utils/auth";
 import { applyPortalTheme, readStoredPortalTheme, resolvePortalTheme } from "../../utils/portalTheme";
+import RouteErrorBoundary from "../RouteErrorBoundary";
 
 function getPortalTitle(user: Record<string, unknown> | null): string {
   const roleName = (user?.role as { name?: unknown } | undefined)?.name;
@@ -192,7 +193,9 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         </aside>
 
         <main className="flex-1">
-          <div className="glass-card min-h-full p-6 md:p-8">{children}</div>
+          <div className="glass-card min-h-full p-6 md:p-8">
+            <RouteErrorBoundary>{children}</RouteErrorBoundary>
+          </div>
         </main>
       </div>
     </div>
