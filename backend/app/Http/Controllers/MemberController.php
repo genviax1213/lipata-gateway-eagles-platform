@@ -25,6 +25,22 @@ class MemberController extends Controller
         return $this->normalizeEmail((string) config('app.bootstrap_superadmin_email', 'admin@lipataeagles.ph'));
     }
 
+    private function resolveActorMember(User $user): ?Member
+    {
+        $user->loadMissing('memberProfile', 'role:id,name');
+
+        if ($user->memberProfile) {
+            return $user->memberProfile;
+        }
+
+        $email = $this->normalizeEmail((string) $user->email);
+        if ($email === '') {
+            return null;
+        }
+
+        return Member::query()->where('email', $email)->first();
+    }
+
     public function index(Request $request)
     {
         $this->authorize('viewMemberDirectory', Member::class);
@@ -80,6 +96,78 @@ class MemberController extends Controller
         return response()->json([
             'message' => 'Direct member creation is disabled. Use member application approval workflow.',
         ], 422);
+    }
+
+    public function myProfile(Request $request)
+    {
+        /** @var User $actor */
+        $actor = $request->user();
+        $member = $this->resolveActorMember($actor);
+
+        if (!$member) {
+            return response()->json([
+                'message' => 'No linked member profile found for this account.',
+            ], 404);
+        }
+
+        $this->authorize('manageOwnProfile', $member);
+
+        return response()->json($member);
+    }
+
+    public function updateMyProfile(Request $request)
+    {
+        /** @var User $actor */
+        $actor = $request->user();
+        $member = $this->resolveActorMember($actor);
+
+        if (!$member) {
+            return response()->json([
+                'message' => 'No linked member profile found for this account.',
+            ], 404);
+        }
+
+        $this->authorize('manageOwnProfile', $member);
+
+        $validated = $request->validate([
+            'first_name' => 'required|string|max:120',
+            'middle_name' => ['required', 'string', 'min:2', 'max:120', 'not_regex:/\./'],
+            'last_name' => 'required|string|max:120',
+            'spouse_name' => 'nullable|string|max:120',
+            'contact_number' => 'nullable|string|max:50',
+            'address' => 'nullable|string|max:65535',
+            'date_of_birth' => 'nullable|date',
+            'induction_date' => 'nullable|date',
+        ]);
+
+        $validated['first_name'] = (string) TextCase::title($validated['first_name']);
+        $validated['middle_name'] = (string) TextCase::title($validated['middle_name']);
+        $validated['last_name'] = (string) TextCase::title($validated['last_name']);
+        $validated['spouse_name'] = isset($validated['spouse_name']) && $validated['spouse_name'] !== ''
+            ? (string) TextCase::title($validated['spouse_name'])
+            : null;
+        $validated['contact_number'] = isset($validated['contact_number']) && $validated['contact_number'] !== ''
+            ? preg_replace('/\s+/', '', (string) $validated['contact_number'])
+            : null;
+        $validated['address'] = isset($validated['address']) && $validated['address'] !== ''
+            ? trim((string) $validated['address'])
+            : null;
+
+        $member->fill($validated);
+        $member->save();
+
+        if ($member->user_id) {
+            User::query()
+                ->where('id', $member->user_id)
+                ->update([
+                    'name' => (string) TextCase::title(trim($member->first_name . ' ' . ($member->middle_name ? $member->middle_name . ' ' : '') . $member->last_name)),
+                ]);
+        }
+
+        return response()->json([
+            'message' => 'Profile updated successfully.',
+            'member' => $member->fresh(),
+        ]);
     }
 
     public function update(Request $request, Member $member)

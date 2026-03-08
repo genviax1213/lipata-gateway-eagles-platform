@@ -58,6 +58,7 @@
   - `storeNote`: finance route requires `finance.view`, but controller enforces auditor-only note creation.
 - `MemberPolicy`
   - `viewMemberDirectory`: requires `members.view`.
+  - `manageOwnProfile`: allows non-admin users with a linked member profile to edit only their own personal data through the self-service member profile flow.
   - `viewFinanceDirectory`: requires `finance.view`.
   - `viewFinancialContributions`: requires `finance.view`.
 - `PostPolicy`
@@ -131,6 +132,10 @@ Seeder note:
 - These are intentionally not exposed in the UI and send recovery mail only to the configured bootstrap recovery email.
 - The bootstrap superadmin is excluded from the generic forgot/reset-password routes and from the admin user-password reset endpoint.
 - Bootstrap password recovery is only supported through the protected `/api/v1/rll*` flow, while authenticated password change remains available to the signed-in bootstrap account.
+- Non-admin users with a linked member profile can use:
+  - `GET /api/v1/members/me/profile`
+  - `PUT /api/v1/members/me/profile`
+- This self-service profile flow intentionally excludes email, batch, membership status, and account verification fields from self-editing.
 - `MemberContributionHistorySeeder` is restricted to `local`/`testing` by default and will throw outside those environments unless `ALLOW_MEMBER_HISTORY_SEEDER=true`.
 - `FinanceWorkflowDemoSeeder` is restricted to `local`/`testing` by default and seeds Treasurer/Auditor workflow examples, including opening balances, expenses, and follow-up notes.
 - Workflow reference: [docs/finance-workflows.md](/mnt/rll/projects/lipata-gateway-eagles-platform/docs/finance-workflows.md)

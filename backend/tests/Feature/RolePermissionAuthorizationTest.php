@@ -1311,4 +1311,84 @@ class RolePermissionAuthorizationTest extends TestCase
         ])->assertStatus(422)
             ->assertJsonPath('message', 'The bootstrap superadmin email cannot be changed.');
     }
+
+    public function test_member_can_update_own_profile_without_email_or_batch_edit(): void
+    {
+        $memberRole = Role::query()->where('name', 'member')->firstOrFail();
+        $user = User::factory()->create([
+            'role_id' => $memberRole->id,
+            'email' => 'member-self@example.com',
+            'name' => 'Old Member Name',
+        ]);
+
+        $member = Member::query()->create([
+            'member_number' => 'M-SELF-001',
+            'first_name' => 'Old',
+            'middle_name' => 'Member',
+            'last_name' => 'Name',
+            'email' => 'member-self@example.com',
+            'membership_status' => 'active',
+            'batch' => 'Alpha Batch',
+            'user_id' => $user->id,
+        ]);
+
+        Sanctum::actingAs($user);
+
+        $response = $this->putJson('/api/v1/members/me/profile', [
+            'first_name' => 'new',
+            'middle_name' => 'middle',
+            'last_name' => 'member',
+            'spouse_name' => 'jane member',
+            'contact_number' => '0917 222 3344',
+            'address' => 'Purok 2, Surigao City',
+            'date_of_birth' => '1991-02-14',
+            'induction_date' => '2024-01-15',
+            'email' => 'blocked-change@example.com',
+            'batch' => 'Beta Batch',
+        ]);
+
+        $response->assertOk()
+            ->assertJsonPath('message', 'Profile updated successfully.')
+            ->assertJsonPath('member.first_name', 'New')
+            ->assertJsonPath('member.middle_name', 'Middle')
+            ->assertJsonPath('member.last_name', 'Member')
+            ->assertJsonPath('member.spouse_name', 'Jane Member')
+            ->assertJsonPath('member.contact_number', '09172223344')
+            ->assertJsonPath('member.email', 'member-self@example.com')
+            ->assertJsonPath('member.batch', 'Alpha Batch');
+
+        $member->refresh();
+        $user->refresh();
+
+        $this->assertSame('member-self@example.com', $member->email);
+        $this->assertSame('Alpha Batch', $member->batch);
+        $this->assertSame('New Middle Member', $user->name);
+    }
+
+    public function test_admin_cannot_use_member_self_profile_endpoint(): void
+    {
+        $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
+        $admin = User::factory()->create([
+            'role_id' => $adminRole->id,
+            'email' => 'admin-self-profile@example.com',
+        ]);
+
+        Member::query()->create([
+            'member_number' => 'M-ADMIN-SELF-001',
+            'first_name' => 'Admin',
+            'middle_name' => 'Portal',
+            'last_name' => 'User',
+            'email' => 'admin-self-profile@example.com',
+            'membership_status' => 'active',
+            'user_id' => $admin->id,
+        ]);
+
+        Sanctum::actingAs($admin);
+
+        $this->putJson('/api/v1/members/me/profile', [
+            'first_name' => 'Changed',
+            'middle_name' => 'Portal',
+            'last_name' => 'User',
+        ])->assertStatus(403);
+    }
 }

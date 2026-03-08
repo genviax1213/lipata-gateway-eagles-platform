@@ -25,6 +25,24 @@ interface DashboardPayload {
   can_manage_batch_applicant_contributions?: boolean;
 }
 
+interface SelfMemberProfile {
+  id: number;
+  member_number: string;
+  email: string | null;
+  first_name: string;
+  middle_name: string | null;
+  last_name: string;
+  spouse_name: string | null;
+  contact_number: string | null;
+  address: string | null;
+  date_of_birth: string | null;
+  batch: string | null;
+  induction_date: string | null;
+  membership_status: "active" | "inactive";
+  email_verified: boolean;
+  password_set: boolean;
+}
+
 interface ApplicantNotice {
   id: number;
   notice_text: string;
@@ -236,6 +254,7 @@ type PortalTab =
   | "batch-docs"
   | "application-archive"
   | "my-contributions"
+  | "my-profile"
   | "committee";
 
 const PAGE_SIZE = 10;
@@ -301,7 +320,21 @@ export default function PortalDashboard() {
   const [documentsPage, setDocumentsPage] = useState(1);
   const [feesPage, setFeesPage] = useState(1);
   const [committeeDocumentsPage, setCommitteeDocumentsPage] = useState(1);
+  const [profile, setProfile] = useState<SelfMemberProfile | null>(null);
+  const [profileLoaded, setProfileLoaded] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileForm, setProfileForm] = useState({
+    first_name: "",
+    middle_name: "",
+    last_name: "",
+    spouse_name: "",
+    contact_number: "",
+    address: "",
+    date_of_birth: "",
+    induction_date: "",
+  });
   const canBatchTreasurerManagePayments = Boolean(dashboard?.can_manage_batch_applicant_contributions);
+  const canSelfEditProfile = !isAdmin && dashboard?.view !== "applicant";
 
   const parseError = useCallback((err: unknown, fallback: string): string => {
     if (!axios.isAxiosError(err)) return fallback;
@@ -370,6 +403,30 @@ export default function PortalDashboard() {
         setContributionInfo("");
       }
 
+      if (!isAdmin && dashRes.data.view !== "applicant") {
+        try {
+          const profileRes = await api.get<SelfMemberProfile>("/members/me/profile");
+          setProfile(profileRes.data);
+          setProfileLoaded(true);
+          setProfileForm({
+            first_name: profileRes.data.first_name ?? "",
+            middle_name: profileRes.data.middle_name ?? "",
+            last_name: profileRes.data.last_name ?? "",
+            spouse_name: profileRes.data.spouse_name ?? "",
+            contact_number: profileRes.data.contact_number ?? "",
+            address: profileRes.data.address ?? "",
+            date_of_birth: profileRes.data.date_of_birth ?? "",
+            induction_date: profileRes.data.induction_date ?? "",
+          });
+        } catch {
+          setProfile(null);
+          setProfileLoaded(false);
+        }
+      } else {
+        setProfile(null);
+        setProfileLoaded(false);
+      }
+
       if (canChairmanReview || canChairmanSetContributionTarget || canChairmanLogContributionPayment) {
         setApplications([]);
       } else {
@@ -380,7 +437,7 @@ export default function PortalDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [canChairmanLogContributionPayment, canChairmanReview, canChairmanSetContributionTarget, canViewApplicantDashboard, parseError]);
+  }, [canChairmanLogContributionPayment, canChairmanReview, canChairmanSetContributionTarget, canViewApplicantDashboard, isAdmin, parseError]);
 
   useEffect(() => {
     void loadDashboard();
@@ -874,6 +931,37 @@ export default function PortalDashboard() {
     }
   };
 
+  const saveOwnProfile = async () => {
+    if (!canSelfEditProfile) return;
+
+    setError("");
+    setNotice("");
+    setSavingProfile(true);
+
+    try {
+      const response = await api.put<{ message?: string; member?: SelfMemberProfile }>("/members/me/profile", profileForm);
+      if (response.data?.member) {
+        setProfile(response.data.member);
+        setProfileForm({
+          first_name: response.data.member.first_name ?? "",
+          middle_name: response.data.member.middle_name ?? "",
+          last_name: response.data.member.last_name ?? "",
+          spouse_name: response.data.member.spouse_name ?? "",
+          contact_number: response.data.member.contact_number ?? "",
+          address: response.data.member.address ?? "",
+          date_of_birth: response.data.member.date_of_birth ?? "",
+          induction_date: response.data.member.induction_date ?? "",
+        });
+      }
+      setNotice(response.data?.message ?? "Profile updated successfully.");
+      await loadDashboard();
+    } catch (err) {
+      setError(parseError(err, "Failed to update profile."));
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
   const viewDocument = async (documentId: number, originalName: string) => {
     setError("");
     try {
@@ -924,6 +1012,7 @@ export default function PortalDashboard() {
         {dashboard?.view === "applicant" && applicantDetails?.batch && <button type="button" onClick={() => setActiveTab("batch-docs")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "batch-docs" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Batch Materials</button>}
         {dashboard?.application_archive_available && <button type="button" onClick={() => setActiveTab("application-archive")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "application-archive" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Application Archive</button>}
         {dashboard?.view !== "applicant" && <button type="button" onClick={() => setActiveTab("my-contributions")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "my-contributions" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>My Contributions</button>}
+        {canSelfEditProfile && <button type="button" onClick={() => setActiveTab("my-profile")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "my-profile" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>My Profile</button>}
         {isAdmin && <button type="button" onClick={() => setActiveTab("themes")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "themes" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Themes</button>}
         {isAdmin && <button type="button" onClick={() => setActiveTab("glossary")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "glossary" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Glossary</button>}
         {(canChairmanReview || canChairmanSetContributionTarget || canChairmanLogContributionPayment || canChairmanSetNotice || canChairmanSetStage || canChairmanReviewDocs || canBatchTreasurerManagePayments) && <button type="button" onClick={() => setActiveTab("committee")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "committee" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Application Review</button>}
@@ -1398,6 +1487,69 @@ export default function PortalDashboard() {
               </>
             )}
           </div>
+        </div>
+      )}
+
+      {activeTab === "my-profile" && canSelfEditProfile && (
+        <div className="rounded-xl border border-white/20 bg-white/10 p-4">
+          <h2 className="mb-2 font-heading text-2xl text-offwhite">My Profile</h2>
+          <p className="mb-4 text-sm text-mist/85">
+            Update your personal member data here. Email, batch, member number, membership status, and account verification settings are managed separately.
+          </p>
+
+          {!profileLoaded || !profile ? (
+            <p className="text-sm text-mist/80">No linked member profile found for this account.</p>
+          ) : (
+            <>
+              <div className="mb-4 grid gap-3 rounded-lg border border-white/15 bg-white/5 p-4 md:grid-cols-2">
+                <p className="text-sm text-mist/85">Member Number: <span className="text-offwhite">{profile.member_number}</span></p>
+                <p className="text-sm text-mist/85">Email: <span className="text-offwhite">{profile.email ?? "—"}</span></p>
+                <p className="text-sm text-mist/85">Batch: <span className="text-offwhite">{profile.batch ?? "—"}</span></p>
+                <p className="text-sm text-mist/85">Membership Status: <span className="text-offwhite">{profile.membership_status}</span></p>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <label htmlFor="self-first-name" className="mb-2 block text-xs uppercase tracking-wider text-gold-soft">First Name</label>
+                  <input id="self-first-name" value={profileForm.first_name} onChange={(e) => setProfileForm((prev) => ({ ...prev, first_name: e.target.value }))} className="w-full rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite focus:border-gold focus:outline-none" />
+                </div>
+                <div>
+                  <label htmlFor="self-middle-name" className="mb-2 block text-xs uppercase tracking-wider text-gold-soft">Middle Name</label>
+                  <input id="self-middle-name" value={profileForm.middle_name} onChange={(e) => setProfileForm((prev) => ({ ...prev, middle_name: e.target.value }))} className="w-full rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite focus:border-gold focus:outline-none" />
+                </div>
+                <div>
+                  <label htmlFor="self-last-name" className="mb-2 block text-xs uppercase tracking-wider text-gold-soft">Last Name</label>
+                  <input id="self-last-name" value={profileForm.last_name} onChange={(e) => setProfileForm((prev) => ({ ...prev, last_name: e.target.value }))} className="w-full rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite focus:border-gold focus:outline-none" />
+                </div>
+                <div>
+                  <label htmlFor="self-spouse-name" className="mb-2 block text-xs uppercase tracking-wider text-gold-soft">Spouse Name</label>
+                  <input id="self-spouse-name" value={profileForm.spouse_name} onChange={(e) => setProfileForm((prev) => ({ ...prev, spouse_name: e.target.value }))} className="w-full rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite focus:border-gold focus:outline-none" />
+                </div>
+                <div>
+                  <label htmlFor="self-contact-number" className="mb-2 block text-xs uppercase tracking-wider text-gold-soft">Contact Number</label>
+                  <input id="self-contact-number" value={profileForm.contact_number} onChange={(e) => setProfileForm((prev) => ({ ...prev, contact_number: e.target.value }))} className="w-full rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite focus:border-gold focus:outline-none" />
+                </div>
+                <div>
+                  <label htmlFor="self-date-of-birth" className="mb-2 block text-xs uppercase tracking-wider text-gold-soft">Date of Birth</label>
+                  <input id="self-date-of-birth" type="date" value={profileForm.date_of_birth} onChange={(e) => setProfileForm((prev) => ({ ...prev, date_of_birth: e.target.value }))} className="w-full rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite focus:border-gold focus:outline-none" />
+                </div>
+                <div className="md:col-span-2">
+                  <label htmlFor="self-address" className="mb-2 block text-xs uppercase tracking-wider text-gold-soft">Address</label>
+                  <textarea id="self-address" value={profileForm.address} onChange={(e) => setProfileForm((prev) => ({ ...prev, address: e.target.value }))} className="min-h-[96px] w-full rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite focus:border-gold focus:outline-none" />
+                </div>
+                <div>
+                  <label htmlFor="self-induction-date" className="mb-2 block text-xs uppercase tracking-wider text-gold-soft">Induction Date</label>
+                  <input id="self-induction-date" type="date" value={profileForm.induction_date} onChange={(e) => setProfileForm((prev) => ({ ...prev, induction_date: e.target.value }))} className="w-full rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite focus:border-gold focus:outline-none" />
+                </div>
+              </div>
+
+              <div className="mt-4 flex justify-end">
+                <button type="button" onClick={() => void saveOwnProfile()} disabled={savingProfile} className="btn-primary disabled:opacity-50">
+                  {savingProfile ? "Saving..." : "Save Profile"}
+                </button>
+              </div>
+            </>
+          )}
         </div>
       )}
 

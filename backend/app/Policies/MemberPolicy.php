@@ -12,6 +12,21 @@ class MemberPolicy
         return $user->hasPermission('members.view');
     }
 
+    public function manageOwnProfile(User $user, Member $member): bool
+    {
+        $roleName = (string) optional($user->role)->name;
+        if (in_array($roleName, ['superadmin', 'admin'], true)) {
+            return false;
+        }
+
+        if ($user->memberProfile?->id === $member->id) {
+            return true;
+        }
+
+        return strtolower(trim((string) $member->email)) !== ''
+            && strtolower(trim((string) $member->email)) === strtolower(trim((string) $user->email));
+    }
+
     public function viewFinanceDirectory(User $user): bool
     {
         return $user->hasPermission('finance.view');
