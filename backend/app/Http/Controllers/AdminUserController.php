@@ -33,6 +33,11 @@ class AdminUserController extends Controller
         return Str::of($value)->lower()->trim()->value();
     }
 
+    private function emailImmutableMessage(): string
+    {
+        return 'Registration email is the canonical account identity and cannot be changed.';
+    }
+
     private function preserveVerifiedEmailState(User $user, Member $member): void
     {
         if ($user->email_verified_at !== null || !(bool) $member->email_verified) {
@@ -318,11 +323,14 @@ class AdminUserController extends Controller
         /** @var User $actor */
         $actor = $request->user();
         $this->authorize('manageAdminUsers', [User::class, 'users.manage']);
-        $request->merge(['email' => $this->normalizeEmail((string) $request->input('email', ''))]);
+
+        if ($request->filled('email')) {
+            $request->merge(['email' => $this->normalizeEmail((string) $request->input('email', ''))]);
+        }
 
         $validated = $request->validate([
             'name' => 'required|string|max:120',
-            'email' => 'required|email|max:255|unique:users,email,' . $user->id,
+            'email' => 'sometimes|required|email|max:255',
             'password' => 'nullable|string|min:8|max:255',
             'role_id' => 'required|integer|exists:roles,id',
         ]);
@@ -335,34 +343,21 @@ class AdminUserController extends Controller
         $this->authorize('manageRoleAssignment', [User::class, $user, $selectedRole, 'update']);
 
         $currentEmail = $this->normalizeEmail((string) $user->email);
-        $requestedEmail = $this->normalizeEmail((string) $validated['email']);
-        if ($currentEmail === $this->bootstrapEmail() && $requestedEmail !== $currentEmail) {
+        $requestedEmail = $this->normalizeEmail((string) ($validated['email'] ?? $currentEmail));
+        if ($requestedEmail !== '' && $requestedEmail !== $currentEmail) {
             return response()->json([
-                'message' => 'The bootstrap superadmin email cannot be changed.',
+                'message' => $this->emailImmutableMessage(),
             ], 422);
         }
 
         $previousRole = optional($user->role)->name;
         DB::transaction(function () use ($user, $validated): void {
-            $previousEmail = (string) $user->email;
-
             $user->name = (string) TextCase::title($validated['name']);
-            $user->email = $validated['email'];
             $user->role_id = $validated['role_id'];
             if (!empty($validated['password'])) {
                 $user->password = Hash::make($validated['password']);
             }
             $user->save();
-
-            Member::query()
-                ->where('user_id', $user->id)
-                ->orWhereRaw('LOWER(TRIM(email)) = ?', [$previousEmail])
-                ->update(['email' => $validated['email']]);
-
-            Applicant::query()
-                ->where('user_id', $user->id)
-                ->orWhereRaw('LOWER(TRIM(email)) = ?', [$previousEmail])
-                ->update(['email' => $validated['email']]);
         });
 
         Log::info('admin.user_updated', [

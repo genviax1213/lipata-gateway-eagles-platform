@@ -755,3 +755,17 @@ Navigation/UI effect:
 - the portal members section is now visible to applicant-list viewers even when they do not have `members.view`
 - for ordinary members, the page opens directly on the applicant list rather than the member-management tab
 - the applicant list now includes newly registered applicants by loading all applicant statuses instead of only `under_review`
+
+### 2026-03-09 - Registration email immutability
+
+Implemented behavior:
+- registration email is now treated as the canonical identity for both members and applicants
+- post-registration email edits are blocked everywhere in the app:
+  - admin user update
+  - member directory update
+  - self-service member profile editing
+- email remains viewable where appropriate, but no longer editable after registration/verification
+
+Rationale:
+- verified registration email is now the source of truth for account identity and cross-record linkage
+- this removes drift between `users`, `members`, and applicant dossier records caused by later email edits

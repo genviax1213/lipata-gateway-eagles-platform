@@ -196,9 +196,11 @@ export default function MemberModal({
                     name="email"
                     type="email"
                     value={form.email}
-                    onChange={handleChange}
-                    className="w-full rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite placeholder:text-mist/70 focus:border-gold focus:outline-none"
+                    readOnly
+                    aria-readonly="true"
+                    className="w-full rounded-md border border-white/25 bg-white/5 px-4 py-2 text-offwhite/80 placeholder:text-mist/70 focus:outline-none"
                   />
+                  <p className="mt-1 text-xs text-mist/70">Registration email is locked and remains the source of truth for this account.</p>
                   {errors.email && <p className="text-sm text-red-300">{errors.email[0]}</p>}
                 </div>
 

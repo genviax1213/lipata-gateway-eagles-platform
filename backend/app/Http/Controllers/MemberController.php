@@ -8,7 +8,6 @@ use App\Models\MemberRegistration;
 use App\Models\User;
 use App\Support\RoleHierarchy;
 use App\Support\TextCase;
-use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -23,6 +22,11 @@ class MemberController extends Controller
     private function bootstrapEmail(): string
     {
         return $this->normalizeEmail((string) config('app.bootstrap_superadmin_email', 'admin@lipataeagles.ph'));
+    }
+
+    private function emailImmutableMessage(): string
+    {
+        return 'Registration email is the canonical account identity and cannot be changed.';
     }
 
     private function resolveActorMember(User $user): ?Member
@@ -181,7 +185,7 @@ class MemberController extends Controller
 
         $validated = $request->validate([
             'member_number' => 'required|string|max:50|unique:members,member_number,' . $member->id,
-            'email' => 'nullable|email|max:255|unique:members,email,' . $member->id,
+            'email' => 'sometimes|nullable|email|max:255',
             'first_name' => 'required|string|max:120',
             'middle_name' => ['required', 'string', 'min:2', 'max:120', 'not_regex:/\./'],
             'last_name' => 'required|string|max:120',
@@ -227,46 +231,27 @@ class MemberController extends Controller
 
         $currentEmail = $this->normalizeEmail((string) ($member->email ?? ''));
         $requestedEmail = $this->normalizeEmail((string) ($validated['email'] ?? ''));
-        if ($currentEmail === $this->bootstrapEmail() && $requestedEmail !== $currentEmail) {
+        if ($requestedEmail !== '' && $requestedEmail !== $currentEmail) {
             return response()->json([
-                'message' => 'The bootstrap superadmin email cannot be changed.',
+                'message' => $this->emailImmutableMessage(),
             ], 422);
         }
 
-        try {
-            DB::transaction(function () use ($member, $validated): void {
-                $previousEmail = (string) ($member->email ?? '');
-                $member->update($validated);
+        DB::transaction(function () use ($member, $validated): void {
+            $member->update($validated);
 
-                if ($member->user_id) {
-                    User::query()
-                        ->where('id', $member->user_id)
-                        ->update([
-                            'email' => $validated['email'],
-                            'email_verified_at' => ($validated['email_verified'] ?? $member->email_verified) ? now() : null,
-                        ]);
-                }
+            if ($member->user_id) {
+                User::query()
+                    ->where('id', $member->user_id)
+                    ->update([
+                        'email_verified_at' => ($validated['email_verified'] ?? $member->email_verified) ? now() : null,
+                    ]);
+            }
 
-                $member->email_verified = (bool) ($validated['email_verified'] ?? $member->email_verified);
-                $member->password_set = (bool) ($validated['password_set'] ?? $member->password_set);
-                $member->save();
-
-                $applicationQuery = Applicant::query();
-                if ($member->user_id) {
-                    $applicationQuery->where('user_id', $member->user_id);
-                    if ($previousEmail !== '') {
-                        $applicationQuery->orWhereRaw('LOWER(TRIM(email)) = ?', [$previousEmail]);
-                    }
-                } else {
-                    $applicationQuery->whereRaw('LOWER(TRIM(email)) = ?', [$previousEmail]);
-                }
-                $applicationQuery->update(['email' => $validated['email']]);
-            });
-        } catch (QueryException $exception) {
-            return response()->json([
-                'message' => 'Email is already linked to another portal account.',
-            ], 422);
-        }
+            $member->email_verified = (bool) ($validated['email_verified'] ?? $member->email_verified);
+            $member->password_set = (bool) ($validated['password_set'] ?? $member->password_set);
+            $member->save();
+        });
 
         return response()->json($member);
     }

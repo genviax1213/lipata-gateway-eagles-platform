@@ -136,6 +136,8 @@ Seeder note:
   - `GET /api/v1/members/me/profile`
   - `PUT /api/v1/members/me/profile`
 - This self-service profile flow intentionally excludes email, batch, membership status, and account verification fields from self-editing.
+- Registration email is the canonical account identity for both members and applicants.
+- Post-registration email edits are blocked across admin user updates, member-directory updates, and self-service profile editing.
 - `MemberContributionHistorySeeder` is restricted to `local`/`testing` by default and will throw outside those environments unless `ALLOW_MEMBER_HISTORY_SEEDER=true`.
 - `FinanceWorkflowDemoSeeder` is restricted to `local`/`testing` by default and seeds Treasurer/Auditor workflow examples, including opening balances, expenses, and follow-up notes.
 - Workflow reference: [docs/finance-workflows.md](/mnt/rll/projects/lipata-gateway-eagles-platform/docs/finance-workflows.md)

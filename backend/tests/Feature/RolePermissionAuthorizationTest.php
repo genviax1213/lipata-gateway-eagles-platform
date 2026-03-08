@@ -1281,35 +1281,33 @@ class RolePermissionAuthorizationTest extends TestCase
         $this->assertSame('2023-07-24', $member->induction_date);
     }
 
-    public function test_bootstrap_superadmin_email_cannot_be_changed_via_member_profile_update(): void
+    public function test_member_directory_email_cannot_be_changed_after_registration(): void
     {
-        config()->set('app.bootstrap_superadmin_email', 'admin@lipataeagles.ph');
-
         $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
         $admin = User::factory()->create([
             'role_id' => $adminRole->id,
         ]);
 
         $member = Member::query()->create([
-            'member_number' => 'M-BOOT-001',
-            'first_name' => 'System',
-            'middle_name' => 'Super',
-            'last_name' => 'Admin',
-            'email' => 'admin@lipataeagles.ph',
+            'member_number' => 'M-LOCK-001',
+            'first_name' => 'Locked',
+            'middle_name' => 'Email',
+            'last_name' => 'Member',
+            'email' => 'locked-member@example.com',
             'membership_status' => 'active',
         ]);
 
         Sanctum::actingAs($admin);
 
         $this->putJson("/api/v1/members/{$member->id}", [
-            'member_number' => 'M-BOOT-001',
-            'email' => 'new-bootstrap@example.com',
-            'first_name' => 'System',
-            'middle_name' => 'Super',
-            'last_name' => 'Admin',
+            'member_number' => 'M-LOCK-001',
+            'email' => 'new-email@example.com',
+            'first_name' => 'Locked',
+            'middle_name' => 'Email',
+            'last_name' => 'Member',
             'membership_status' => 'active',
         ])->assertStatus(422)
-            ->assertJsonPath('message', 'The bootstrap superadmin email cannot be changed.');
+            ->assertJsonPath('message', 'Registration email is the canonical account identity and cannot be changed.');
     }
 
     public function test_member_can_update_own_profile_without_email_or_batch_edit(): void

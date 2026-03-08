@@ -277,7 +277,7 @@ class AuditLoggingTest extends TestCase
 
         $this->putJson("/api/v1/admin/users/{$target->id}", [
             'name' => 'Updated Target',
-            'email' => 'updated-target@example.com',
+            'email' => $target->email,
             'role_id' => $memberRole->id,
         ])->assertOk();
 
