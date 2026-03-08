@@ -5,7 +5,7 @@ import MemberModal from "../components/MemberModal";
 import DeleteModal from "../components/DeleteModal";
 import type { Member, Applicant, MemberForm, ValidationErrors } from "../types/member";
 import { useAuth } from "../contexts/useAuth";
-import { hasPermission } from "../utils/auth";
+import { hasPermission, isAdminUser } from "../utils/auth";
 import {
   PORTAL_DATA_REFRESH_EVENT,
   isPortalDataRefreshScope,
@@ -21,8 +21,9 @@ export default function Members() {
   const canApproveApplications = hasPermission(user, "applications.review");
   const actorRoleName = (user?.role as { name?: string } | undefined)?.name ?? null;
   const canDeleteApplicants = actorRoleName === "superadmin";
-  const canEditMembers = hasPermission(user, "members.update");
-  const canDeleteMembers = hasPermission(user, "members.delete");
+  const canManageMembers = isAdminUser(user);
+  const canEditMembers = canManageMembers;
+  const canDeleteMembers = canManageMembers;
   const canEditMemberBatch = hasPermission(user, "applications.review");
 
   const [activeTab, setActiveTab] = useState<MembersTab>(() => (canViewMembers ? "members" : "applications"));
@@ -377,7 +378,7 @@ export default function Members() {
                       <th className="px-4 py-3 text-left">Contact</th>
                       <th className="px-4 py-3 text-left">Email Verified</th>
                       <th className="px-4 py-3 text-left">Password Set</th>
-                      <th className="px-4 py-3 text-left">Actions</th>
+                      {canManageMembers && <th className="px-4 py-3 text-left">Actions</th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -398,26 +399,25 @@ export default function Members() {
                             {m.password_set ? "Set" : "Not Set"}
                           </span>
                         </td>
-                        <td className="px-4 py-3 space-x-3">
-                          {canEditMembers && (
-                            <button onClick={() => setEditing(m)} className="text-gold hover:text-gold-soft hover:underline">
-                              Edit
-                            </button>
-                          )}
-                          {canDeleteMembers && (
-                            <button onClick={() => setDeleting(m)} className="text-red-300 hover:underline">
-                              Delete
-                            </button>
-                          )}
-                          {!canEditMembers && !canDeleteMembers && (
-                            <span className="text-xs text-mist/70">Read only</span>
-                          )}
-                        </td>
+                        {canManageMembers && (
+                          <td className="px-4 py-3 space-x-3">
+                            {canEditMembers && (
+                              <button onClick={() => setEditing(m)} className="text-gold hover:text-gold-soft hover:underline">
+                                Edit
+                              </button>
+                            )}
+                            {canDeleteMembers && (
+                              <button onClick={() => setDeleting(m)} className="text-red-300 hover:underline">
+                                Delete
+                              </button>
+                            )}
+                          </td>
+                        )}
                       </tr>
                     ))}
                     {members.length === 0 && (
                       <tr>
-                        <td colSpan={8} className="px-4 py-8 text-center text-mist/80">No members found for the current filters.</td>
+                        <td colSpan={canManageMembers ? 8 : 7} className="px-4 py-8 text-center text-mist/80">No members found for the current filters.</td>
                       </tr>
                     )}
                   </tbody>
