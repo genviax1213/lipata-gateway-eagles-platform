@@ -653,6 +653,15 @@ export default function PortalDashboard() {
     }
   }, [canChairmanReview, parseError]);
 
+  const refreshSelectedCommitteeApplication = useCallback(async (applicationId: number) => {
+    try {
+      const res = await api.get<ApplicantDetails>(`/applicants/${applicationId}`);
+      setSelectedApplicationDetails(res.data);
+    } catch {
+      setSelectedApplicationDetails(null);
+    }
+  }, []);
+
   const loadBatchSupportData = useCallback(async () => {
     if (!canChairmanReview) return;
 
@@ -737,19 +746,37 @@ export default function PortalDashboard() {
     }
   };
 
-  const chairmanAction = async (path: string, payload?: Record<string, unknown>) => {
+  const chairmanAction = useCallback(async (path: string, payload?: Record<string, unknown>) => {
     if (!selectedApplication) return;
     setError("");
     setNotice("");
 
     try {
-      await api.post(`/applicants/${selectedApplication.id}/${path}`, payload ?? {});
+      const res = await api.post<{ message?: string; application?: Partial<ApplicationRow> & { id?: number } }>(
+        `/applicants/${selectedApplication.id}/${path}`,
+        payload ?? {},
+      );
+      const updatedApplication = res.data?.application;
+      if (updatedApplication?.id) {
+        setApplications((current) => current.map((item) => (
+          item.id === updatedApplication.id
+            ? {
+                ...item,
+                status: (updatedApplication.status as ApplicationRow["status"] | undefined) ?? item.status,
+                decision_status: (updatedApplication.decision_status as ApplicationRow["decision_status"] | undefined) ?? item.decision_status,
+                current_stage: (updatedApplication.current_stage as string | null | undefined) ?? item.current_stage,
+              }
+            : item
+        )));
+        await refreshSelectedCommitteeApplication(updatedApplication.id);
+      } else {
+        await refreshSelectedCommitteeApplication(selectedApplication.id);
+      }
       setNotice("Application decision updated.");
-      await loadDashboard();
     } catch (err) {
       setError(parseError(err, "Failed to update application."));
     }
-  };
+  }, [parseError, refreshSelectedCommitteeApplication, selectedApplication]);
 
   const setNoticeForApplicant = async () => {
     if (!selectedApplication || !noticeText.trim()) return;
@@ -1608,7 +1635,13 @@ export default function PortalDashboard() {
 
               {canChairmanReview && (
                 <div className="flex flex-wrap gap-2">
-                  <button className="btn-secondary" onClick={() => void chairmanAction("approve")}>Approve</button>
+                  <button
+                    className="btn-secondary"
+                    onClick={() => void chairmanAction("approve")}
+                    disabled={selectedApplication.status !== "under_review"}
+                  >
+                    Approve
+                  </button>
                   {selectedApplicationDetails?.activation_eligible && (
                     <button className="btn-secondary" onClick={() => void activateApplicantAsMember()}>Activate as Member</button>
                   )}

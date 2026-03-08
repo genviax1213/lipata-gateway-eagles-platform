@@ -77,6 +77,43 @@ class ApplicantFlowTest extends TestCase
         $this->assertSame('applicant', User::query()->findOrFail($applicantUser->id)->role->name);
     }
 
+    public function test_only_under_review_applicant_can_be_approved_by_membership_chairman(): void
+    {
+        $chairmanRole = Role::query()->where('name', 'membership_chairman')->firstOrFail();
+        $applicantRole = Role::query()->where('name', 'applicant')->firstOrFail();
+
+        $chairman = User::factory()->create(['role_id' => $chairmanRole->id]);
+        $applicantUser = User::factory()->create([
+            'role_id' => $applicantRole->id,
+            'email' => 'not-ready@applicant.test',
+        ]);
+
+        $application = Applicant::query()->create([
+            'user_id' => $applicantUser->id,
+            'first_name' => 'Not',
+            'middle_name' => 'Yet',
+            'last_name' => 'Reviewable',
+            'email' => 'not-ready@applicant.test',
+            'membership_status' => 'applicant',
+            'status' => Applicant::STATUS_PENDING_VERIFICATION,
+            'decision_status' => 'pending',
+            'current_stage' => 'interview',
+            'verification_token' => hash('sha256', 'not-ready-token'),
+            'email_verified_at' => null,
+            'is_login_blocked' => false,
+        ]);
+
+        Sanctum::actingAs($chairman);
+
+        $this->postJson("/api/v1/applicants/{$application->id}/approve")
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Only verified applications under review can be approved.');
+
+        $application->refresh();
+        $this->assertSame(Applicant::STATUS_PENDING_VERIFICATION, $application->status);
+        $this->assertSame('pending', $application->decision_status);
+    }
+
     public function test_eligible_official_applicant_can_be_activated_as_member_by_chairman(): void
     {
         $chairmanRole = Role::query()->where('name', 'membership_chairman')->firstOrFail();
