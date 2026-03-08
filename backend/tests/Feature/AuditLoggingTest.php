@@ -561,7 +561,7 @@ class AuditLoggingTest extends TestCase
             'reviewed_at' => now(),
         ]);
 
-        $this->postJson('/api/v1/member-applications/reapply', [
+        $this->postJson('/api/v1/applicant-registrations/reapply', [
             'email' => 'reapply-audit@applicant.test',
             'password' => 'Password123',
             'password_confirmation' => 'Password123',

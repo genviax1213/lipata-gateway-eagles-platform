@@ -32,7 +32,7 @@ class MemberApplicationFlowTest extends TestCase
     {
         Notification::fake();
 
-        $submit = $this->postJson('/api/v1/member-applications', [
+        $submit = $this->postJson('/api/v1/applicant-registrations', [
             'first_name' => 'Juan',
             'middle_name' => 'Santos',
             'last_name' => 'Dela Cruz',
@@ -53,7 +53,7 @@ class MemberApplicationFlowTest extends TestCase
         });
         $this->assertNotEmpty($token);
 
-        $verify = $this->postJson('/api/v1/member-applications/verify', [
+        $verify = $this->postJson('/api/v1/applicant-registrations/verify', [
             'email' => 'juan@applicant.test',
             'verification_token' => $token,
         ]);
@@ -213,7 +213,7 @@ class MemberApplicationFlowTest extends TestCase
             'reviewed_at' => now(),
         ]);
 
-        $response = $this->postJson('/api/v1/member-applications/reapply', [
+        $response = $this->postJson('/api/v1/applicant-registrations/reapply', [
             'email' => 'reapply@applicant.test',
             'password' => 'Password123',
             'password_confirmation' => 'Password123',
@@ -260,7 +260,7 @@ class MemberApplicationFlowTest extends TestCase
             'email_verified_at' => now(),
         ]);
 
-        $this->postJson('/api/v1/member-applications/reapply', [
+        $this->postJson('/api/v1/applicant-registrations/reapply', [
             'email' => 'reapply-open@applicant.test',
             'password' => 'Password123',
             'password_confirmation' => 'Password123',
@@ -499,7 +499,7 @@ class MemberApplicationFlowTest extends TestCase
             'membership_status' => 'active',
         ]);
 
-        $submit = $this->postJson('/api/v1/member-applications', [
+        $submit = $this->postJson('/api/v1/applicant-registrations', [
             'first_name' => 'Juan',
             'middle_name' => 'Santos',
             'last_name' => 'Dela Cruz',
@@ -526,7 +526,7 @@ class MemberApplicationFlowTest extends TestCase
             'membership_status' => 'active',
         ]);
 
-        $submit = $this->postJson('/api/v1/member-applications', [
+        $submit = $this->postJson('/api/v1/applicant-registrations', [
             'first_name' => 'New',
             'middle_name' => 'Bravo',
             'last_name' => 'Applicant',
@@ -540,7 +540,7 @@ class MemberApplicationFlowTest extends TestCase
 
     public function test_application_requires_all_fields(): void
     {
-        $submit = $this->postJson('/api/v1/member-applications', [
+        $submit = $this->postJson('/api/v1/applicant-registrations', [
             'first_name' => '   ',
             'middle_name' => '',
             'last_name' => 'Applicant',
@@ -562,7 +562,7 @@ class MemberApplicationFlowTest extends TestCase
     {
         Notification::fake();
 
-        $submit = $this->postJson('/api/v1/member-applications', [
+        $submit = $this->postJson('/api/v1/applicant-registrations', [
             'first_name' => 'Pedro',
             'middle_name' => 'Salazar',
             'last_name' => 'Cruz',
@@ -582,7 +582,7 @@ class MemberApplicationFlowTest extends TestCase
         });
         $this->assertNotEmpty($token);
 
-        $this->postJson('/api/v1/member-applications/verify', [
+        $this->postJson('/api/v1/applicant-registrations/verify', [
             'email' => 'pedro@applicant.test',
             'verification_token' => $token,
         ])->assertOk();
@@ -599,7 +599,7 @@ class MemberApplicationFlowTest extends TestCase
     {
         Notification::fake();
 
-        $submit = $this->postJson('/api/v1/member-applications', [
+        $submit = $this->postJson('/api/v1/applicant-registrations', [
             'first_name' => 'Luis',
             'middle_name' => 'Soriano',
             'last_name' => 'Delos Reyes',
@@ -619,7 +619,7 @@ class MemberApplicationFlowTest extends TestCase
         });
         $this->assertNotEmpty($token);
 
-        $this->postJson('/api/v1/member-applications/verify', [
+        $this->postJson('/api/v1/applicant-registrations/verify', [
             'email' => 'luis@applicant.test',
             'verification_token' => $token,
         ])->assertOk();

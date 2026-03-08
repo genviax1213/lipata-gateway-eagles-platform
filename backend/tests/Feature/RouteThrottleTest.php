@@ -40,7 +40,7 @@ class RouteThrottleTest extends TestCase
         $email = 'throttle-submit@applicant.test';
 
         for ($i = 0; $i < 5; $i++) {
-            $response = $this->postJson('/api/v1/member-applications', [
+            $response = $this->postJson('/api/v1/applicant-registrations', [
                 'first_name' => 'Juan',
                 'middle_name' => 'Santos',
                 'last_name' => 'Dela Cruz',
@@ -53,7 +53,7 @@ class RouteThrottleTest extends TestCase
             $this->assertContains($response->status(), [201, 422]);
         }
 
-        $blocked = $this->postJson('/api/v1/member-applications', [
+        $blocked = $this->postJson('/api/v1/applicant-registrations', [
             'first_name' => 'Juan',
             'middle_name' => 'Santos',
             'last_name' => 'Dela Cruz',
@@ -90,7 +90,7 @@ class RouteThrottleTest extends TestCase
         $email = 'throttle-verify@example.test';
 
         for ($i = 0; $i < 5; $i++) {
-            $response = $this->postJson('/api/v1/member-applications/verify', [
+            $response = $this->postJson('/api/v1/applicant-registrations/verify', [
                 'email' => $email,
                 'verification_token' => 'invalid-token-value',
             ]);
@@ -98,7 +98,7 @@ class RouteThrottleTest extends TestCase
             $this->assertSame(422, $response->status());
         }
 
-        $blocked = $this->postJson('/api/v1/member-applications/verify', [
+        $blocked = $this->postJson('/api/v1/applicant-registrations/verify', [
             'email' => $email,
             'verification_token' => 'invalid-token-value',
         ]);

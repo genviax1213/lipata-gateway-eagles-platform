@@ -55,7 +55,6 @@ export default function AppRoutes() {
               </GuestRoute>
             }
           />
-          <Route path="/member-application" element={<Navigate to="/applicant-registration" replace />} />
           <Route path="/news/:slug" element={<Layout><NewsArticle /></Layout>} />
 
           {/* Auth */}

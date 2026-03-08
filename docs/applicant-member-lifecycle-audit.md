@@ -549,7 +549,7 @@ Residual gap after slice 3:
 ### 2026-03-08 - Local implementation slice 4
 
 Implemented locally:
-- public reapply shortcut via `POST /api/v1/member-applications/reapply`
+- public reapply shortcut via `POST /api/v1/applicant-registrations/reapply`
 - reapply uses the archived application email to start a fresh `pending_verification` application
 - archived application remains immutable; the new reapplication creates a separate new record
 - reapply resets the applicant account back into a fresh verification cycle using a new password and verification token
@@ -574,7 +574,7 @@ Implemented locally:
 - archived applications no longer reopen the active applicant dashboard path
 - archived applicants without a linked member profile now resolve to general view plus archive availability instead of active applicant view
 - portal dashboard applicant lifecycle fields now use explicit shared status unions instead of generic strings
-- member-application ownership and archive/open status rules were consolidated so dashboard and applicant endpoints follow the same lifecycle split
+- applicant ownership and archive/open status rules were consolidated so dashboard and applicant endpoints follow the same lifecycle split
 - archive tab visibility now follows the dashboard contract instead of disappearing silently on archive fetch failure
 - regression coverage now checks that archived applicant records stay out of the active applicant dashboard flow
 
@@ -666,7 +666,6 @@ Implemented locally:
 - frontend public routes are now split:
   - `/applicant-registration`
   - `/member-registration`
-  - legacy `/member-application` redirects to `/applicant-registration`
 
 Behavioral outcome:
 - outsider applicant:

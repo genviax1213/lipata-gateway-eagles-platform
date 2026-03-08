@@ -31,14 +31,6 @@ Route::prefix('v1')->group(function () {
     Route::post('/member-registrations/verify', [MemberRegistrationController::class, 'verify'])
         ->middleware('throttle:application-verify');
 
-    // Backward-compatible aliases during route transition.
-    Route::post('/member-applications', [MemberApplicationController::class, 'submit'])
-        ->middleware('throttle:application-submit');
-    Route::post('/member-applications/reapply', [MemberApplicationController::class, 'reapply'])
-        ->middleware('throttle:application-submit');
-    Route::post('/member-applications/verify', [MemberApplicationController::class, 'verify'])
-        ->middleware('throttle:application-verify');
-
     // Login route
     Route::post('/login', [AuthController::class, 'login'])
         ->middleware('throttle:auth-login');
