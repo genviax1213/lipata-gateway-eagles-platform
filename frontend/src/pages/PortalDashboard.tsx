@@ -544,10 +544,17 @@ export default function PortalDashboard() {
   }, [currentHistoryDetails?.fees.requirements, feesPage]);
   const feesLastPage = Math.max(1, Math.ceil((currentHistoryDetails?.fees.requirements?.length ?? 0) / PAGE_SIZE));
 
-  const userFullName = useMemo(
-    () => (typeof user?.name === "string" ? user.name : "Unknown User"),
-    [user],
-  );
+  const userFullName = useMemo(() => {
+    if (typeof user?.name === "string" && user.name.trim()) {
+      return user.name;
+    }
+
+    if (typeof user?.email === "string" && user.email.trim()) {
+      return user.email;
+    }
+
+    return "Portal Account";
+  }, [user]);
   const userEmail = useMemo(
     () => (typeof user?.email === "string" ? user.email : "-"),
     [user],
