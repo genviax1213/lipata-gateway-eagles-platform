@@ -20,6 +20,11 @@ class MemberController extends Controller
         return Str::of($value)->lower()->trim()->value();
     }
 
+    private function bootstrapEmail(): string
+    {
+        return $this->normalizeEmail((string) config('app.bootstrap_superadmin_email', 'admin@lipataeagles.ph'));
+    }
+
     public function index(Request $request)
     {
         $this->authorize('viewMemberDirectory', Member::class);
@@ -109,6 +114,14 @@ class MemberController extends Controller
         $validated['batch'] = isset($validated['batch']) && $validated['batch'] !== ''
             ? (string) TextCase::title($validated['batch'])
             : null;
+
+        $currentEmail = $this->normalizeEmail((string) ($member->email ?? ''));
+        $requestedEmail = $this->normalizeEmail((string) ($validated['email'] ?? ''));
+        if ($currentEmail === $this->bootstrapEmail() && $requestedEmail !== $currentEmail) {
+            return response()->json([
+                'message' => 'The bootstrap superadmin email cannot be changed.',
+            ], 422);
+        }
 
         try {
             DB::transaction(function () use ($member, $validated): void {

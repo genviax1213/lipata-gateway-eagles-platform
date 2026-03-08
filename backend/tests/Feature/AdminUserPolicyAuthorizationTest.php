@@ -240,4 +240,25 @@ class AdminUserPolicyAuthorizationTest extends TestCase
             ->assertJsonPath('message', 'Password updated successfully.');
         $this->assertTrue(Hash::check('NewPass456', (string) $target->fresh()->password));
     }
+
+    public function test_bootstrap_superadmin_email_cannot_be_changed_via_user_update(): void
+    {
+        config()->set('app.bootstrap_superadmin_email', 'admin@lipataeagles.ph');
+
+        $superadminRole = Role::query()->where('name', 'superadmin')->firstOrFail();
+        $actor = User::factory()->create(['role_id' => $superadminRole->id]);
+        $target = User::factory()->create([
+            'role_id' => $superadminRole->id,
+            'email' => 'admin@lipataeagles.ph',
+        ]);
+
+        Sanctum::actingAs($actor);
+
+        $this->putJson("/api/v1/admin/users/{$target->id}", [
+            'name' => $target->name,
+            'email' => 'changed-bootstrap@example.com',
+            'role_id' => $superadminRole->id,
+        ])->assertStatus(422)
+            ->assertJsonPath('message', 'The bootstrap superadmin email cannot be changed.');
+    }
 }

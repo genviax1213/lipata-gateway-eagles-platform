@@ -896,4 +896,35 @@ class RolePermissionAuthorizationTest extends TestCase
         $this->assertSame('1988-06-10', $member->date_of_birth);
         $this->assertSame('2023-07-24', $member->induction_date);
     }
+
+    public function test_bootstrap_superadmin_email_cannot_be_changed_via_member_profile_update(): void
+    {
+        config()->set('app.bootstrap_superadmin_email', 'admin@lipataeagles.ph');
+
+        $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
+        $admin = User::factory()->create([
+            'role_id' => $adminRole->id,
+        ]);
+
+        $member = Member::query()->create([
+            'member_number' => 'M-BOOT-001',
+            'first_name' => 'System',
+            'middle_name' => 'Super',
+            'last_name' => 'Admin',
+            'email' => 'admin@lipataeagles.ph',
+            'membership_status' => 'active',
+        ]);
+
+        Sanctum::actingAs($admin);
+
+        $this->putJson("/api/v1/members/{$member->id}", [
+            'member_number' => 'M-BOOT-001',
+            'email' => 'new-bootstrap@example.com',
+            'first_name' => 'System',
+            'middle_name' => 'Super',
+            'last_name' => 'Admin',
+            'membership_status' => 'active',
+        ])->assertStatus(422)
+            ->assertJsonPath('message', 'The bootstrap superadmin email cannot be changed.');
+    }
 }

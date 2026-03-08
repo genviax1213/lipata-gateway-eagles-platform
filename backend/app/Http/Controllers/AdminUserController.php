@@ -18,6 +18,11 @@ class AdminUserController extends Controller
 {
     private const FORUM_ROLES = ['forum_moderator'];
 
+    private function bootstrapEmail(): string
+    {
+        return $this->normalizeEmail((string) config('app.bootstrap_superadmin_email', 'admin@lipataeagles.ph'));
+    }
+
     private function isProtectedAdminRole(?string $roleName): bool
     {
         return in_array($roleName, [RoleHierarchy::SUPERADMIN, RoleHierarchy::ADMIN], true);
@@ -299,6 +304,14 @@ class AdminUserController extends Controller
             return $response;
         }
         $this->authorize('manageRoleAssignment', [User::class, $user, $selectedRole, 'update']);
+
+        $currentEmail = $this->normalizeEmail((string) $user->email);
+        $requestedEmail = $this->normalizeEmail((string) $validated['email']);
+        if ($currentEmail === $this->bootstrapEmail() && $requestedEmail !== $currentEmail) {
+            return response()->json([
+                'message' => 'The bootstrap superadmin email cannot be changed.',
+            ], 422);
+        }
 
         $previousRole = optional($user->role)->name;
         DB::transaction(function () use ($user, $validated): void {
