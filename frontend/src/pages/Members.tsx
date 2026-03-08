@@ -33,8 +33,10 @@ export default function Members() {
   const [passwordSetFilter, setPasswordSetFilter] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [lastPage, setLastPage] = useState(1);
+  const [totalMembers, setTotalMembers] = useState(0);
   const [applicationsPage, setApplicationsPage] = useState(1);
   const [applicationsLastPage, setApplicationsLastPage] = useState(1);
+  const [totalApplications, setTotalApplications] = useState(0);
 
   const [editing, setEditing] = useState<Member | null>(null);
   const [deleting, setDeleting] = useState<Member | null>(null);
@@ -59,6 +61,7 @@ export default function Members() {
     setMembers(res.data.data);
     setCurrentPage(res.data.current_page);
     setLastPage(res.data.last_page);
+    setTotalMembers(Number(res.data.total ?? res.data.data.length));
     setMembersLoaded(true);
   }, [emailVerifiedFilter, passwordSetFilter, search]);
 
@@ -68,6 +71,7 @@ export default function Members() {
     setApplications((res.data?.data ?? []) as Applicant[]);
     setApplicationsPage(Number(res.data?.current_page ?? 1));
     setApplicationsLastPage(Number(res.data?.last_page ?? 1));
+    setTotalApplications(Number(res.data?.total ?? (res.data?.data ?? []).length));
     setApplicationsLoaded(true);
   }, [canViewApplications]);
 
@@ -250,6 +254,26 @@ export default function Members() {
         <p className="mb-4 rounded-md border border-gold/30 bg-gold/10 px-4 py-2 text-sm text-gold-soft">
           {notice}
         </p>
+      )}
+
+      {effectiveActiveTab === "members" && canViewMembers && membersLoaded && (
+        <div className="mb-4 rounded-lg border border-white/15 bg-white/5 px-4 py-3 text-sm text-mist/90">
+          Total members: <span className="font-semibold text-offwhite">{totalMembers}</span>
+          {" | "}
+          Rows on page: <span className="font-semibold text-offwhite">{members.length}</span>
+          {" | "}
+          Page <span className="font-semibold text-offwhite">{currentPage}</span> of <span className="font-semibold text-offwhite">{lastPage}</span>
+        </div>
+      )}
+
+      {effectiveActiveTab === "applications" && canViewApplications && applicationsLoaded && (
+        <div className="mb-4 rounded-lg border border-white/15 bg-white/5 px-4 py-3 text-sm text-mist/90">
+          Total applicants: <span className="font-semibold text-offwhite">{totalApplications}</span>
+          {" | "}
+          Rows on page: <span className="font-semibold text-offwhite">{applications.length}</span>
+          {" | "}
+          Page <span className="font-semibold text-offwhite">{applicationsPage}</span> of <span className="font-semibold text-offwhite">{applicationsLastPage}</span>
+        </div>
       )}
 
       <div className="mb-6 flex flex-wrap gap-2">
