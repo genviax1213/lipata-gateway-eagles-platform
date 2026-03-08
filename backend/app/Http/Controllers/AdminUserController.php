@@ -33,6 +33,15 @@ class AdminUserController extends Controller
         return Str::of($value)->lower()->trim()->value();
     }
 
+    private function preserveVerifiedEmailState(User $user, Member $member): void
+    {
+        if ($user->email_verified_at !== null || !(bool) $member->email_verified) {
+            return;
+        }
+
+        $user->forceFill(['email_verified_at' => now()])->saveQuietly();
+    }
+
     private function rejectLifecycleManagedRole(Role $role)
     {
         if (!RoleHierarchy::isLifecycleManagedPrimaryRole($role->name)) {
@@ -189,6 +198,7 @@ class AdminUserController extends Controller
             $linkedUser->role_id = $selectedRole->id;
         }
 
+        $this->preserveVerifiedEmailState($linkedUser, $member);
         $linkedUser->finance_role = null;
         $linkedUser->forum_role = in_array($forumRole, self::FORUM_ROLES, true) ? $forumRole : null;
         $linkedUser->save();
@@ -199,7 +209,7 @@ class AdminUserController extends Controller
         if ($member->email !== $memberEmail) {
             $member->email = $memberEmail;
         }
-        $member->email_verified = (bool) $linkedUser->email_verified_at;
+        $member->email_verified = $member->email_verified || (bool) $linkedUser->email_verified_at;
         $member->password_set = !empty($linkedUser->password);
         $member->save();
 
@@ -451,9 +461,11 @@ class AdminUserController extends Controller
             ], 409);
         }
 
+        $this->preserveVerifiedEmailState($actor, $member);
+
         $member->user_id = $actor->id;
         $member->email = $normalizedEmail;
-        $member->email_verified = (bool) $actor->email_verified_at;
+        $member->email_verified = $member->email_verified || (bool) $actor->email_verified_at;
         $member->password_set = !empty($actor->password);
         $member->save();
 

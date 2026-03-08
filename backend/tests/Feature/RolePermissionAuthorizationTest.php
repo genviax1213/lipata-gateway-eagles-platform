@@ -333,6 +333,41 @@ class RolePermissionAuthorizationTest extends TestCase
             ->assertJsonPath('message', 'Batch assignment is managed by the membership chairman through the applicant batch workflow.');
     }
 
+    public function test_assigning_role_to_verified_member_preserves_verified_state(): void
+    {
+        $superadminRole = Role::query()->where('name', 'superadmin')->firstOrFail();
+        $officerRole = Role::query()->where('name', 'officer')->firstOrFail();
+        $memberRole = Role::query()->where('name', 'member')->firstOrFail();
+
+        $superadmin = User::factory()->create(['role_id' => $superadminRole->id]);
+        $linkedUser = User::factory()->create([
+            'role_id' => $memberRole->id,
+            'email' => 'verified-member@test.local',
+            'email_verified_at' => null,
+        ]);
+
+        $member = Member::query()->create([
+            'member_number' => 'LGEC-VERIFY-001',
+            'first_name' => 'Verified',
+            'middle_name' => 'Existing',
+            'last_name' => 'Member',
+            'email' => 'verified-member@test.local',
+            'membership_status' => 'active',
+            'email_verified' => true,
+            'password_set' => true,
+            'user_id' => $linkedUser->id,
+        ]);
+
+        Sanctum::actingAs($superadmin);
+
+        $this->putJson("/api/v1/admin/members/{$member->id}/role", [
+            'role_id' => $officerRole->id,
+        ])->assertOk();
+
+        $this->assertNotNull($linkedUser->fresh()->email_verified_at);
+        $this->assertTrue((bool) $member->fresh()->email_verified);
+    }
+
     public function test_membership_chairman_can_create_and_assign_applicant_batch(): void
     {
         $chairmanRole = Role::query()->where('name', 'membership_chairman')->firstOrFail();

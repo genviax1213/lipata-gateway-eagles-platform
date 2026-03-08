@@ -188,11 +188,16 @@ class User extends Authenticatable
             }
         }
 
-        $emailVerified = $user->email_verified_at !== null;
-        $passwordSet = !empty($user->password);
-
         if (!$member) {
             return;
+        }
+
+        $memberEmailVerified = (bool) $member->email_verified;
+        $emailVerified = $user->email_verified_at !== null || $memberEmailVerified;
+        $passwordSet = !empty($user->password);
+
+        if ($emailVerified && $user->email_verified_at === null) {
+            $user->forceFill(['email_verified_at' => now()])->saveQuietly();
         }
 
         $member->fill([

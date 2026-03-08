@@ -66,7 +66,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const navItems = useMemo(
     () => [
       { to: "/portal", label: "Dashboard", icon: "dashboard", show: true, end: true },
-      { to: "/portal/members", label: canViewMembers ? "Directory" : "Applicants", icon: "members", show: canOpenMembersSection },
+      { to: "/portal/members", label: "Directory", icon: "members", show: canOpenMembersSection },
       { to: "/portal/contributions", label: canViewFinance ? "Finance" : "My Contributions", icon: "finance", show: true },
       { to: "/portal/forum", label: "Forum", icon: "forum", show: canViewForum },
       { to: "/portal/posts", label: "CMS Posts", icon: "cms", show: canManageCmsPosts },

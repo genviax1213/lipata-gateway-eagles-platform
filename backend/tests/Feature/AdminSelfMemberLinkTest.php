@@ -59,4 +59,33 @@ class AdminSelfMemberLinkTest extends TestCase
         $this->postJson('/api/v1/admin/users/me/link-member-profile')
             ->assertStatus(404);
     }
+
+    public function test_linking_self_to_verified_member_preserves_verified_state(): void
+    {
+        $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
+        $admin = User::factory()->create([
+            'role_id' => $adminRole->id,
+            'email' => 'verified-link@test.local',
+            'email_verified_at' => null,
+        ]);
+
+        $member = Member::query()->create([
+            'member_number' => 'LGEC-2026-10000',
+            'first_name' => 'Verified',
+            'middle_name' => 'Member',
+            'last_name' => 'Link',
+            'email' => 'verified-link@test.local',
+            'membership_status' => 'active',
+            'email_verified' => true,
+            'user_id' => null,
+        ]);
+
+        Sanctum::actingAs($admin);
+
+        $this->postJson('/api/v1/admin/users/me/link-member-profile')
+            ->assertOk();
+
+        $this->assertNotNull($admin->fresh()->email_verified_at);
+        $this->assertTrue((bool) $member->fresh()->email_verified);
+    }
 }
