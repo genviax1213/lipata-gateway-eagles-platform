@@ -427,17 +427,12 @@ export default function PortalDashboard() {
         setProfileLoaded(false);
       }
 
-      if (canChairmanReview || canChairmanSetContributionTarget || canChairmanLogContributionPayment) {
-        setApplications([]);
-      } else {
-        setApplications([]);
-      }
     } catch (err) {
       setError(parseError(err, "Unable to load dashboard."));
     } finally {
       setLoading(false);
     }
-  }, [canChairmanLogContributionPayment, canChairmanReview, canChairmanSetContributionTarget, canViewApplicantDashboard, isAdmin, parseError]);
+  }, [canViewApplicantDashboard, isAdmin, parseError]);
 
   useEffect(() => {
     void loadDashboard();
