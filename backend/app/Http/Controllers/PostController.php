@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Post;
 use App\Support\ImageUploadOptimizer;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
@@ -178,6 +179,7 @@ class PostController extends Controller
         }
 
         Storage::disk('public')->delete($path);
+        $this->deleteMirroredCmsImagePath($path);
 
         return response()->json([
             'message' => 'Image deleted from library.',
@@ -220,10 +222,12 @@ class PostController extends Controller
                 true,
                 $this->targetCmsImageBytes()
             );
+            $this->mirrorCmsImagePath($validated['image_path']);
         } elseif (array_key_exists('selected_image_path', $validated)) {
             $selectedImagePath = $this->normalizeStorageImagePath($validated['selected_image_path']);
             if ($selectedImagePath && $this->isSelectableLibraryImage($selectedImagePath)) {
                 $validated['image_path'] = $selectedImagePath;
+                $this->mirrorCmsImagePath($validated['image_path']);
             } elseif ($selectedImagePath) {
                 return response()->json([
                     'message' => 'Selected image is not available. Please pick one from the image library list.',
@@ -272,10 +276,12 @@ class PostController extends Controller
                 true,
                 $this->targetCmsImageBytes()
             );
+            $this->mirrorCmsImagePath($validated['image_path']);
         } elseif (array_key_exists('selected_image_path', $validated)) {
             $selectedImagePath = $this->normalizeStorageImagePath($validated['selected_image_path']);
             if ($selectedImagePath && $this->isSelectableLibraryImage($selectedImagePath)) {
                 $validated['image_path'] = $selectedImagePath;
+                $this->mirrorCmsImagePath($validated['image_path']);
             } elseif ($selectedImagePath) {
                 return response()->json([
                     'message' => 'Selected image is not available. Please pick one from the image library list.',
@@ -316,11 +322,38 @@ class PostController extends Controller
             true,
             $this->targetCmsImageBytes()
         );
+        $this->mirrorCmsImagePath($path);
 
         return response()->json([
             'url' => asset('storage/' . $path),
             'path' => $path,
         ], 201);
+    }
+
+    private function mirrorCmsImagePath(?string $imagePath): void
+    {
+        $path = $this->normalizeStorageImagePath($imagePath);
+        $mirrorRoot = rtrim((string) config('app.cms_public_image_mirror_root', ''), '/');
+
+        if (!$path || $mirrorRoot === '' || !Storage::disk('public')->exists($path)) {
+            return;
+        }
+
+        $target = $mirrorRoot . '/' . $path;
+        File::ensureDirectoryExists(dirname($target));
+        File::copy(Storage::disk('public')->path($path), $target);
+    }
+
+    private function deleteMirroredCmsImagePath(?string $imagePath): void
+    {
+        $path = $this->normalizeStorageImagePath($imagePath);
+        $mirrorRoot = rtrim((string) config('app.cms_public_image_mirror_root', ''), '/');
+
+        if (!$path || $mirrorRoot === '') {
+            return;
+        }
+
+        File::delete($mirrorRoot . '/' . $path);
     }
 
     private function uniqueSlug(string $base, ?int $ignoreId = null): string

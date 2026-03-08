@@ -9,6 +9,8 @@ use App\Models\User;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
@@ -111,6 +113,33 @@ class CmsImageLibraryTest extends TestCase
             'title' => 'Another Post',
             'image_path' => 'posts/in-use.jpg',
         ]);
+    }
+
+    public function test_store_post_mirrors_uploaded_image_when_public_mirror_root_is_configured(): void
+    {
+        $officer = $this->officerUser();
+        $mirrorRoot = storage_path('framework/testing/cms-public-mirror');
+        File::deleteDirectory($mirrorRoot);
+        Config::set('app.cms_public_image_mirror_root', $mirrorRoot);
+
+        Sanctum::actingAs($officer);
+
+        $response = $this->post('/api/v1/cms/posts', [
+            'title' => 'Mirrored Image Post',
+            'section' => 'news',
+            'excerpt' => 'Excerpt',
+            'content' => '<p>Content</p>',
+            'status' => 'published',
+            'image' => UploadedFile::fake()->image('cover.jpg'),
+        ]);
+
+        $response->assertCreated();
+
+        $post = Post::query()->where('title', 'Mirrored Image Post')->firstOrFail();
+        $this->assertNotNull($post->image_path);
+        $this->assertFileExists($mirrorRoot . '/' . $post->image_path);
+
+        File::deleteDirectory($mirrorRoot);
     }
 
     public function test_delete_library_image_removes_unlinked_image(): void

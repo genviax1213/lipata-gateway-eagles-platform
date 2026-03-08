@@ -108,6 +108,9 @@
   - `cd backend && php artisan optimize:clear`
   - `cd backend && php artisan config:cache`
 - Verification emails for both `member-registration` and `applicant-registration` now read the frontend base URL from `config('app.frontend_url')`, so production links will follow `FRONTEND_URL` consistently.
+- On shared-hosting setups where the public site root is separate from `backend/public`, CMS cover images can be mirrored into the public web root by setting:
+  - `CMS_PUBLIC_IMAGE_MIRROR_ROOT=/absolute/path/to/public_html/storage`
+  This keeps newly uploaded CMS images visible at `/storage/...` even when the backend writes to `storage/app/public`.
 - Google OAuth is supported for:
   - `Portal Login` (existing registered email only)
   - `member-registration` (Google-verified email skips manual token verification and activates immediately)

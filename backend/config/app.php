@@ -62,6 +62,8 @@ return [
 
     'bootstrap_superadmin_recovery_token_ttl' => (int) env('BOOTSTRAP_SUPERADMIN_RECOVERY_TOKEN_TTL', 15),
 
+    'cms_public_image_mirror_root' => env('CMS_PUBLIC_IMAGE_MIRROR_ROOT'),
+
     /*
     |--------------------------------------------------------------------------
     | Application Timezone
