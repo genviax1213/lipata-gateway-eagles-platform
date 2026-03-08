@@ -311,6 +311,7 @@ export default function CmsPosts() {
   const [appliedPostQuery, setAppliedPostQuery] = useState("");
   const [appliedPostSectionFilter, setAppliedPostSectionFilter] = useState("");
   const [availableImages, setAvailableImages] = useState<AvailableCmsImage[]>([]);
+  const [selectedCoverImage, setSelectedCoverImage] = useState<AvailableCmsImage | null>(null);
   const [imagesMeta, setImagesMeta] = useState<PaginatedMeta>({ current_page: 1, last_page: 1, per_page: 8, total: 0 });
   const [imagesLoaded, setImagesLoaded] = useState(false);
   const [imageFilterDraft, setImageFilterDraft] = useState<"all" | "linked" | "unlinked">("all");
@@ -337,8 +338,8 @@ export default function CmsPosts() {
   const pointerDragRef = useRef<{ pointerId: number; startX: number; startY: number; originX: number; originY: number } | null>(null);
   const editingPost = editingId ? posts.find((p) => p.id === editingId) : null;
   const selectedLibraryImage = useMemo(
-    () => availableImages.find((image) => image.path === form.selected_image_path) ?? null,
-    [availableImages, form.selected_image_path],
+    () => selectedCoverImage ?? availableImages.find((image) => image.path === form.selected_image_path) ?? null,
+    [availableImages, form.selected_image_path, selectedCoverImage],
   );
   const previewImageUrl = previewUploadUrl || selectedLibraryImage?.url || editingPost?.image_url || "";
   const cropRendered = sourceImage
@@ -436,6 +437,7 @@ export default function CmsPosts() {
       selected_image_path: image.path,
       image: null,
     }));
+    setSelectedCoverImage(image);
     setProcessedImageMeta(null);
     setSourceImage(null);
     setCrop({ x: 0, y: 0, zoom: 1 });
@@ -597,6 +599,18 @@ export default function CmsPosts() {
   }, [sourceImage]);
 
   useEffect(() => {
+    if (!form.selected_image_path) {
+      setSelectedCoverImage(null);
+      return;
+    }
+
+    const matchedImage = availableImages.find((image) => image.path === form.selected_image_path);
+    if (matchedImage) {
+      setSelectedCoverImage(matchedImage);
+    }
+  }, [availableImages, form.selected_image_path]);
+
+  useEffect(() => {
     const onPointerMove = (event: PointerEvent) => {
       const drag = pointerDragRef.current;
       if (!drag || drag.pointerId !== event.pointerId || !sourceImage) return;
@@ -714,6 +728,7 @@ export default function CmsPosts() {
 
   function resetForm() {
     setForm(initialForm);
+    setSelectedCoverImage(null);
     setProcessedImageMeta(null);
     setSourceImage(null);
     setCrop({ x: 0, y: 0, zoom: 1 });
@@ -753,6 +768,7 @@ export default function CmsPosts() {
     });
     setMessage("");
     setError("");
+    setSelectedCoverImage(null);
     setProcessedImageMeta(null);
     setSourceImage(null);
     setCrop({ x: 0, y: 0, zoom: 1 });
@@ -979,6 +995,7 @@ export default function CmsPosts() {
               onChange={(file) => {
                 if (file) {
                   setForm((prev) => ({ ...prev, selected_image_path: "" }));
+                  setSelectedCoverImage(null);
                 }
                 void handleImageChange(file);
               }}
@@ -1006,7 +1023,10 @@ export default function CmsPosts() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => setForm((prev) => ({ ...prev, selected_image_path: "" }))}
+                  onClick={() => {
+                    setForm((prev) => ({ ...prev, selected_image_path: "" }));
+                    setSelectedCoverImage(null);
+                  }}
                   className="rounded-md border border-white/30 px-3 py-1.5 text-xs text-offwhite"
                 >
                   {editingId ? "Clear replacement" : "Clear"}
