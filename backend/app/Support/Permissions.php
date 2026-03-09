@@ -16,7 +16,6 @@ class Permissions
 
     // Member Management Permissions
     public const MEMBERS_VIEW = 'members.view';
-    public const MEMBERS_CREATE = 'members.create';
     public const MEMBERS_UPDATE = 'members.update';
     public const MEMBERS_DELETE = 'members.delete';
 
@@ -64,7 +63,6 @@ class Permissions
     {
         return [
             self::MEMBERS_VIEW,
-            self::MEMBERS_CREATE,
             self::MEMBERS_UPDATE,
             self::MEMBERS_DELETE,
         ];

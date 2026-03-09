@@ -510,7 +510,7 @@ class ApplicantFlowTest extends TestCase
             ->assertJsonCount(2, 'notices');
     }
 
-    public function test_direct_member_create_endpoint_is_disabled(): void
+    public function test_direct_member_create_route_is_not_available(): void
     {
         $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
         $admin = User::factory()->create([
@@ -526,7 +526,7 @@ class ApplicantFlowTest extends TestCase
             'membership_status' => 'active',
         ]);
 
-        $response->assertStatus(422);
+        $response->assertStatus(405);
     }
 
     public function test_duplicate_person_application_is_blocked_with_email_edit_guidance(): void
