@@ -88,6 +88,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/members', [MemberController::class, 'index'])->middleware('portal.permission:members.view');
         Route::get('/members/me/profile', [MemberController::class, 'myProfile']);
         Route::get('/members/{member}/formal-photo', [FormalPhotoController::class, 'showForMember']);
+        Route::post('/members/{member}/assign-applicant-batch', [MemberController::class, 'assignApplicantBatch'])->middleware('throttle:members-write', 'portal.permission:applications.review');
         Route::put('/members/me/profile', [MemberController::class, 'updateMyProfile']);
         Route::post('/members', [MemberController::class, 'store'])->middleware('throttle:members-write', 'portal.permission:members.create');
         Route::put('/members/{member}', [MemberController::class, 'update'])->middleware('throttle:members-write', 'portal.permission:members.update');

@@ -648,6 +648,7 @@ class ApplicantController extends Controller
         }
 
         $status = (string) $request->query('status', Applicant::STATUS_UNDER_REVIEW);
+        $search = trim((string) $request->query('search', ''));
         $allowed = [
             Applicant::STATUS_PENDING_VERIFICATION,
             Applicant::STATUS_UNDER_REVIEW,
@@ -666,6 +667,19 @@ class ApplicantController extends Controller
 
         if ($status !== 'all') {
             $query->where('status', $status);
+        }
+
+        if ($search !== '') {
+            $query->where(function ($builder) use ($search): void {
+                $builder
+                    ->where('first_name', 'like', "%{$search}%")
+                    ->orWhere('middle_name', 'like', "%{$search}%")
+                    ->orWhere('last_name', 'like', "%{$search}%")
+                    ->orWhere('email', 'like', "%{$search}%")
+                    ->orWhereHas('batch', function ($batchQuery) use ($search): void {
+                        $batchQuery->where('name', 'like', "%{$search}%");
+                    });
+            });
         }
 
         return response()->json($query->latest('id')->paginate(20));

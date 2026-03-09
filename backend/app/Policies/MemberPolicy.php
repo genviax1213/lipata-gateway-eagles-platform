@@ -4,6 +4,8 @@ namespace App\Policies;
 
 use App\Models\Member;
 use App\Models\User;
+use App\Support\Permissions;
+use App\Support\RoleHierarchy;
 
 class MemberPolicy
 {
@@ -39,5 +41,11 @@ class MemberPolicy
             return true;
         }
         return $user->hasPermission('finance.view');
+    }
+
+    public function assignBatch(User $user, Member $member): bool
+    {
+        return (string) optional($user->role)->name === RoleHierarchy::MEMBERSHIP_CHAIRMAN
+            && $user->hasPermission(Permissions::APPLICATIONS_REVIEW);
     }
 }

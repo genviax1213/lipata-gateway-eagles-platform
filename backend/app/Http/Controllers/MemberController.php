@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ApplicantBatch;
 use App\Models\FormalPhoto;
 use App\Models\Member;
 use App\Models\Applicant;
@@ -263,6 +264,28 @@ class MemberController extends Controller
         });
 
         return response()->json($member);
+    }
+
+    public function assignApplicantBatch(Request $request, Member $member)
+    {
+        $this->authorize('assignBatch', $member);
+
+        $validated = $request->validate([
+            'batch_id' => 'required|integer|exists:applicant_batches,id',
+        ]);
+
+        $batch = ApplicantBatch::query()->findOrFail((int) $validated['batch_id']);
+        $member->batch = $batch->name;
+        $member->save();
+
+        return response()->json([
+            'message' => 'Member batch assigned.',
+            'member' => $member->fresh(),
+            'batch' => [
+                'id' => $batch->id,
+                'name' => $batch->name,
+            ],
+        ]);
     }
 
     public function destroy(Request $request, Member $member)

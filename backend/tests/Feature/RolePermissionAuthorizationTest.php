@@ -6,8 +6,10 @@ use App\Models\Post;
 use App\Models\Role;
 use App\Models\Member;
 use App\Models\Applicant;
+use App\Models\ApplicantBatch;
 use App\Models\Contribution;
 use App\Models\FinanceAccount;
+use App\Models\Permission;
 use App\Models\User;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -443,6 +445,73 @@ class RolePermissionAuthorizationTest extends TestCase
         $this->assertDatabaseHas('applicants', [
             'id' => $applicant->id,
             'batch_id' => $batchId,
+        ]);
+    }
+
+    public function test_membership_chairman_can_assign_existing_member_to_applicant_batch_without_members_update(): void
+    {
+        $chairmanRole = Role::query()->where('name', 'membership_chairman')->firstOrFail();
+        $chairman = User::factory()->create(['role_id' => $chairmanRole->id]);
+
+        $member = Member::query()->create([
+            'member_number' => 'M-CHAIR-BATCH-001',
+            'first_name' => 'Existing',
+            'middle_name' => 'Batch',
+            'last_name' => 'Member',
+            'membership_status' => 'active',
+            'email' => 'existing-batch-member@test.local',
+            'batch' => 'Alpha Batch',
+        ]);
+
+        $batch = ApplicantBatch::query()->create([
+            'name' => 'Batch Bonifacio',
+        ]);
+
+        Sanctum::actingAs($chairman);
+
+        $this->postJson("/api/v1/members/{$member->id}/assign-applicant-batch", [
+            'batch_id' => $batch->id,
+        ])->assertOk()
+            ->assertJsonPath('message', 'Member batch assigned.')
+            ->assertJsonPath('member.batch', 'Batch Bonifacio')
+            ->assertJsonPath('batch.id', $batch->id);
+
+        $this->assertDatabaseHas('members', [
+            'id' => $member->id,
+            'batch' => 'Batch Bonifacio',
+        ]);
+    }
+
+    public function test_admin_cannot_assign_existing_member_to_applicant_batch_via_chairman_endpoint(): void
+    {
+        $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
+        $admin = User::factory()->create(['role_id' => $adminRole->id]);
+        $reviewPermission = Permission::query()->where('name', 'applications.review')->firstOrFail();
+        $admin->role->permissions()->syncWithoutDetaching([$reviewPermission->id]);
+
+        $member = Member::query()->create([
+            'member_number' => 'M-ADMIN-BATCH-001',
+            'first_name' => 'Admin',
+            'middle_name' => 'Blocked',
+            'last_name' => 'Member',
+            'membership_status' => 'active',
+            'email' => 'admin-batch-member@test.local',
+            'batch' => 'Alpha Batch',
+        ]);
+
+        $batch = ApplicantBatch::query()->create([
+            'name' => 'Batch Luna',
+        ]);
+
+        Sanctum::actingAs($admin);
+
+        $this->postJson("/api/v1/members/{$member->id}/assign-applicant-batch", [
+            'batch_id' => $batch->id,
+        ])->assertStatus(403);
+
+        $this->assertDatabaseHas('members', [
+            'id' => $member->id,
+            'batch' => 'Alpha Batch',
         ]);
     }
 
