@@ -25,7 +25,7 @@ class SecurityHeaders
         }
 
         if (!$response->headers->has('Permissions-Policy')) {
-            $response->headers->set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+            $response->headers->set('Permissions-Policy', 'camera=(self), microphone=(), geolocation=()');
         }
 
         if (!$response->headers->has('Content-Security-Policy')) {
