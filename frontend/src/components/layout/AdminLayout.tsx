@@ -16,6 +16,7 @@ function getPortalTitle(user: Record<string, unknown> | null): string {
     if (roleName === "membership_chairman") return "Membership Committee Chairman Portal";
     if (roleName === "superadmin") return "Superadmin Portal";
     if (roleName === "admin") return "Admin Portal";
+    if (roleName === "secretary") return "Secretary Portal";
     if (roleName === "officer") return "Officer Portal";
     if (roleName === "treasurer") return "Treasurer Portal";
     if (roleName === "auditor") return "Auditor Portal";

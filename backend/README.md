@@ -24,7 +24,7 @@
   - API responses include `X-Request-Id`
   - Structured audit events are available for auth, admin role/user changes, applicant decisions, finance reversals, and finance audit-note creation
   - Finance direction now covers both contribution and expense review activity, with account-aware visibility across bank, GCash, and cash on hand
-  - Query playbook: `docs/incident-response-logging.md`
+  - Detailed incident-response playbooks should stay in internal, non-public operational docs.
 
 ## Authorization Policy Map
 
@@ -77,8 +77,8 @@
 - `MAIL_FROM_ADDRESS`
 - `MAIL_FROM_NAME`
 - `ADMIN_INITIAL_PASSWORD` (optional; if unset, seeder generates a random admin password)
-- `BOOTSTRAP_SUPERADMIN_EMAIL` (optional; defaults to `admin@lipataeagles.ph`)
-- `BOOTSTRAP_SUPERADMIN_RECOVERY_EMAIL` (optional; defaults to `r.lanugon@gmail.com`)
+- `BOOTSTRAP_SUPERADMIN_EMAIL` (optional)
+- `BOOTSTRAP_SUPERADMIN_RECOVERY_EMAIL` (optional)
 - `BOOTSTRAP_SUPERADMIN_RECOVERY_TOKEN_TTL` (optional; minutes, defaults to `15`)
 - `TEMP_LOGIN_PASSWORD` (required when running `TemporaryLoginSeeder`)
 - `ALLOW_MEMBER_HISTORY_SEEDER` (default `false`; set to `true` only when intentionally running member history seeding outside local/testing)
@@ -109,8 +109,8 @@
   - `cd backend && php artisan config:cache`
 - Verification emails for both `member-registration` and `applicant-registration` now read the frontend base URL from `config('app.frontend_url')`, so production links will follow `FRONTEND_URL` consistently.
 - On shared-hosting setups where the public site root is separate from `backend/public`, CMS cover images can be mirrored into the public web root by setting:
-  - `CMS_PUBLIC_IMAGE_MIRROR_ROOT=/absolute/path/to/public_html/storage`
-  This keeps newly uploaded CMS images visible at `/storage/...` even when the backend writes to `storage/app/public`.
+  - `CMS_PUBLIC_IMAGE_MIRROR_ROOT=/absolute/path/to/public-storage-mirror`
+  Keep the exact host path in internal deployment notes, not in the public repo.
 - Google OAuth is supported for:
   - `Portal Login` (existing registered email only)
   - `member-registration` (Google-verified email skips manual token verification and activates immediately)
@@ -119,22 +119,14 @@
   - `GOOGLE_CLIENT_ID`
   - `GOOGLE_CLIENT_SECRET`
   - `GOOGLE_REDIRECT_URI=https://lgec.org/oauth/google/callback`
-- Hidden/session-backed Google routes:
-  - `GET /oauth/google/redirect?intent=login|member_registration|applicant_registration`
-  - `GET /oauth/google/callback`
-  - `GET /api/v1/oauth/google/status`
-  - `GET /api/v1/oauth/google/claim?intent=member_registration|applicant_registration`
+- Keep exact internal OAuth flow routes in implementation code or internal runbooks rather than public-facing docs.
 
 Seeder note:
 - `AdminSeeder` sets initial admin password only when admin account does not yet exist.
 - Re-running seeders will not rotate an existing admin password.
-- Hidden bootstrap recovery endpoints are available for the bootstrap superadmin only:
-  - `POST /api/v1/rll`
-  - `POST /api/v1/rll/verify`
-  - `POST /api/v1/rll/reset`
-- These are intentionally not exposed in the UI and send recovery mail only to the configured bootstrap recovery email.
+- Bootstrap recovery is available only for the bootstrap superadmin and should be documented in internal operational notes, not public repo docs.
 - The bootstrap superadmin is excluded from the generic forgot/reset-password routes and from the admin user-password reset endpoint.
-- Bootstrap password recovery is only supported through the protected `/api/v1/rll*` flow, while authenticated password change remains available to the signed-in bootstrap account.
+- Bootstrap password recovery remains restricted to the protected bootstrap-only flow, while authenticated password change stays available to the signed-in bootstrap account.
 - Non-admin users with a linked member profile can use:
   - `GET /api/v1/members/me/profile`
   - `PUT /api/v1/members/me/profile`
@@ -143,7 +135,7 @@ Seeder note:
 - Post-registration email edits are blocked across admin user updates, member-directory updates, and self-service profile editing.
 - `MemberContributionHistorySeeder` is restricted to `local`/`testing` by default and will throw outside those environments unless `ALLOW_MEMBER_HISTORY_SEEDER=true`.
 - `FinanceWorkflowDemoSeeder` is restricted to `local`/`testing` by default and seeds Treasurer/Auditor workflow examples, including opening balances, expenses, and follow-up notes.
-- Workflow reference: [docs/finance-workflows.md](/mnt/rll/projects/lipata-gateway-eagles-platform/docs/finance-workflows.md)
+- Workflow reference belongs in internal finance/runbook documentation, not the public repo.
 
 ### Migration Release Note
 

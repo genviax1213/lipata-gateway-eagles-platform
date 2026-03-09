@@ -40,6 +40,8 @@ export default function SecretaryAttendancePanel({ onNotice, onError }: Secretar
   const streamRef = useRef<MediaStream | null>(null);
   const rafRef = useRef<number | null>(null);
   const scanLockRef = useRef(false);
+  const cameraActiveRef = useRef(false);
+  const selectedEventIdRef = useRef<number | null>(null);
 
   const selectedEvent = events.find((item) => item.id === selectedEventId) ?? null;
   const visibleRoster = selectedEventId ? roster : [];
@@ -81,7 +83,12 @@ export default function SecretaryAttendancePanel({ onNotice, onError }: Secretar
     return () => window.clearTimeout(timer);
   }, [loadRoster, selectedEventId]);
 
+  useEffect(() => {
+    selectedEventIdRef.current = selectedEventId;
+  }, [selectedEventId]);
+
   const stopCamera = () => {
+    cameraActiveRef.current = false;
     if (rafRef.current !== null) {
       window.cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
@@ -89,21 +96,25 @@ export default function SecretaryAttendancePanel({ onNotice, onError }: Secretar
 
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
     setCameraActive(false);
   };
 
   useEffect(() => stopCamera, []);
 
   const submitToken = async (token: string) => {
-    if (!selectedEventId || !token.trim()) return;
+    const eventId = selectedEventIdRef.current;
+    if (!eventId || !token.trim()) return;
 
     try {
-      const res = await api.post<{ message?: string }>(`/attendance/events/${selectedEventId}/scan`, {
+      const res = await api.post<{ message?: string }>(`/attendance/events/${eventId}/scan`, {
         qr_token: token.trim(),
       });
       onNotice(res.data?.message ?? "Attendance recorded.");
       setManualToken("");
-      await Promise.all([loadEvents(), loadRoster(selectedEventId)]);
+      await Promise.all([loadEvents(), loadRoster(eventId)]);
     } catch (err) {
       const message = axios.isAxiosError(err)
         ? ((err.response?.data as { message?: string } | undefined)?.message ?? "Unable to record attendance.")
@@ -115,7 +126,7 @@ export default function SecretaryAttendancePanel({ onNotice, onError }: Secretar
   const scanFrame = () => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    if (!video || !canvas || !cameraActive) return;
+    if (!video || !canvas || !cameraActiveRef.current) return;
 
     if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
       rafRef.current = window.requestAnimationFrame(scanFrame);
@@ -162,9 +173,11 @@ export default function SecretaryAttendancePanel({ onNotice, onError }: Secretar
         await videoRef.current.play();
       }
 
+      cameraActiveRef.current = true;
       setCameraActive(true);
       rafRef.current = window.requestAnimationFrame(scanFrame);
     } catch {
+      cameraActiveRef.current = false;
       onError("Unable to open the camera scanner. Check browser camera permission and HTTPS context.");
     }
   };
@@ -178,7 +191,7 @@ export default function SecretaryAttendancePanel({ onNotice, onError }: Secretar
         </p>
 
         <div className="mt-4 grid gap-4 lg:grid-cols-[280px_1fr]">
-          <div className="rounded-xl border border-white/15 bg-white/5 p-4">
+          <div>
             <label className="mb-2 block text-xs uppercase tracking-[0.18em] text-gold-soft">Attendance Event</label>
             <select
               value={selectedEventId ? String(selectedEventId) : ""}
@@ -198,7 +211,7 @@ export default function SecretaryAttendancePanel({ onNotice, onError }: Secretar
             </div>
           </div>
 
-          <div className="rounded-xl border border-white/15 bg-white/5 p-4">
+          <div>
             <div className="flex flex-wrap gap-2">
               <button type="button" className="btn-primary" onClick={() => void startCamera()} disabled={!selectedEventId || cameraActive}>Start Scanner</button>
               <button type="button" className="rounded-md border border-white/25 px-3 py-2 text-sm text-offwhite disabled:opacity-50" onClick={stopCamera} disabled={!cameraActive}>Stop Scanner</button>
@@ -208,7 +221,7 @@ export default function SecretaryAttendancePanel({ onNotice, onError }: Secretar
                 <video ref={videoRef} className="min-h-[260px] w-full object-cover" muted playsInline />
                 <canvas ref={canvasRef} className="hidden" />
               </div>
-              <div className="rounded-xl border border-white/15 bg-white/5 p-4">
+              <div>
                 <label className="mb-2 block text-xs uppercase tracking-[0.18em] text-gold-soft">Manual QR Token</label>
                 <textarea
                   value={manualToken}

@@ -15,9 +15,14 @@ BLOCKCHAIN_*.md
 frontend-dist-deploy.tgz
 frontend/dist/
 .private-docs/
+.obsidian/
 .github/PULL_REQUEST_TEMPLATE.md
 docs/codex-session-scope-agreement.md
 docs/finance-workflows.md
+docs/*incident-response*.md
+docs/*runbook*.md
+docs/*security*.md
+docs/*playbook*.md
 docs/software-engineering-standards.md
 ARCHITECTURE_IMPROVEMENTS.md
 BUILD_SPEC.DRAFT.md

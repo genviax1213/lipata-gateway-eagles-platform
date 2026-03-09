@@ -212,9 +212,9 @@ export default function CalendarNoticesPanel({ canManage, onNotice, onError }: C
       <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
         <div className="rounded-xl border border-white/20 bg-white/10 p-4">
           <h3 className="font-heading text-xl text-offwhite">Upcoming Schedule</h3>
-          <div className="mt-4 space-y-3">
+          <div className="mt-4">
             {upcomingEvents.map((event) => (
-              <div key={event.id} className="rounded-lg border border-white/15 bg-white/5 p-4">
+              <div key={event.id} className="border-t border-white/10 py-4 first:border-t-0 first:pt-0 last:pb-0">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <p className="text-xs uppercase tracking-[0.18em] text-gold-soft">{event.event_type}</p>
