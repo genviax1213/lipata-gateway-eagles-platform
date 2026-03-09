@@ -1984,11 +1984,13 @@ export default function PortalDashboard() {
           ) : (
             <>
               <div className="mb-3 overflow-x-auto rounded-lg border border-white/20">
-                <table className="min-w-full text-sm text-offwhite">
+                <table className="min-w-[860px] text-sm text-offwhite">
                   <thead className="bg-navy/70 text-gold-soft">
                     <tr>
                       <th className="px-3 py-2 text-left">Select</th>
                       <th className="px-3 py-2 text-left">Applicant</th>
+                      <th className="px-3 py-2 text-left">Email</th>
+                      <th className="px-3 py-2 text-left">Batch</th>
                       <th className="px-3 py-2 text-left">Status</th>
                       <th className="px-3 py-2 text-left">Decision</th>
                     </tr>
@@ -2006,6 +2008,8 @@ export default function PortalDashboard() {
                           </button>
                         </td>
                         <td className="px-3 py-2">{appName(app)}</td>
+                        <td className="px-3 py-2 text-mist/85">{app.email}</td>
+                        <td className="px-3 py-2 text-mist/85">{app.batch?.name ?? "Unassigned"}</td>
                         <td className="px-3 py-2">{app.status}</td>
                         <td className="px-3 py-2">{app.decision_status}</td>
                       </tr>
@@ -2013,11 +2017,28 @@ export default function PortalDashboard() {
                   </tbody>
                 </table>
               </div>
+              <div className="mb-2 text-[11px] text-mist/65 sm:text-xs">
+                Scroll sideways on narrow screens to see all review columns.
+              </div>
               <div className="mb-4 flex items-center justify-between text-xs text-mist/80">
                 <span>Page {applicationsPage} of {applicationsLastPage} | Total {applications.length}</span>
                 <div className="flex gap-2">
-                  <button type="button" className="btn-secondary" disabled={applicationsPage <= 1} onClick={() => setApplicationsPage((current) => Math.max(1, current - 1))}>Prev</button>
-                  <button type="button" className="btn-secondary" disabled={applicationsPage >= applicationsLastPage} onClick={() => setApplicationsPage((current) => Math.min(applicationsLastPage, current + 1))}>Next</button>
+                  <button
+                    type="button"
+                    className="btn-secondary disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0"
+                    disabled={applications.length === 0 || applicationsPage <= 1}
+                    onClick={() => setApplicationsPage((current) => Math.max(1, current - 1))}
+                  >
+                    Prev
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-secondary disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0"
+                    disabled={applications.length === 0 || applicationsPage >= applicationsLastPage}
+                    onClick={() => setApplicationsPage((current) => Math.min(applicationsLastPage, current + 1))}
+                  >
+                    Next
+                  </button>
                 </div>
               </div>
             </>

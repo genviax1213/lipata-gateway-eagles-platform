@@ -125,6 +125,19 @@ input::-ms-clear {
   border-color: color-mix(in srgb, var(--color-gold) 85%, transparent);
 }
 
+.btn-primary:disabled,
+.btn-secondary:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.btn-primary:disabled:hover,
+.btn-secondary:disabled:hover {
+  transform: none;
+  background: inherit;
+  box-shadow: none;
+}
+
 .surface-card {
   border-radius: 1rem;
   border: 1px solid rgba(255, 255, 255, 0.2);
