@@ -43,6 +43,13 @@ class Permissions
     public const USERS_MANAGE = 'users.manage';
     public const USERS_PASSWORD_RESET = 'users.password.reset';
     public const FORMAL_PHOTOS_VIEW_PRIVATE = 'formal_photos.view_private';
+    public const IDENTITY_QR_VIEW = 'identity.qr.view';
+    public const CALENDAR_VIEW = 'calendar.view';
+    public const CALENDAR_MANAGE = 'calendar.manage';
+    public const ATTENDANCE_VIEW = 'attendance.view';
+    public const ATTENDANCE_SCAN = 'attendance.scan';
+    public const DIRECTORY_EXPORT = 'directory.export';
+    public const PHOTOS_EXPORT = 'photos.export';
 
     // Forum Permissions
     public const FORUM_VIEW = 'forum.view';
@@ -117,6 +124,10 @@ class Permissions
             'roles' => [self::ROLES_DELEGATE],
             'users' => [self::USERS_VIEW, self::USERS_MANAGE, self::USERS_PASSWORD_RESET],
             'formal_photos' => [self::FORMAL_PHOTOS_VIEW_PRIVATE],
+            'identity' => [self::IDENTITY_QR_VIEW],
+            'calendar' => [self::CALENDAR_VIEW, self::CALENDAR_MANAGE],
+            'attendance' => [self::ATTENDANCE_VIEW, self::ATTENDANCE_SCAN],
+            'directory' => [self::DIRECTORY_EXPORT, self::PHOTOS_EXPORT],
             'forum' => self::forum(),
         ];
     }

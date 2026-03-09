@@ -3,6 +3,7 @@ import axios from "axios";
 import api from "../services/api";
 import MemberModal from "../components/MemberModal";
 import DeleteModal from "../components/DeleteModal";
+import MemberDetailModal from "../components/MemberDetailModal";
 import type {
   Applicant,
   ApplicantStatus,
@@ -15,6 +16,7 @@ import { hasPermission, isAdminUser, type AuthUser } from "../utils/auth";
 import {
   PORTAL_DATA_REFRESH_EVENT,
   isPortalDataRefreshScope,
+  notifyPortalDataRefresh,
   parsePortalDataRefresh,
 } from "../utils/portalRefresh";
 
@@ -40,6 +42,33 @@ interface BatchTreasurerCandidate {
   status: ApplicantStatus;
 }
 
+interface MemberDetailRecord {
+  id: number;
+  member_number: string;
+  first_name: string;
+  middle_name: string | null;
+  last_name: string;
+  email: string | null;
+  spouse_name: string | null;
+  contact_number: string | null;
+  address: string | null;
+  date_of_birth: string | null;
+  batch: string | null;
+  induction_date: string | null;
+  membership_status: string;
+  email_verified: boolean;
+  password_set: boolean;
+  formal_photo?: {
+    image_url?: string | null;
+  } | null;
+  user?: {
+    id: number;
+    name: string;
+    email: string | null;
+    role?: { id: number; name: string } | null;
+  } | null;
+}
+
 function roleNameOf(user: AuthUser): string | null {
   if (!user || typeof user !== "object") return null;
   const role = (user as { role?: unknown }).role;
@@ -56,6 +85,24 @@ function memberName(member: Member): string {
   return `${member.first_name} ${member.middle_name ? `${member.middle_name} ` : ""}${member.last_name}`;
 }
 
+function fallbackExportFilename(path: string): string {
+  if (path.includes("member-photos")) return "lgec_member_photos.zip";
+  if (path.includes("applicants")) return "lgec_applicants.csv";
+  return "lgec_members.csv";
+}
+
+function resolveDownloadFilename(contentDisposition: string | undefined, fallback: string): string {
+  if (!contentDisposition) return fallback;
+
+  const utf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8Match?.[1]) {
+    return decodeURIComponent(utf8Match[1]);
+  }
+
+  const simpleMatch = contentDisposition.match(/filename="?([^"]+)"?/i);
+  return simpleMatch?.[1] ?? fallback;
+}
+
 export default function Members() {
   const { user } = useAuth();
   const userRoleName = roleNameOf(user);
@@ -66,6 +113,10 @@ export default function Members() {
   const canEditMembers = canManageMembers;
   const canDeleteMembers = canManageMembers;
   const canManageBatchWorkflow = userRoleName === "membership_chairman" && hasPermission(user, "applications.review");
+  const canViewMemberDetails = canViewMembers;
+  const canExportDirectory = hasPermission(user, "directory.export");
+  const canExportPhotos = hasPermission(user, "photos.export");
+  const canUseExports = canExportDirectory || canExportPhotos;
 
   const [activeTab, setActiveTab] = useState<MembersTab>(() => (canViewMembers ? "members" : "applications"));
   const effectiveActiveTab: MembersTab = !canViewMembers && canManageBatchWorkflow
@@ -113,9 +164,18 @@ export default function Members() {
   const [newBatchStartDate, setNewBatchStartDate] = useState("");
   const [newBatchTargetDate, setNewBatchTargetDate] = useState("");
   const [newBatchTreasurerUserId, setNewBatchTreasurerUserId] = useState("");
+  const [editingBatchName, setEditingBatchName] = useState("");
+  const [editingBatchDescription, setEditingBatchDescription] = useState("");
+  const [editingBatchStartDate, setEditingBatchStartDate] = useState("");
+  const [editingBatchTargetDate, setEditingBatchTargetDate] = useState("");
+  const [editingBatchTreasurerUserId, setEditingBatchTreasurerUserId] = useState("");
+  const [exportTarget, setExportTarget] = useState<"excel" | "google_sheets">("excel");
+  const [photoArchiveLabel, setPhotoArchiveLabel] = useState("");
+  const [downloadingExport, setDownloadingExport] = useState<"members" | "applicants" | "photos" | null>(null);
 
   const [editing, setEditing] = useState<Member | null>(null);
   const [deleting, setDeleting] = useState<Member | null>(null);
+  const [viewingMember, setViewingMember] = useState<MemberDetailRecord | null>(null);
   const [errors, setErrors] = useState<ValidationErrors>({});
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -135,6 +195,14 @@ export default function Members() {
     () => batches.find((item) => String(item.id) === activeBatchId) ?? null,
     [activeBatchId, batches],
   );
+
+  useEffect(() => {
+    setEditingBatchName(selectedWorkflowBatch?.name ?? "");
+    setEditingBatchDescription(selectedWorkflowBatch?.description ?? "");
+    setEditingBatchStartDate(selectedWorkflowBatch?.start_date ?? "");
+    setEditingBatchTargetDate(selectedWorkflowBatch?.target_completion_date ?? "");
+    setEditingBatchTreasurerUserId(selectedWorkflowBatch?.batch_treasurer ? String(selectedWorkflowBatch.batch_treasurer.id) : "");
+  }, [selectedWorkflowBatch]);
 
   const fetchMembers = useCallback(async (page = 1, filters?: { search: string; email_verified: string; password_set: string; group_by: MemberListGrouping }) => {
     setError("");
@@ -305,6 +373,45 @@ export default function Members() {
     workflowSupportLoaded,
   ]);
 
+  const refreshBatchViews = useCallback(async (options?: { includeApplicants?: boolean; includeMembers?: boolean }) => {
+    const nextOptions = {
+      includeApplicants: options?.includeApplicants ?? true,
+      includeMembers: options?.includeMembers ?? true,
+    };
+
+    const tasks: Array<Promise<unknown>> = [fetchWorkflowSupport()];
+
+    if (nextOptions.includeApplicants) {
+      tasks.push(fetchWorkflowApplicants(workflowApplicantsPage));
+      if (applicationsLoaded) {
+        tasks.push(fetchApplications(applicationsPage));
+      }
+    }
+
+    if (nextOptions.includeMembers) {
+      tasks.push(fetchWorkflowMembers(workflowMembersPage));
+      if (membersLoaded) {
+        tasks.push(fetchMembers(currentPage));
+      }
+    }
+
+    notifyPortalDataRefresh("applicants");
+    notifyPortalDataRefresh("members");
+    await Promise.all(tasks);
+  }, [
+    applicationsLoaded,
+    applicationsPage,
+    currentPage,
+    fetchApplications,
+    fetchMembers,
+    fetchWorkflowApplicants,
+    fetchWorkflowMembers,
+    fetchWorkflowSupport,
+    membersLoaded,
+    workflowApplicantsPage,
+    workflowMembersPage,
+  ]);
+
   useEffect(() => {
     if (!canViewMembers || membersLoaded) return;
     const timer = window.setTimeout(() => {
@@ -459,6 +566,80 @@ export default function Members() {
     }
   }
 
+  async function handleUpdateBatch() {
+    if (!selectedWorkflowBatch) {
+      setError("Choose a working batch before editing.");
+      return;
+    }
+
+    if (!editingBatchName.trim()) {
+      setError("Batch name is required before you save changes.");
+      return;
+    }
+
+    try {
+      setError("");
+      const response = await api.put<{ batch?: { id: number; name: string } }>(`/applicant-batches/${selectedWorkflowBatch.id}`, {
+        name: editingBatchName.trim(),
+        description: editingBatchDescription.trim() || null,
+        start_date: editingBatchStartDate || null,
+        target_completion_date: editingBatchTargetDate || null,
+        batch_treasurer_user_id: editingBatchTreasurerUserId ? Number(editingBatchTreasurerUserId) : null,
+      });
+
+      setNotice(`Batch updated${response.data?.batch?.name ? `: ${response.data.batch.name}` : "."}`);
+      await refreshBatchViews();
+    } catch (err: unknown) {
+      if (axios.isAxiosError(err)) {
+        const message = (err.response?.data as { message?: string } | undefined)?.message;
+        setError(message ?? "Failed to update batch.");
+      }
+    }
+  }
+
+  async function handleExport(path: string, key: "members" | "applicants" | "photos") {
+    try {
+      setError("");
+      setDownloadingExport(key);
+      const response = await api.get(path, { responseType: "blob" });
+      const fallback = fallbackExportFilename(path);
+      const filename = resolveDownloadFilename(response.headers["content-disposition"], fallback);
+      const blobUrl = window.URL.createObjectURL(response.data as Blob);
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(blobUrl);
+      setNotice(`Export ready: ${filename}`);
+    } catch (err: unknown) {
+      if (axios.isAxiosError(err)) {
+        const message = (err.response?.data as { message?: string } | undefined)?.message;
+        setError(message ?? "Failed to export directory data.");
+      } else {
+        setError("Failed to export directory data.");
+      }
+    } finally {
+      setDownloadingExport(null);
+    }
+  }
+
+  async function handleViewMember(memberId: number) {
+    try {
+      setError("");
+      const response = await api.get<MemberDetailRecord>(`/members/${memberId}`);
+      setViewingMember(response.data);
+    } catch (err: unknown) {
+      if (axios.isAxiosError(err)) {
+        const message = (err.response?.data as { message?: string } | undefined)?.message;
+        setError(message ?? "Failed to load member details.");
+      } else {
+        setError("Failed to load member details.");
+      }
+    }
+  }
+
   async function handleAssignApplicantBatch() {
     if (!selectedWorkflowApplicant || !activeBatchId) {
       setError("Choose a working batch and an applicant before assigning.");
@@ -471,13 +652,7 @@ export default function Members() {
         batch_id: Number(activeBatchId),
       });
       setNotice(`Applicant batch updated for ${applicantName(selectedWorkflowApplicant)}.`);
-      await Promise.all([
-        fetchWorkflowSupport(),
-        fetchWorkflowApplicants(workflowApplicantsPage),
-      ]);
-      if (applicationsLoaded) {
-        await fetchApplications(applicationsPage);
-      }
+      await refreshBatchViews({ includeApplicants: true, includeMembers: false });
     } catch (err: unknown) {
       if (axios.isAxiosError(err)) {
         const message = (err.response?.data as { message?: string } | undefined)?.message;
@@ -498,13 +673,7 @@ export default function Members() {
         batch_id: Number(activeBatchId),
       });
       setNotice(`Member batch updated for ${memberName(selectedWorkflowMember)}.`);
-      await Promise.all([
-        fetchWorkflowSupport(),
-        fetchWorkflowMembers(workflowMembersPage),
-      ]);
-      if (membersLoaded) {
-        await fetchMembers(currentPage);
-      }
+      await refreshBatchViews({ includeApplicants: false, includeMembers: true });
     } catch (err: unknown) {
       if (axios.isAxiosError(err)) {
         const message = (err.response?.data as { message?: string } | undefined)?.message;
@@ -513,7 +682,7 @@ export default function Members() {
     }
   }
 
-  if (!canViewMembers && !canViewApplications && !canManageBatchWorkflow) {
+  if (!canViewMembers && !canViewApplications && !canManageBatchWorkflow && !canUseExports) {
     return (
       <section>
         <h1 className="mb-3 font-heading text-4xl text-offwhite">Members Management</h1>
@@ -592,6 +761,72 @@ export default function Members() {
         )}
       </div>
 
+      {canUseExports && (
+        <section className="mb-6 rounded-xl border border-white/20 bg-white/10 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h2 className="font-heading text-2xl text-offwhite">Directory Exports</h2>
+              <p className="mt-2 max-w-3xl text-sm text-mist/80">
+                Secretary and admin export actions stay here so directory downloads remain available without leaving Members Management.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              {canExportDirectory && (
+                <select
+                  value={exportTarget}
+                  onChange={(e) => setExportTarget(e.target.value as "excel" | "google_sheets")}
+                  className="rounded-md border border-white/25 bg-white/10 px-4 py-2 text-sm text-offwhite"
+                >
+                  <option value="excel" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Excel CSV</option>
+                  <option value="google_sheets" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Google Sheets CSV</option>
+                </select>
+              )}
+              {canExportDirectory && (
+                <button
+                  type="button"
+                  onClick={() => void handleExport(`/directory/exports/members?target=${exportTarget}`, "members")}
+                  disabled={downloadingExport !== null}
+                  className="btn-primary disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {downloadingExport === "members" ? "Preparing Members CSV..." : "Export Members CSV"}
+                </button>
+              )}
+              {canExportDirectory && (
+                <button
+                  type="button"
+                  onClick={() => void handleExport(`/directory/exports/applicants?target=${exportTarget}`, "applicants")}
+                  disabled={downloadingExport !== null}
+                  className="rounded-md border border-white/25 px-4 py-2 text-sm text-offwhite disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {downloadingExport === "applicants" ? "Preparing Applicants CSV..." : "Export Applicants CSV"}
+                </button>
+              )}
+              {canExportPhotos && (
+                <>
+                  <input
+                    value={photoArchiveLabel}
+                    onChange={(e) => setPhotoArchiveLabel(e.target.value)}
+                    placeholder={`ZIP label (default: lgec_members_${new Date().getFullYear()})`}
+                    className="min-w-[240px] rounded-md border border-white/25 bg-white/10 px-4 py-2 text-sm text-offwhite placeholder:text-mist/70"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const query = photoArchiveLabel.trim() ? `?label=${encodeURIComponent(photoArchiveLabel.trim())}` : "";
+                      void handleExport(`/directory/exports/member-photos${query}`, "photos");
+                    }}
+                    disabled={downloadingExport !== null}
+                    className="rounded-md border border-gold/30 px-4 py-2 text-sm text-gold-soft disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {downloadingExport === "photos" ? "Preparing Member Photos ZIP..." : "Export Member Photos ZIP"}
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
+
       {effectiveActiveTab === "members" && canViewMembers && (
         <>
           <div className="mb-6 grid gap-4 rounded-xl border border-white/20 bg-white/10 p-4 md:grid-cols-[1fr_220px_220px_200px_auto]">
@@ -660,7 +895,7 @@ export default function Members() {
                       <th className="px-4 py-3 text-left">Contact</th>
                       <th className="px-4 py-3 text-left">Email Verified</th>
                       <th className="px-4 py-3 text-left">Password Set</th>
-                      {canManageMembers && <th className="px-4 py-3 text-left">Actions</th>}
+                      {(canViewMemberDetails || canManageMembers) && <th className="px-4 py-3 text-left">Actions</th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -668,7 +903,7 @@ export default function Members() {
                       if (row.kind === "group") {
                         return (
                           <tr key={`group-${row.key}`} className="border-b border-white/10 bg-gold/5">
-                            <td colSpan={canManageMembers ? 8 : 7} className="px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-gold-soft">
+                            <td colSpan={canViewMemberDetails || canManageMembers ? 8 : 7} className="px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-gold-soft">
                               Batch: {row.label}
                             </td>
                           </tr>
@@ -693,8 +928,13 @@ export default function Members() {
                               {m.password_set ? "Set" : "Not Set"}
                             </span>
                           </td>
-                          {canManageMembers && (
+                          {(canViewMemberDetails || canManageMembers) && (
                             <td className="space-x-3 px-4 py-3">
+                              {canViewMemberDetails && (
+                                <button onClick={() => void handleViewMember(m.id)} className="text-mist hover:text-offwhite hover:underline">
+                                  View
+                                </button>
+                              )}
                               {canEditMembers && (
                                 <button onClick={() => setEditing(m)} className="text-gold hover:text-gold-soft hover:underline">
                                   Edit
@@ -712,7 +952,7 @@ export default function Members() {
                     })}
                     {members.length === 0 && (
                       <tr>
-                        <td colSpan={canManageMembers ? 8 : 7} className="px-4 py-8 text-center text-mist/80">
+                        <td colSpan={canViewMemberDetails || canManageMembers ? 8 : 7} className="px-4 py-8 text-center text-mist/80">
                           No members found for the current filters.
                         </td>
                       </tr>
@@ -1014,6 +1254,108 @@ export default function Members() {
                     </p>
                   </div>
                 </div>
+
+                <div className="mt-5 rounded-xl border border-gold/20 bg-navy/30 p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div>
+                      <h4 className="text-lg font-semibold text-offwhite">Edit Active Batch</h4>
+                      <p className="mt-2 text-sm text-mist/75">
+                        Rename or adjust the active batch here. Create and assign flows stay separate below.
+                      </p>
+                    </div>
+                    <div className="rounded-lg border border-white/15 bg-white/5 px-4 py-3 text-sm text-mist/80">
+                      <p>Active batch: <span className="text-offwhite">{selectedWorkflowBatch ? `${selectedWorkflowBatch.name} (#${selectedWorkflowBatch.id})` : "Choose one from the list above"}</span></p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid gap-4 md:grid-cols-2">
+                    <div>
+                      <label htmlFor="edit-batch-name" className="mb-2 block text-xs uppercase tracking-wider text-gold-soft">
+                        Batch Name
+                      </label>
+                      <input
+                        id="edit-batch-name"
+                        value={editingBatchName}
+                        onChange={(e) => setEditingBatchName(e.target.value)}
+                        placeholder="Batch name"
+                        disabled={!selectedWorkflowBatch}
+                        className="w-full rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite placeholder:text-mist/70 focus:border-gold focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="edit-batch-treasurer" className="mb-2 block text-xs uppercase tracking-wider text-gold-soft">
+                        Batch Treasurer
+                      </label>
+                      <select
+                        id="edit-batch-treasurer"
+                        value={editingBatchTreasurerUserId}
+                        onChange={(e) => setEditingBatchTreasurerUserId(e.target.value)}
+                        disabled={!selectedWorkflowBatch}
+                        className="w-full rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite focus:border-gold focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <option value="" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Select treasurer</option>
+                        {batchCandidates.map((candidate) => (
+                          <option key={candidate.user_id} value={String(candidate.user_id)} style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>
+                            {candidate.full_name} ({candidate.email})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label htmlFor="edit-batch-start-date" className="mb-2 block text-xs uppercase tracking-wider text-gold-soft">
+                        Start Date
+                      </label>
+                      <input
+                        id="edit-batch-start-date"
+                        value={editingBatchStartDate}
+                        onChange={(e) => setEditingBatchStartDate(e.target.value)}
+                        type="date"
+                        disabled={!selectedWorkflowBatch}
+                        className="w-full rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite focus:border-gold focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="edit-batch-target-date" className="mb-2 block text-xs uppercase tracking-wider text-gold-soft">
+                        Target Completion
+                      </label>
+                      <input
+                        id="edit-batch-target-date"
+                        value={editingBatchTargetDate}
+                        onChange={(e) => setEditingBatchTargetDate(e.target.value)}
+                        type="date"
+                        disabled={!selectedWorkflowBatch}
+                        className="w-full rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite focus:border-gold focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label htmlFor="edit-batch-description" className="mb-2 block text-xs uppercase tracking-wider text-gold-soft">
+                        Batch Description
+                      </label>
+                      <textarea
+                        id="edit-batch-description"
+                        value={editingBatchDescription}
+                        onChange={(e) => setEditingBatchDescription(e.target.value)}
+                        placeholder="Shared schedule, notes, and leadership context for this batch."
+                        disabled={!selectedWorkflowBatch}
+                        className="min-h-[96px] w-full rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite placeholder:text-mist/70 focus:border-gold focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => void handleUpdateBatch()}
+                      disabled={!selectedWorkflowBatch}
+                      className="btn-primary disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Save Batch Changes
+                    </button>
+                    <p className="text-xs text-mist/70">
+                      Renaming a batch refreshes the batch list plus any visible applicant/member rows that reference that batch.
+                    </p>
+                  </div>
+                </div>
               </>
             )}
           </section>
@@ -1295,6 +1637,13 @@ export default function Members() {
           subject={`${deleting.first_name} ${deleting.last_name}`}
           onCancel={() => setDeleting(null)}
           onConfirm={() => void handleDelete(deleting.id)}
+        />
+      )}
+
+      {viewingMember && (
+        <MemberDetailModal
+          member={viewingMember}
+          onClose={() => setViewingMember(null)}
         />
       )}
     </div>

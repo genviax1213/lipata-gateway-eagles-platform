@@ -9,6 +9,9 @@ import TaskHierarchyCard from "../components/TaskHierarchyCard";
 import FileSelectionPreview from "../components/FileSelectionPreview";
 import FormalPhotoCard from "../components/FormalPhotoCard";
 import FormalPhotoStaffViewer from "../components/FormalPhotoStaffViewer";
+import PortalQrCard from "../components/PortalQrCard";
+import CalendarNoticesPanel from "../components/CalendarNoticesPanel";
+import SecretaryAttendancePanel from "../components/SecretaryAttendancePanel";
 import type { FormalPhotoRecord } from "../utils/formalPhoto";
 import { notifyPortalDataRefresh } from "../utils/portalRefresh";
 import {
@@ -408,6 +411,9 @@ type PortalTab =
   | "themes"
   | "glossary"
   | "chairman-notices"
+  | "my-qr"
+  | "calendar"
+  | "attendance"
   | "applicant-status"
   | "applicant-notices"
   | "applicant-docs"
@@ -437,6 +443,12 @@ export default function PortalDashboard() {
   const canChairmanSetContributionTarget = hasPermission(user, "applications.fee.set");
   const canChairmanLogContributionPayment = hasPermission(user, "applications.fee.pay");
   const canViewFormalPhotos = hasPermission(user, "formal_photos.view_private");
+  const canViewIdentityQr = hasPermission(user, "identity.qr.view");
+  const canViewCalendar = hasPermission(user, "calendar.view");
+  const canManageCalendar = hasPermission(user, "calendar.manage");
+  const canViewAttendance = hasPermission(user, "attendance.view");
+  const canScanAttendance = hasPermission(user, "attendance.scan");
+  const canAccessAttendanceFlow = canViewAttendance || canScanAttendance;
   const isAdmin = isAdminUser(user);
   const canManageChairmanNotices = isMembershipChairman && canChairmanSetNotice;
 
@@ -1265,6 +1277,9 @@ export default function PortalDashboard() {
         {dashboard?.application_archive_available && <button type="button" onClick={() => setActiveTab("application-archive")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "application-archive" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Application Archive</button>}
         {dashboard?.view !== "applicant" && <button type="button" onClick={() => setActiveTab("my-contributions")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "my-contributions" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>My Contributions</button>}
         {canSelfEditProfile && <button type="button" onClick={() => setActiveTab("my-profile")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "my-profile" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>My Profile</button>}
+        {canViewIdentityQr && <button type="button" onClick={() => setActiveTab("my-qr")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "my-qr" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>My QR Code</button>}
+        {canViewCalendar && <button type="button" onClick={() => setActiveTab("calendar")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "calendar" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Calendar & Notices</button>}
+        {canAccessAttendanceFlow && <button type="button" onClick={() => setActiveTab("attendance")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "attendance" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Attendance</button>}
         {canViewFormalPhotos && <button type="button" onClick={() => setActiveTab("formal-photo-viewer")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "formal-photo-viewer" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Formal Photos</button>}
         {isAdmin && <button type="button" onClick={() => setActiveTab("themes")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "themes" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Themes</button>}
         {isAdmin && <button type="button" onClick={() => setActiveTab("glossary")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "glossary" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Glossary</button>}
@@ -1291,6 +1306,25 @@ export default function PortalDashboard() {
             <TaskHierarchyCard status={statusSummary} actions={availableActionsSummary} nextStep={nextStepSummary} />
           </div>
         </>
+      )}
+
+      {activeTab === "my-qr" && canViewIdentityQr && (
+        <PortalQrCard onError={reportDashboardError} />
+      )}
+
+      {activeTab === "calendar" && canViewCalendar && (
+        <CalendarNoticesPanel
+          canManage={canManageCalendar}
+          onNotice={reportDashboardNotice}
+          onError={reportDashboardError}
+        />
+      )}
+
+      {activeTab === "attendance" && canAccessAttendanceFlow && (
+        <SecretaryAttendancePanel
+          onNotice={reportDashboardNotice}
+          onError={reportDashboardError}
+        />
       )}
 
       {activeTab === "themes" && isAdmin && (

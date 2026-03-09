@@ -1240,7 +1240,7 @@ class ApplicantController extends Controller
     public function createBatch(Request $request)
     {
         $validated = $request->validate([
-            'name' => 'required|string|min:2|max:120',
+            'name' => 'required|string|min:2|max:120|unique:applicant_batches,name',
             'description' => 'nullable|string|max:3000',
             'start_date' => 'nullable|date',
             'target_completion_date' => 'nullable|date|after_or_equal:start_date',
@@ -1276,6 +1276,57 @@ class ApplicantController extends Controller
             'message' => 'Applicant batch created.',
             'batch' => $batch->load('batchTreasurer:id,name,email'),
         ], 201);
+    }
+
+    public function updateBatch(Request $request, ApplicantBatch $applicantBatch)
+    {
+        $validated = $request->validate([
+            'name' => 'required|string|min:2|max:120|unique:applicant_batches,name,' . $applicantBatch->id,
+            'description' => 'nullable|string|max:3000',
+            'start_date' => 'nullable|date',
+            'target_completion_date' => 'nullable|date|after_or_equal:start_date',
+            'batch_treasurer_user_id' => 'nullable|integer|exists:users,id',
+        ]);
+
+        if (!empty($validated['batch_treasurer_user_id'])) {
+            $isOfficialApplicant = Applicant::query()
+                ->where('user_id', (int) $validated['batch_treasurer_user_id'])
+                ->whereIn('status', [
+                    Applicant::STATUS_OFFICIAL_APPLICANT,
+                    Applicant::STATUS_ELIGIBLE_FOR_ACTIVATION,
+                ])
+                ->exists();
+
+            if (!$isOfficialApplicant) {
+                return response()->json([
+                    'message' => 'Batch treasurer must be selected from official applicants.',
+                ], 422);
+            }
+        }
+
+        $previousName = trim((string) $applicantBatch->name);
+
+        DB::transaction(function () use ($applicantBatch, $validated, $request, $previousName): void {
+            $applicantBatch->fill([
+                'name' => trim((string) $validated['name']),
+                'description' => isset($validated['description']) ? trim((string) $validated['description']) : null,
+                'start_date' => $validated['start_date'] ?? null,
+                'target_completion_date' => $validated['target_completion_date'] ?? null,
+                'batch_treasurer_user_id' => $validated['batch_treasurer_user_id'] ?? null,
+            ]);
+            $applicantBatch->save();
+
+            if (strcasecmp($previousName, $applicantBatch->name) !== 0) {
+                Member::query()
+                    ->whereRaw('LOWER(TRIM(batch)) = ?', [strtolower($previousName)])
+                    ->update(['batch' => $applicantBatch->name]);
+            }
+        });
+
+        return response()->json([
+            'message' => 'Applicant batch updated.',
+            'batch' => $applicantBatch->fresh()->load('batchTreasurer:id,name,email'),
+        ]);
     }
 
     public function listBatches()

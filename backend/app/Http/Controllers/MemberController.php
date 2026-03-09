@@ -10,6 +10,7 @@ use App\Models\MemberRegistration;
 use App\Models\User;
 use App\Support\RoleHierarchy;
 use App\Support\TextCase;
+use App\Support\Permissions;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -113,6 +114,44 @@ class MemberController extends Controller
         return response()->json([
             'message' => 'Direct member creation is disabled. Use member application approval workflow.',
         ], 422);
+    }
+
+    public function show(Request $request, Member $member)
+    {
+        $this->authorize('viewMemberDirectory', Member::class);
+
+        /** @var User $viewer */
+        $viewer = $request->user()->loadMissing('role:id,name');
+        $member->loadMissing('user.role:id,name', 'user.formalPhoto');
+
+        $normalizedEmail = $this->normalizeEmail((string) ($member->email ?? ''));
+        if ($normalizedEmail === $this->bootstrapEmail()) {
+            abort(404);
+        }
+
+        if (
+            optional($viewer->role)->name !== RoleHierarchy::SUPERADMIN
+            && $member->user
+            && optional($member->user->role)->name === RoleHierarchy::SUPERADMIN
+        ) {
+            abort(404);
+        }
+
+        return response()->json([
+            ...$member->toArray(),
+            'user' => $member->user ? [
+                'id' => $member->user->id,
+                'name' => $member->user->name,
+                'email' => $member->user->email,
+                'role' => $member->user->role ? [
+                    'id' => $member->user->role->id,
+                    'name' => $member->user->role->name,
+                ] : null,
+            ] : null,
+            'formal_photo' => $request->user()->hasPermission(Permissions::FORMAL_PHOTOS_VIEW_PRIVATE)
+                ? $this->formalPhotoPayload($member->user?->formalPhoto)
+                : null,
+        ]);
     }
 
     public function myProfile(Request $request)

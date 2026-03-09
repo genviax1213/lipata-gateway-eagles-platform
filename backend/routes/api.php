@@ -18,6 +18,10 @@ use App\Http\Controllers\FormalPhotoController;
 use App\Http\Controllers\LogManagementController;
 use App\Http\Controllers\BootstrapRecoveryController;
 use App\Http\Controllers\GoogleOAuthController;
+use App\Http\Controllers\IdentityQrController;
+use App\Http\Controllers\CalendarEventController;
+use App\Http\Controllers\AttendanceController;
+use App\Http\Controllers\DirectoryExportController;
 
 Route::prefix('v1')->group(function () {
     Route::get('/content/homepage-community', [PostController::class, 'publicHomepageCommunity']);
@@ -69,6 +73,16 @@ Route::prefix('v1')->group(function () {
         Route::get('/admin/logs/archives/{archive}/download', [LogManagementController::class, 'downloadArchive'])->middleware('portal.permission:users.view');
         Route::delete('/admin/logs/archives/{archive}', [LogManagementController::class, 'deleteArchive'])->middleware('portal.permission:users.manage');
         Route::get('/dashboard/me', [DashboardController::class, 'me']);
+        Route::get('/identity/my-qr', [IdentityQrController::class, 'showMine'])->middleware('portal.permission:identity.qr.view');
+        Route::get('/calendar/events', [CalendarEventController::class, 'index'])->middleware('portal.permission:calendar.view');
+        Route::post('/calendar/events', [CalendarEventController::class, 'store'])->middleware('portal.permission:calendar.manage');
+        Route::put('/calendar/events/{calendarEvent}', [CalendarEventController::class, 'update'])->middleware('portal.permission:calendar.manage');
+        Route::delete('/calendar/events/{calendarEvent}', [CalendarEventController::class, 'destroy'])->middleware('portal.permission:calendar.manage');
+        Route::get('/attendance/events/{calendarEvent}/records', [AttendanceController::class, 'roster'])->middleware('portal.permission:attendance.view');
+        Route::post('/attendance/events/{calendarEvent}/scan', [AttendanceController::class, 'scan'])->middleware('portal.permission:attendance.scan');
+        Route::get('/directory/exports/members', [DirectoryExportController::class, 'exportMembers'])->middleware('portal.permission:directory.export');
+        Route::get('/directory/exports/applicants', [DirectoryExportController::class, 'exportApplicants'])->middleware('portal.permission:directory.export');
+        Route::get('/directory/exports/member-photos', [DirectoryExportController::class, 'exportMemberPhotosZip'])->middleware('portal.permission:photos.export');
         Route::get('/formal-photos/me', [FormalPhotoController::class, 'showMine'])->name('formal-photos.my');
         Route::post('/formal-photos/me', [FormalPhotoController::class, 'storeMine'])->middleware('throttle:members-write')->name('formal-photos.store');
         Route::get('/formal-photos/me/image', [FormalPhotoController::class, 'showMineImage'])->name('formal-photos.my-image');
@@ -86,6 +100,7 @@ Route::prefix('v1')->group(function () {
         Route::delete('/cms/posts/{post}', [PostController::class, 'destroy'])->middleware('portal.permission:posts.delete');
 
         Route::get('/members', [MemberController::class, 'index'])->middleware('portal.permission:members.view');
+        Route::get('/members/{member}', [MemberController::class, 'show'])->middleware('portal.permission:members.view');
         Route::get('/members/me/profile', [MemberController::class, 'myProfile']);
         Route::get('/members/{member}/formal-photo', [FormalPhotoController::class, 'showForMember']);
         Route::post('/members/{member}/assign-applicant-batch', [MemberController::class, 'assignApplicantBatch'])->middleware('throttle:members-write', 'portal.permission:applications.review');
@@ -116,6 +131,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/applicant-batches', [ApplicantController::class, 'listBatches'])->middleware('portal.permission:applications.review');
         Route::get('/applicant-batch-treasurer-candidates', [ApplicantController::class, 'batchTreasurerCandidates'])->middleware('portal.permission:applications.review');
         Route::post('/applicant-batches', [ApplicantController::class, 'createBatch'])->middleware('portal.permission:applications.review');
+        Route::put('/applicant-batches/{applicantBatch}', [ApplicantController::class, 'updateBatch'])->middleware('portal.permission:applications.review');
         Route::post('/applicant-batches/{applicantBatch}/documents', [ApplicantController::class, 'uploadBatchDocument'])->middleware('portal.permission:applications.review');
         Route::get('/applicant-batches/documents/{document}/view', [ApplicantController::class, 'viewBatchDocument']);
 
