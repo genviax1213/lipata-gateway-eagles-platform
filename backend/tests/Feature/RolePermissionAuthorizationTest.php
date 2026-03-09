@@ -117,6 +117,22 @@ class RolePermissionAuthorizationTest extends TestCase
         $response->assertStatus(200);
     }
 
+    public function test_membership_chairman_can_access_forum_threads_and_create_thread(): void
+    {
+        $chairmanRole = Role::query()->where('name', 'membership_chairman')->firstOrFail();
+        $chairman = User::factory()->create(['role_id' => $chairmanRole->id]);
+
+        Sanctum::actingAs($chairman);
+
+        $this->getJson('/api/v1/forum/threads')
+            ->assertOk();
+
+        $this->postJson('/api/v1/forum/threads', [
+            'title' => 'Chairman Forum Access',
+            'body' => '<p>Membership chairman forum access is working.</p>',
+        ])->assertCreated();
+    }
+
     public function test_member_cannot_access_admin_users_list(): void
     {
         $memberRole = Role::query()->where('name', 'member')->firstOrFail();

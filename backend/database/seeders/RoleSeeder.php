@@ -204,6 +204,9 @@ class RoleSeeder extends Seeder
             $permissionIds['applications.docs.review'],
             $permissionIds['applications.fee.set'],
             $permissionIds['applications.fee.pay'],
+            $permissionIds['forum.view'],
+            $permissionIds['forum.create_thread'],
+            $permissionIds['forum.reply'],
         ]);
     }
 }
