@@ -100,8 +100,12 @@ export default function FormalPhotoStaffViewer({
         onNotice(`This ${member.subject_type} does not have a saved formal photo yet.`);
       }
     } catch {
-      setFormalPhoto(member.formal_photo ?? null);
-      onError("Unable to load the selected person's formal photo.");
+      const fallbackPhoto = member.formal_photo ?? null;
+      setFormalPhoto(fallbackPhoto);
+
+      if (!fallbackPhoto) {
+        onError("Unable to load the selected person's formal photo.");
+      }
     } finally {
       setLoadingPhoto(false);
     }
