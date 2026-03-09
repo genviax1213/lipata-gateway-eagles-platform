@@ -767,6 +767,99 @@ class ApplicantFlowTest extends TestCase
         ])->assertStatus(403);
     }
 
+    public function test_membership_chairman_can_remove_pending_verification_applicant_with_wrong_email(): void
+    {
+        $chairmanRole = Role::query()->where('name', 'membership_chairman')->firstOrFail();
+        $chairman = User::factory()->create(['role_id' => $chairmanRole->id]);
+
+        $linkedUser = User::factory()->create([
+            'role_id' => Role::query()->where('name', 'applicant')->firstOrFail()->id,
+            'email' => 'wrong-email@applicant.test',
+            'email_verified_at' => null,
+        ]);
+
+        $application = Applicant::query()->create([
+            'user_id' => $linkedUser->id,
+            'first_name' => 'Wrong',
+            'middle_name' => 'Email',
+            'last_name' => 'Applicant',
+            'email' => 'wrong-email@applicant.test',
+            'membership_status' => 'applicant',
+            'status' => Applicant::STATUS_PENDING_VERIFICATION,
+            'decision_status' => 'pending',
+            'current_stage' => 'interview',
+            'verification_token' => hash('sha256', 'wrong-email-token'),
+            'email_verified_at' => null,
+            'is_login_blocked' => false,
+        ]);
+
+        Sanctum::actingAs($chairman);
+
+        $this->postJson("/api/v1/applicants/{$application->id}/recover-pending-verification")
+            ->assertOk()
+            ->assertJsonPath('message', 'Pending verification applicant removed. The person may register again using the correct email address.');
+
+        $this->assertDatabaseMissing('applicants', ['id' => $application->id]);
+        $this->assertDatabaseMissing('users', ['id' => $linkedUser->id]);
+    }
+
+    public function test_membership_chairman_cannot_remove_under_review_applicant_through_wrong_email_recovery(): void
+    {
+        $chairmanRole = Role::query()->where('name', 'membership_chairman')->firstOrFail();
+        $chairman = User::factory()->create(['role_id' => $chairmanRole->id]);
+
+        $application = Applicant::query()->create([
+            'first_name' => 'Reviewed',
+            'middle_name' => 'Queue',
+            'last_name' => 'Applicant',
+            'email' => 'reviewed@applicant.test',
+            'membership_status' => 'applicant',
+            'status' => Applicant::STATUS_UNDER_REVIEW,
+            'decision_status' => 'pending',
+            'current_stage' => 'interview',
+            'verification_token' => hash('sha256', 'reviewed-token'),
+            'email_verified_at' => now(),
+            'is_login_blocked' => false,
+        ]);
+
+        Sanctum::actingAs($chairman);
+
+        $this->postJson("/api/v1/applicants/{$application->id}/recover-pending-verification")
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Only pending verification applicants with unreachable email tokens can be removed through this chairman recovery workflow.');
+
+        $this->assertDatabaseHas('applicants', ['id' => $application->id]);
+    }
+
+    public function test_non_chairman_with_review_permission_cannot_use_wrong_email_recovery(): void
+    {
+        $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
+        $reviewPermission = Permission::query()->where('name', 'applications.review')->firstOrFail();
+        $adminRole->permissions()->syncWithoutDetaching([$reviewPermission->id]);
+        $admin = User::factory()->create(['role_id' => $adminRole->id]);
+
+        $application = Applicant::query()->create([
+            'first_name' => 'Blocked',
+            'middle_name' => 'Recovery',
+            'last_name' => 'Applicant',
+            'email' => 'blocked-recovery@applicant.test',
+            'membership_status' => 'applicant',
+            'status' => Applicant::STATUS_PENDING_VERIFICATION,
+            'decision_status' => 'pending',
+            'current_stage' => 'interview',
+            'verification_token' => hash('sha256', 'blocked-recovery-token'),
+            'email_verified_at' => null,
+            'is_login_blocked' => false,
+        ]);
+
+        Sanctum::actingAs($admin);
+
+        $this->postJson("/api/v1/applicants/{$application->id}/recover-pending-verification")
+            ->assertStatus(403);
+
+        $this->assertDatabaseHas('applicants', ['id' => $application->id]);
+    }
+
     public function test_non_chairman_cannot_set_applicant_contribution_target(): void
     {
         $officerRole = Role::query()->where('name', 'officer')->firstOrFail();

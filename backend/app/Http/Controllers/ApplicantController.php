@@ -146,6 +146,73 @@ class ApplicantController extends Controller
         ];
     }
 
+    private function canRecoverPendingVerificationApplicant(Applicant $applicant): bool
+    {
+        return $applicant->status === Applicant::STATUS_PENDING_VERIFICATION
+            && $applicant->email_verified_at === null
+            && $applicant->reviewed_at === null
+            && $applicant->member_id === null;
+    }
+
+    private function purgeApplicantRecord(Applicant $applicant, bool $purgeLinkedRegistrations = true): void
+    {
+        $applicant->loadMissing(['documents', 'feeRequirements.payments', 'user.role:id,name']);
+
+        DB::transaction(function () use ($applicant, $purgeLinkedRegistrations): void {
+            $normalizedEmail = $this->normalizeEmail((string) $applicant->email);
+            $linkedUser = $applicant->user;
+
+            foreach ($applicant->documents as $document) {
+                $disk = $this->resolveDocumentDisk($document);
+                if (Storage::disk($disk)->exists($document->file_path)) {
+                    Storage::disk($disk)->delete($document->file_path);
+                }
+            }
+
+            ApplicantNotice::query()->where('applicant_id', $applicant->id)->delete();
+            ApplicantDocument::query()->where('applicant_id', $applicant->id)->delete();
+
+            $requirementIds = ApplicantFeeRequirement::query()
+                ->where('applicant_id', $applicant->id)
+                ->pluck('id');
+
+            if ($requirementIds->isNotEmpty()) {
+                ApplicantFeePayment::query()
+                    ->whereIn('applicant_fee_requirement_id', $requirementIds)
+                    ->delete();
+            }
+
+            ApplicantFeeRequirement::query()->where('applicant_id', $applicant->id)->delete();
+
+            if ($purgeLinkedRegistrations) {
+                MemberRegistration::query()
+                    ->where(function ($query) use ($linkedUser, $normalizedEmail): void {
+                        if ($linkedUser) {
+                            $query->where('user_id', $linkedUser->id);
+                        }
+
+                        if ($normalizedEmail !== '') {
+                            $method = $linkedUser ? 'orWhereRaw' : 'whereRaw';
+                            $query->{$method}('LOWER(TRIM(email)) = ?', [$normalizedEmail]);
+                        }
+                    })
+                    ->whereNull('member_id')
+                    ->delete();
+            }
+
+            $applicant->delete();
+
+            if ($linkedUser
+                && (string) optional($linkedUser->role)->name === 'applicant'
+                && !Applicant::query()->where('user_id', $linkedUser->id)->exists()
+                && !Member::query()->where('user_id', $linkedUser->id)->exists()
+                && !MemberRegistration::query()->where('user_id', $linkedUser->id)->exists()
+            ) {
+                $linkedUser->delete();
+            }
+        });
+    }
+
     private function fiveIStageLabel(?string $stage): string
     {
         $labels = [
@@ -1127,58 +1194,7 @@ class ApplicantController extends Controller
             ], 422);
         }
 
-        $applicant->loadMissing(['documents', 'feeRequirements.payments', 'user.role:id,name']);
-
-        DB::transaction(function () use ($applicant): void {
-            $normalizedEmail = $this->normalizeEmail((string) $applicant->email);
-            $linkedUser = $applicant->user;
-
-            foreach ($applicant->documents as $document) {
-                $disk = $this->resolveDocumentDisk($document);
-                if (Storage::disk($disk)->exists($document->file_path)) {
-                    Storage::disk($disk)->delete($document->file_path);
-                }
-            }
-
-            ApplicantNotice::query()->where('applicant_id', $applicant->id)->delete();
-            ApplicantDocument::query()->where('applicant_id', $applicant->id)->delete();
-
-            $requirementIds = ApplicantFeeRequirement::query()
-                ->where('applicant_id', $applicant->id)
-                ->pluck('id');
-
-            if ($requirementIds->isNotEmpty()) {
-                ApplicantFeePayment::query()
-                    ->whereIn('applicant_fee_requirement_id', $requirementIds)
-                    ->delete();
-            }
-
-            ApplicantFeeRequirement::query()->where('applicant_id', $applicant->id)->delete();
-
-            MemberRegistration::query()
-                ->where(function ($query) use ($linkedUser, $normalizedEmail): void {
-                    if ($linkedUser) {
-                        $query->where('user_id', $linkedUser->id);
-                    }
-
-                    if ($normalizedEmail !== '') {
-                        $method = $linkedUser ? 'orWhereRaw' : 'whereRaw';
-                        $query->{$method}('LOWER(TRIM(email)) = ?', [$normalizedEmail]);
-                    }
-                })
-                ->whereNull('member_id')
-                ->delete();
-
-            $applicant->delete();
-
-            if ($linkedUser
-                && (string) optional($linkedUser->role)->name === 'applicant'
-                && !Applicant::query()->where('user_id', $linkedUser->id)->exists()
-                && !Member::query()->where('user_id', $linkedUser->id)->exists()
-            ) {
-                $linkedUser->delete();
-            }
-        });
+        $this->purgeApplicantRecord($applicant);
 
         Log::info('application.deleted', [
             'actor_user_id' => $request->user()->id,
@@ -1189,6 +1205,35 @@ class ApplicantController extends Controller
 
         return response()->json([
             'message' => 'Applicant deleted.',
+        ]);
+    }
+
+    public function recoverPendingVerification(Request $request, Applicant $applicant)
+    {
+        $this->authorize('recoverPendingVerification', $applicant);
+
+        if (!$this->canRecoverPendingVerificationApplicant($applicant)) {
+            return response()->json([
+                'message' => 'Only pending verification applicants with unreachable email tokens can be removed through this chairman recovery workflow.',
+            ], 422);
+        }
+
+        $applicationId = $applicant->id;
+        $normalizedEmail = $this->normalizeEmail((string) $applicant->email);
+        $nameLabel = trim($applicant->first_name . ' ' . ($applicant->middle_name ? $applicant->middle_name . ' ' : '') . $applicant->last_name);
+
+        $this->purgeApplicantRecord($applicant, false);
+
+        Log::info('application.pending_verification_recovered', [
+            'actor_user_id' => $request->user()->id,
+            'application_id' => $applicationId,
+            'email' => $normalizedEmail,
+            'name' => $nameLabel,
+            'ip' => $request->ip(),
+        ]);
+
+        return response()->json([
+            'message' => 'Pending verification applicant removed. The person may register again using the correct email address.',
         ]);
     }
 

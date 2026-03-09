@@ -111,6 +111,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/applicants/{applicant}/activate', [ApplicantController::class, 'activate'])->middleware('portal.permission:applications.review');
         Route::post('/applicants/{applicant}/probation', [ApplicantController::class, 'setProbation'])->middleware('portal.permission:applications.review');
         Route::post('/applicants/{applicant}/reject', [ApplicantController::class, 'reject'])->middleware('portal.permission:applications.review');
+        Route::post('/applicants/{applicant}/recover-pending-verification', [ApplicantController::class, 'recoverPendingVerification'])->middleware('portal.permission:applications.review');
         Route::post('/applicants/{applicant}/assign-batch', [ApplicantController::class, 'assignBatch'])->middleware('portal.permission:applications.review');
         Route::get('/applicant-batches', [ApplicantController::class, 'listBatches'])->middleware('portal.permission:applications.review');
         Route::get('/applicant-batch-treasurer-candidates', [ApplicantController::class, 'batchTreasurerCandidates'])->middleware('portal.permission:applications.review');

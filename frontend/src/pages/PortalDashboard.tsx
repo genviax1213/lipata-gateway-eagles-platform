@@ -10,6 +10,7 @@ import FileSelectionPreview from "../components/FileSelectionPreview";
 import FormalPhotoCard from "../components/FormalPhotoCard";
 import FormalPhotoStaffViewer from "../components/FormalPhotoStaffViewer";
 import type { FormalPhotoRecord } from "../utils/formalPhoto";
+import { notifyPortalDataRefresh } from "../utils/portalRefresh";
 import {
   PORTAL_BUILTIN_THEMES,
   applyPortalTheme,
@@ -978,6 +979,27 @@ export default function PortalDashboard() {
       setError(parseError(err, "Failed to update application."));
     }
   }, [parseError, refreshSelectedCommitteeApplication, selectedApplication]);
+
+  const recoverPendingVerificationApplicant = useCallback(async () => {
+    if (!selectedApplication || selectedApplication.status !== "pending_verification") return;
+    if (!window.confirm(`Delete the pending verification record for ${appName(selectedApplication)} so they can register again using the correct email address?`)) {
+      return;
+    }
+
+    setError("");
+    setNotice("");
+
+    try {
+      const res = await api.post<{ message?: string }>(`/applicants/${selectedApplication.id}/recover-pending-verification`);
+      setNotice(res.data?.message ?? "Pending verification applicant removed.");
+      setSelectedApplicationId(null);
+      setSelectedApplicationDetails(null);
+      await loadCommitteeApplications();
+      notifyPortalDataRefresh("applicants");
+    } catch (err) {
+      setError(parseError(err, "Failed to remove the pending verification applicant."));
+    }
+  }, [loadCommitteeApplications, parseError, selectedApplication]);
 
   const setNoticeForApplicant = async () => {
     if (!selectedApplication || !noticeText.trim()) return;
@@ -2068,6 +2090,22 @@ export default function PortalDashboard() {
                   )}
                   <button className="btn-secondary" onClick={() => void chairmanAction("probation")}>Set Probation</button>
                   <button className="btn-secondary" onClick={() => void chairmanAction("reject", { reason: "Rejected by chairman review." })}>Reject</button>
+                </div>
+              )}
+
+              {canChairmanReview && selectedApplication.status === "pending_verification" && (
+                <div className="rounded-lg border border-amber-300/30 bg-amber-400/10 px-3 py-3 text-sm text-amber-100">
+                  <p className="font-semibold text-offwhite">Wrong Email Recovery</p>
+                  <p className="mt-2 text-amber-100/90">
+                    Use this only when the applicant entered a non-existent email and cannot receive the verification token. Deleting this pending record lets the person start a new registration with the correct email address.
+                  </p>
+                  <button
+                    type="button"
+                    className="mt-3 rounded-md border border-amber-200/40 px-4 py-2 text-sm text-amber-50 transition hover:bg-amber-300/10"
+                    onClick={() => void recoverPendingVerificationApplicant()}
+                  >
+                    Delete Pending Verification Record
+                  </button>
                 </div>
               )}
 

@@ -55,6 +55,12 @@ class ApplicantPolicy
         return $user->hasPermission('applications.review');
     }
 
+    public function recoverPendingVerification(User $user, Applicant $applicant): bool
+    {
+        return (string) optional($user->role)->name === RoleHierarchy::MEMBERSHIP_CHAIRMAN
+            && $user->hasPermission(Permissions::APPLICATIONS_REVIEW);
+    }
+
     public function delete(User $user, Applicant $applicant): bool
     {
         return (string) optional($user->role)->name === RoleHierarchy::SUPERADMIN;
