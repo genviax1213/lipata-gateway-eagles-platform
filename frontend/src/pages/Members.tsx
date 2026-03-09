@@ -27,6 +27,7 @@ interface ApplicantBatchListRow {
   start_date: string | null;
   target_completion_date: string | null;
   applications_count: number;
+  members_count: number;
   batch_treasurer?: { id: number; name: string; email: string } | null;
 }
 
@@ -839,6 +840,7 @@ export default function Members() {
                         <th className="px-3 py-2 text-left">Batch</th>
                         <th className="px-3 py-2 text-left">Treasurer</th>
                         <th className="px-3 py-2 text-left">Applicants</th>
+                        <th className="px-3 py-2 text-left">Members</th>
                         <th className="px-3 py-2 text-left">Dates</th>
                       </tr>
                     </thead>
@@ -862,6 +864,7 @@ export default function Members() {
                             </td>
                             <td className="px-3 py-2 text-mist/85">{batch.batch_treasurer?.name ?? "Unassigned"}</td>
                             <td className="px-3 py-2 text-mist/85">{batch.applications_count}</td>
+                            <td className="px-3 py-2 text-mist/85">{batch.members_count}</td>
                             <td className="px-3 py-2 text-mist/85">
                               {batch.start_date ?? "—"} to {batch.target_completion_date ?? "—"}
                             </td>
@@ -870,7 +873,7 @@ export default function Members() {
                       })}
                       {batches.length === 0 && (
                         <tr>
-                          <td colSpan={5} className="px-4 py-8 text-center text-mist/80">
+                          <td colSpan={6} className="px-4 py-8 text-center text-mist/80">
                             No batches created yet. Use the form below to create the first one.
                           </td>
                         </tr>

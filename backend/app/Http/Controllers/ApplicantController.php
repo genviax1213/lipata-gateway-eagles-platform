@@ -1235,6 +1235,13 @@ class ApplicantController extends Controller
 
     public function listBatches()
     {
+        $memberCounts = Member::query()
+            ->selectRaw('LOWER(TRIM(batch)) as batch_key, COUNT(*) as total')
+            ->whereNotNull('batch')
+            ->whereRaw('TRIM(batch) <> ""')
+            ->groupBy('batch_key')
+            ->pluck('total', 'batch_key');
+
         $batches = ApplicantBatch::query()
             ->with('batchTreasurer:id,name,email')
             ->withCount('applications')
@@ -1247,6 +1254,7 @@ class ApplicantController extends Controller
                 'start_date' => optional($batch->start_date)?->toDateString(),
                 'target_completion_date' => optional($batch->target_completion_date)?->toDateString(),
                 'applications_count' => $batch->applications_count,
+                'members_count' => (int) ($memberCounts[strtolower(trim((string) $batch->name))] ?? 0),
                 'batch_treasurer' => $batch->batchTreasurer ? [
                     'id' => $batch->batchTreasurer->id,
                     'name' => $batch->batchTreasurer->name,
