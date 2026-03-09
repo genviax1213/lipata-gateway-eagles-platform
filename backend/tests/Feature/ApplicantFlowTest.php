@@ -1166,6 +1166,42 @@ class ApplicantFlowTest extends TestCase
             ->assertStatus(200);
     }
 
+    public function test_membership_chairman_applicant_detail_includes_document_view_url(): void
+    {
+        $chairmanRole = Role::query()->where('name', 'membership_chairman')->firstOrFail();
+        $chairman = User::factory()->create(['role_id' => $chairmanRole->id]);
+
+        $application = Applicant::query()->create([
+            'first_name' => 'Preview',
+            'middle_name' => 'Link',
+            'last_name' => 'Applicant',
+            'email' => 'preview-link@applicant.test',
+            'membership_status' => 'applicant',
+            'status' => 'under_review',
+            'decision_status' => 'pending',
+            'current_stage' => 'interview',
+            'is_login_blocked' => false,
+            'verification_token' => hash('sha256', 'preview-link-token'),
+            'email_verified_at' => now(),
+        ]);
+
+        $document = ApplicantDocument::query()->create([
+            'applicant_id' => $application->id,
+            'file_path' => 'application-docs/preview-link.png',
+            'original_name' => 'preview-link.png',
+            'document_label' => 'Government ID',
+            'description' => 'Scanned government ID for review.',
+            'status' => 'pending',
+        ]);
+
+        Sanctum::actingAs($chairman);
+
+        $this->getJson("/api/v1/applicants/{$application->id}")
+            ->assertOk()
+            ->assertJsonPath('documents.0.id', $document->id)
+            ->assertJsonPath('documents.0.view_url', "/api/v1/applicants/documents/{$document->id}/view");
+    }
+
     public function test_unrelated_user_cannot_view_application_document_without_permission(): void
     {
         Storage::fake('public');

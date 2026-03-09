@@ -71,6 +71,7 @@ interface ApplicantDocument {
   original_name: string;
   document_label?: string | null;
   description?: string | null;
+  view_url: string;
   status: "pending" | "approved" | "rejected";
   review_note: string | null;
   created_at?: string | null;
@@ -254,48 +255,33 @@ function countRequirementStatuses(requirements: ApplicantFeeRequirement[]): Revi
   }, { approved: 0, rejected: 0, pending: 0 });
 }
 
-function DocumentThumbnail({ documentId, originalName }: { documentId: number; originalName: string }) {
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+function toAbsoluteApiUrl(url: string): string {
+  const baseUrl = typeof api.defaults.baseURL === "string" ? api.defaults.baseURL : window.location.origin;
+  return new URL(url, baseUrl).toString();
+}
+
+function DocumentThumbnail({ originalName, viewUrl }: { originalName: string; viewUrl: string }) {
   const [previewFailed, setPreviewFailed] = useState(false);
   const imageDocument = isImageDocument(originalName);
-
-  useEffect(() => {
-    if (!imageDocument) return;
-
-    let active = true;
-    let objectUrl: string | null = null;
-
-    void api.get(`/applicants/documents/${documentId}/view`, { responseType: "blob" })
-      .then((response) => {
-        if (!active) return;
-        objectUrl = URL.createObjectURL(response.data);
-        setPreviewUrl(objectUrl);
-        setPreviewFailed(false);
-      })
-      .catch(() => {
-        if (!active) return;
-        setPreviewFailed(true);
-      });
-
-    return () => {
-      active = false;
-      if (objectUrl) {
-        URL.revokeObjectURL(objectUrl);
-      }
-    };
-  }, [documentId, imageDocument]);
+  const absoluteViewUrl = toAbsoluteApiUrl(viewUrl);
 
   return (
     <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-white/15 bg-navy/45">
-      {imageDocument && previewUrl && !previewFailed ? (
-        <img src={previewUrl} alt={originalName} className="h-full w-full object-cover" />
+      {imageDocument && !previewFailed ? (
+        <img
+          src={absoluteViewUrl}
+          alt={originalName}
+          className="h-full w-full object-cover"
+          loading="lazy"
+          onError={() => setPreviewFailed(true)}
+        />
       ) : (
         <div className="px-2 text-center">
           <span className="rounded-md border border-white/15 bg-white/10 px-2 py-1 text-[11px] font-semibold text-gold-soft">
             {getFileExtension(originalName)}
           </span>
           <p className="mt-2 text-[10px] text-mist/70">
-            {imageDocument ? (previewFailed ? "Preview unavailable" : "Preview loading...") : "File thumbnail"}
+            {imageDocument ? "Preview unavailable" : "File thumbnail"}
           </p>
         </div>
       )}
@@ -309,13 +295,13 @@ function ApplicantDocumentCard({
   actions,
 }: {
   document: ApplicantDocument;
-  onView: (documentId: number, originalName: string) => void;
+  onView: (documentUrl: string, originalName: string) => void;
   actions?: ReactNode;
 }) {
   return (
     <div className="rounded-xl border border-white/20 bg-white/5 p-3">
       <div className="flex flex-col gap-3 sm:flex-row">
-        <DocumentThumbnail documentId={document.id} originalName={document.original_name} />
+        <DocumentThumbnail originalName={document.original_name} viewUrl={document.view_url} />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div className="min-w-0">
@@ -335,7 +321,7 @@ function ApplicantDocumentCard({
             <button
               type="button"
               className="rounded border border-white/30 px-2 py-1 text-xs text-offwhite"
-              onClick={() => onView(document.id, document.original_name)}
+              onClick={() => onView(document.view_url, document.original_name)}
             >
               View
             </button>
@@ -1226,20 +1212,11 @@ export default function PortalDashboard() {
     }
   };
 
-  const viewDocument = async (documentId: number, originalName: string) => {
+  const viewDocument = (documentUrl: string, originalName: string) => {
     setError("");
-    try {
-      const response = await api.get(`/applicants/documents/${documentId}/view`, {
-        responseType: "blob",
-      });
-      const blobUrl = window.URL.createObjectURL(response.data as Blob);
-      const tab = window.open(blobUrl, "_blank", "noopener,noreferrer");
-      if (!tab) {
-        setError("Popup blocked. Allow popups to view the document.");
-      }
-      setTimeout(() => window.URL.revokeObjectURL(blobUrl), 60_000);
-    } catch (err) {
-      setError(parseError(err, `Failed to view ${originalName}.`));
+    const tab = window.open(toAbsoluteApiUrl(documentUrl), "_blank", "noopener,noreferrer");
+    if (!tab) {
+      setError(`Popup blocked. Allow popups to view ${originalName}.`);
     }
   };
 
@@ -1538,7 +1515,7 @@ export default function PortalDashboard() {
               <ApplicantDocumentCard
                 key={doc.id}
                 document={doc}
-                onView={(documentId, originalName) => void viewDocument(documentId, originalName)}
+                onView={(documentUrl, originalName) => viewDocument(documentUrl, originalName)}
               />
             ))}
             {applicantDetails.documents.length === 0 && <p className="text-sm text-mist/70">No documents uploaded yet.</p>}
@@ -1666,7 +1643,7 @@ export default function PortalDashboard() {
                     <ApplicantDocumentCard
                       key={doc.id}
                       document={doc}
-                      onView={(documentId, originalName) => void viewDocument(documentId, originalName)}
+                      onView={(documentUrl, originalName) => viewDocument(documentUrl, originalName)}
                     />
                   ))}
                   {archiveDetails.documents.length === 0 && <p className="text-sm text-mist/70">No archived documents.</p>}
@@ -2376,7 +2353,7 @@ export default function PortalDashboard() {
                     <ApplicantDocumentCard
                       key={doc.id}
                       document={doc}
-                      onView={(documentId, originalName) => void viewDocument(documentId, originalName)}
+                      onView={(documentUrl, originalName) => viewDocument(documentUrl, originalName)}
                       actions={(
                         <>
                           <button className="rounded border border-green-400/40 px-2 py-1 text-xs text-green-200" onClick={() => void reviewDocument(doc.id, "approved")}>Approve</button>

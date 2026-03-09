@@ -398,6 +398,7 @@ class ApplicantController extends Controller
                     'original_name' => $doc->original_name,
                     'document_label' => $doc->document_label,
                     'description' => $doc->description,
+                    'view_url' => "/api/v1/applicants/documents/{$doc->id}/view",
                     'status' => $doc->status,
                     'review_note' => $doc->review_note,
                     'created_at' => optional($doc->created_at)?->toISOString(),
@@ -863,10 +864,12 @@ class ApplicantController extends Controller
             abort(404, 'Document file not found.');
         }
 
-        return Storage::disk($disk)->response(
-            $document->file_path,
-            $document->original_name
-        );
+        $path = Storage::disk($disk)->path($document->file_path);
+
+        return response()->file($path, [
+            'Content-Disposition' => 'inline; filename="' . addslashes($document->original_name) . '"',
+            'Cache-Control' => 'private, max-age=300',
+        ]);
     }
 
     public function setStage(Request $request, Applicant $applicant)
