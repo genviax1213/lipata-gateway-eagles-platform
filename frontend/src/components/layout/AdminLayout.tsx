@@ -35,6 +35,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
   const roleName = (user?.role as { name?: unknown } | undefined)?.name;
   const isApplicant = roleName === "applicant";
   const showRoleDelegation = isAdminUser(user) || hasPermission(user, "roles.delegate");
@@ -64,6 +65,17 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       window.removeEventListener("storage", onStorage);
     };
   }, []);
+
+  useEffect(() => {
+    if (!mobileOpen) return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [mobileOpen]);
 
   const navItems = useMemo(
     () => [
@@ -116,6 +128,11 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       : "block rounded-lg px-4 py-2.5 text-offwhite/90 transition hover:bg-white/10 hover:!text-offwhite";
   };
 
+  const mobileLinkStyle = ({ isActive }: { isActive: boolean }) =>
+    isActive
+      ? "flex items-center gap-3 rounded-lg bg-gold px-4 py-3 font-semibold !text-[#0b1b34]"
+      : "flex items-center gap-3 rounded-lg px-4 py-3 text-offwhite/90 transition hover:bg-white/10 hover:!text-offwhite";
+
   const handleLogout = async () => {
     try {
       await logout();
@@ -131,7 +148,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen p-4 md:p-6">
       <div className="flex min-h-[calc(100vh-2rem)] gap-4 md:min-h-[calc(100vh-3rem)]">
-        <aside className={`${collapsed ? "w-[61px]" : "w-[285px]"} shrink-0 transition-all duration-300 glass-card ${collapsed ? "px-2 py-5" : "p-5"} text-offwhite`}>
+        <aside className={`${collapsed ? "w-[61px]" : "w-[285px]"} hidden shrink-0 transition-all duration-300 md:block glass-card ${collapsed ? "px-2 py-5" : "p-5"} text-offwhite`}>
           <div className="mb-8">
             <div className={`mb-3 flex items-center ${collapsed ? "flex-col justify-center gap-2" : "justify-center gap-4"}`}>
               <img
@@ -193,8 +210,89 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           </div>
         </aside>
 
-        <main className="flex-1">
-          <div className="glass-card min-h-full p-6 md:p-8">
+        <main className="min-w-0 flex-1">
+          <div className="mb-4 flex items-center justify-between rounded-xl border border-white/20 bg-ink/75 px-4 py-3 text-offwhite shadow-[0_12px_28px_rgba(2,6,23,0.35)] backdrop-blur md:hidden">
+            <div className="min-w-0 pr-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-gold-soft">Portal</p>
+              <h1 className="truncate font-heading text-lg leading-tight">{portalTitle}</h1>
+            </div>
+            <button
+              type="button"
+              className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-gold/40 text-gold"
+              aria-expanded={mobileOpen}
+              aria-label="Toggle portal navigation menu"
+              onClick={() => setMobileOpen((current) => !current)}
+            >
+              <span className="relative block h-4 w-5">
+                <span className="absolute left-0 top-0 block h-0.5 w-5 rounded bg-current" />
+                <span className="absolute left-0 top-[7px] block h-0.5 w-5 rounded bg-current" />
+                <span className="absolute left-0 top-[14px] block h-0.5 w-5 rounded bg-current" />
+              </span>
+            </button>
+          </div>
+
+          <div className={`fixed inset-0 z-50 md:hidden ${mobileOpen ? "" : "pointer-events-none"}`} aria-hidden={!mobileOpen}>
+            <div
+              className={`absolute inset-0 bg-ink/75 backdrop-blur-sm transition-opacity duration-300 ${mobileOpen ? "opacity-100" : "opacity-0"}`}
+              onClick={() => setMobileOpen(false)}
+            />
+            <aside className={`absolute inset-y-0 left-0 flex w-[min(86vw,320px)] flex-col border-r border-white/15 bg-ink/95 p-5 text-offwhite shadow-[0_22px_48px_rgba(2,6,23,0.55)] transition-transform duration-300 ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}>
+              <div className="mb-6 flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <div className="mb-3 flex items-center gap-3">
+                    <img
+                      src="/images/tfoe-logo.png"
+                      alt="TFOE Logo"
+                      className="h-10 w-10 object-contain"
+                    />
+                    <img
+                      src="/images/lgec-logo.png"
+                      alt="LGEC Logo"
+                      className="h-10 w-10 object-contain"
+                    />
+                  </div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-gold-soft">Portal</p>
+                  <h2 className="mt-1 font-heading text-xl leading-tight">{portalTitle}</h2>
+                </div>
+                <button
+                  type="button"
+                  className="rounded-lg border border-white/20 px-3 py-2 text-xs text-mist/85"
+                  aria-label="Close portal navigation menu"
+                  onClick={() => setMobileOpen(false)}
+                >
+                  Close
+                </button>
+              </div>
+
+              <nav className="space-y-2 text-sm">
+                {navItems.filter((item) => item.show).map((item) => (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    end={item.end}
+                    className={mobileLinkStyle}
+                    onClick={() => setMobileOpen(false)}
+                  >
+                    <span className="inline-flex h-5 w-5 items-center justify-center" aria-hidden="true">
+                      {renderIcon(item.icon)}
+                    </span>
+                    <span>{item.label}</span>
+                  </NavLink>
+                ))}
+              </nav>
+
+              <div className="mt-auto border-t border-white/15 pt-5">
+                <button
+                  onClick={() => void handleLogout()}
+                  className="flex w-full items-center justify-center rounded-lg border border-gold/50 px-4 py-3 text-sm font-semibold text-gold transition hover:bg-gold/10"
+                >
+                  Logout
+                </button>
+              </div>
+            </aside>
+          </div>
+
+          <div className="glass-card min-h-full p-4 sm:p-5 md:p-8">
             <RouteErrorBoundary>{children}</RouteErrorBoundary>
           </div>
         </main>
