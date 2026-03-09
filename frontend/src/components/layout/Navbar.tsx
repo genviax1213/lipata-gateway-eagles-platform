@@ -1,17 +1,87 @@
-import { useState } from "react";
-import { Link, NavLink } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Link, NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "../../contexts/useAuth";
 import { canonicalRoutes } from "../../content/portalCopy";
 
+type NavLeaf = {
+  label: string;
+  to: string;
+};
+
+type NavGroup = {
+  label: string;
+  items: NavLeaf[];
+};
+
+const navGroups: NavGroup[] = [
+  {
+    label: "About Us",
+    items: [
+      { label: "About", to: "/about" },
+      { label: "History", to: "/history" },
+      { label: "Magna Carta", to: "/magna-carta" },
+    ],
+  },
+  {
+    label: "Programs",
+    items: [
+      { label: "Activities", to: "/activities" },
+      { label: "Schedules", to: "/schedules" },
+      { label: "News", to: "/news" },
+    ],
+  },
+  {
+    label: "Resources",
+    items: [
+      { label: "Hymnals", to: "/hymnals" },
+      { label: "Downloads", to: "/downloads" },
+    ],
+  },
+];
+
 export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [openGroup, setOpenGroup] = useState<string | null>(null);
   const { user } = useAuth();
   const isLoggedIn = Boolean(user);
+  const location = useLocation();
+  const desktopNavRef = useRef<HTMLDivElement | null>(null);
+
+  const activeGroup = useMemo(() => (
+    navGroups.find((group) => group.items.some((item) => location.pathname === item.to))?.label ?? null
+  ), [location.pathname]);
 
   const navItem = ({ isActive }: { isActive: boolean }) =>
     `rounded-md px-3 py-2 text-sm tracking-wide transition ${
       isActive ? "bg-gold/20 text-gold" : "text-offwhite/90 hover:text-gold"
     }`;
+
+  const dropdownItem = ({ isActive }: { isActive: boolean }) =>
+    `block rounded-md px-3 py-2 text-sm transition ${
+      isActive ? "bg-gold/15 text-gold" : "text-offwhite/90 hover:bg-white/5 hover:text-gold"
+    }`;
+
+  useEffect(() => {
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!desktopNavRef.current?.contains(event.target as Node)) {
+        setOpenGroup(null);
+      }
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpenGroup(null);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleEscape);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, []);
 
   return (
     <nav className="sticky top-0 z-40 border-b border-white/15 bg-ink/70 backdrop-blur-md">
@@ -72,28 +142,40 @@ export default function Navbar() {
           </Link>
         </div>
 
-        <div className="hidden items-center justify-center gap-2 pt-2 md:flex">
+        <div ref={desktopNavRef} className="hidden items-center justify-center gap-2 pt-2 md:flex">
           <NavLink to="/" className={navItem} end>Home</NavLink>
-          <NavLink to="/about" className={navItem}>About</NavLink>
-          <NavLink to="/history" className={navItem}>History</NavLink>
-          <NavLink to="/activities" className={navItem}>Activities</NavLink>
-          <NavLink to="/news" className={navItem}>News</NavLink>
+          {navGroups.map((group) => (
+            <div key={group.label} className="relative">
+              <button
+                type="button"
+                className={`inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm tracking-wide transition focus:outline-none ${
+                  openGroup === group.label || activeGroup === group.label
+                    ? "bg-gold/20 text-gold"
+                    : "text-offwhite/90 hover:text-gold"
+                }`}
+                aria-haspopup="menu"
+                aria-expanded={openGroup === group.label}
+                onClick={() => setOpenGroup((current) => current === group.label ? null : group.label)}
+              >
+                <span>{group.label}</span>
+                <span className={`text-[10px] text-gold-soft transition ${openGroup === group.label ? "rotate-180" : ""}`}>▼</span>
+              </button>
+              <div className={`${openGroup === group.label ? "visible translate-y-0 opacity-100" : "invisible translate-y-1 opacity-0"} absolute left-0 top-full z-50 mt-2 min-w-[12rem] rounded-xl border border-white/15 bg-ink/95 p-2 shadow-[0_18px_40px_rgba(2,6,23,0.55)] transition duration-150`}>
+                {group.items.map((item) => (
+                  <NavLink key={item.to} to={item.to} className={dropdownItem} onClick={() => setOpenGroup(null)}>
+                    {item.label}
+                  </NavLink>
+                ))}
+              </div>
+            </div>
+          ))}
           <NavLink to="/contact" className={navItem}>Contact</NavLink>
-          {isLoggedIn ? (
-            <NavLink
-              to="/portal"
-              className="ml-2 rounded-md border border-gold/50 px-3 py-2 text-sm font-semibold text-gold transition hover:bg-gold/10"
-            >
-              Portal
-            </NavLink>
-          ) : (
-            <NavLink
-              to={canonicalRoutes.login}
-              className="ml-2 rounded-md border border-gold/50 px-3 py-2 text-sm font-semibold text-gold transition hover:bg-gold/10"
-            >
-              Portal Login
-            </NavLink>
-          )}
+          <NavLink
+            to={isLoggedIn ? "/portal" : canonicalRoutes.login}
+            className="ml-2 rounded-md border border-gold/50 px-3 py-2 text-sm font-semibold text-gold transition hover:bg-gold/10"
+          >
+            Portal Login
+          </NavLink>
         </div>
 
         {mobileOpen && (
@@ -102,38 +184,33 @@ export default function Navbar() {
               <NavLink to="/" onClick={() => setMobileOpen(false)} className={navItem} end>
                 Home
               </NavLink>
-              <NavLink to="/about" onClick={() => setMobileOpen(false)} className={navItem}>
-                About
-              </NavLink>
-              <NavLink to="/history" onClick={() => setMobileOpen(false)} className={navItem}>
-                History
-              </NavLink>
-              <NavLink to="/activities" onClick={() => setMobileOpen(false)} className={navItem}>
-                Activities
-              </NavLink>
-              <NavLink to="/news" onClick={() => setMobileOpen(false)} className={navItem}>
-                News
-              </NavLink>
+              {navGroups.map((group) => (
+                <div key={group.label} className="rounded-md border border-white/10 bg-white/[0.03] px-3 py-2">
+                  <p className="text-xs uppercase tracking-[0.18em] text-gold-soft">{group.label}</p>
+                  <div className="mt-2 flex flex-col gap-1">
+                    {group.items.map((item) => (
+                      <NavLink
+                        key={item.to}
+                        to={item.to}
+                        onClick={() => setMobileOpen(false)}
+                        className={navItem}
+                      >
+                        {item.label}
+                      </NavLink>
+                    ))}
+                  </div>
+                </div>
+              ))}
               <NavLink to="/contact" onClick={() => setMobileOpen(false)} className={navItem}>
                 Contact
               </NavLink>
-              {isLoggedIn ? (
-                <NavLink
-                  to="/portal"
-                  onClick={() => setMobileOpen(false)}
-                  className="mt-1 rounded-md border border-gold/50 px-3 py-2 text-sm font-semibold text-gold transition hover:bg-gold/10"
-                >
-                  Portal
-                </NavLink>
-              ) : (
-                <NavLink
-                  to={canonicalRoutes.login}
-                  onClick={() => setMobileOpen(false)}
-                  className="mt-1 rounded-md border border-gold/50 px-3 py-2 text-sm font-semibold text-gold transition hover:bg-gold/10"
-                >
-                  Portal Login
-                </NavLink>
-              )}
+              <NavLink
+                to={isLoggedIn ? "/portal" : canonicalRoutes.login}
+                onClick={() => setMobileOpen(false)}
+                className="mt-1 rounded-md border border-gold/50 px-3 py-2 text-sm font-semibold text-gold transition hover:bg-gold/10"
+              >
+                Portal Login
+              </NavLink>
             </div>
           </div>
         )}

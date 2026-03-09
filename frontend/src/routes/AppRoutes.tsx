@@ -8,8 +8,12 @@ const Login = lazy(() => import("../pages/Login"));
 const Landing = lazy(() => import("../pages/Landing"));
 const About = lazy(() => import("../pages/About"));
 const History = lazy(() => import("../pages/History"));
+const MagnaCarta = lazy(() => import("../pages/MagnaCarta"));
 const Activities = lazy(() => import("../pages/Activities"));
+const Schedules = lazy(() => import("../pages/Schedules"));
 const News = lazy(() => import("../pages/News"));
+const Hymnals = lazy(() => import("../pages/Hymnals"));
+const Downloads = lazy(() => import("../pages/Downloads"));
 const Contact = lazy(() => import("../pages/Contact"));
 const ApplicantRegistration = lazy(() => import("../pages/ApplicantRegistration"));
 const MemberRegistration = lazy(() => import("../pages/MemberRegistration"));
@@ -36,8 +40,12 @@ export default function AppRoutes() {
           <Route path="/" element={<Layout><Landing /></Layout>} />
           <Route path="/about" element={<Layout><About /></Layout>} />
           <Route path="/history" element={<Layout><History /></Layout>} />
+          <Route path="/magna-carta" element={<Layout><MagnaCarta /></Layout>} />
           <Route path="/activities" element={<Layout><Activities /></Layout>} />
+          <Route path="/schedules" element={<Layout><Schedules /></Layout>} />
           <Route path="/news" element={<Layout><News /></Layout>} />
+          <Route path="/hymnals" element={<Layout><Hymnals /></Layout>} />
+          <Route path="/downloads" element={<Layout><Downloads /></Layout>} />
           <Route path="/contact" element={<Layout><Contact /></Layout>} />
           <Route
             path="/applicant-registration"
