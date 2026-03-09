@@ -82,7 +82,7 @@ export default function FormalPhotoStaffViewer({
 
   const selectMember = async (member: FormalPhotoMemberRow) => {
     setSelectedMember(member);
-    setFormalPhoto(null);
+    setFormalPhoto(member.formal_photo ?? null);
     setLoadingPhoto(true);
     setPreviewFailed(false);
     setPreviewUrl((current) => {
@@ -93,12 +93,14 @@ export default function FormalPhotoStaffViewer({
 
     try {
       const response = await api.get<StaffFormalPhotoResponse>(member.lookup_url);
+      const resolvedPhoto = response.data.formal_photo ?? member.formal_photo ?? null;
       setSelectedMember(response.data.member ?? response.data.applicant ?? member);
-      setFormalPhoto(response.data.formal_photo ?? null);
-      if (!response.data.formal_photo) {
+      setFormalPhoto(resolvedPhoto);
+      if (!resolvedPhoto) {
         onNotice(`This ${member.subject_type} does not have a saved formal photo yet.`);
       }
     } catch {
+      setFormalPhoto(member.formal_photo ?? null);
       onError("Unable to load the selected person's formal photo.");
     } finally {
       setLoadingPhoto(false);
