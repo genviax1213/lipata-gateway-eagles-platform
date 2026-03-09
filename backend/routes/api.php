@@ -14,6 +14,7 @@ use App\Http\Controllers\ExpenseAuditController;
 use App\Http\Controllers\FinanceExpenseController;
 use App\Http\Controllers\ForumController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\FormalPhotoController;
 use App\Http\Controllers\LogManagementController;
 use App\Http\Controllers\BootstrapRecoveryController;
 use App\Http\Controllers\GoogleOAuthController;
@@ -68,6 +69,11 @@ Route::prefix('v1')->group(function () {
         Route::get('/admin/logs/archives/{archive}/download', [LogManagementController::class, 'downloadArchive'])->middleware('portal.permission:users.view');
         Route::delete('/admin/logs/archives/{archive}', [LogManagementController::class, 'deleteArchive'])->middleware('portal.permission:users.manage');
         Route::get('/dashboard/me', [DashboardController::class, 'me']);
+        Route::get('/formal-photos/me', [FormalPhotoController::class, 'showMine'])->name('formal-photos.my');
+        Route::post('/formal-photos/me', [FormalPhotoController::class, 'storeMine'])->middleware('throttle:members-write')->name('formal-photos.store');
+        Route::get('/formal-photos/me/image', [FormalPhotoController::class, 'showMineImage'])->name('formal-photos.my-image');
+        Route::get('/formal-photos/members', [FormalPhotoController::class, 'indexMembers'])->name('formal-photos.members');
+        Route::get('/formal-photos/{formalPhoto}/image', [FormalPhotoController::class, 'showImage'])->name('formal-photos.show-image');
 
         Route::get('/cms/posts', [PostController::class, 'index'])->middleware('portal.permission:posts.create,posts.update,posts.delete');
         Route::get('/cms/posts/available-images', [PostController::class, 'availableImages'])->middleware('portal.permission:posts.create,posts.update,posts.delete');
@@ -81,6 +87,7 @@ Route::prefix('v1')->group(function () {
 
         Route::get('/members', [MemberController::class, 'index'])->middleware('portal.permission:members.view');
         Route::get('/members/me/profile', [MemberController::class, 'myProfile']);
+        Route::get('/members/{member}/formal-photo', [FormalPhotoController::class, 'showForMember']);
         Route::put('/members/me/profile', [MemberController::class, 'updateMyProfile']);
         Route::post('/members', [MemberController::class, 'store'])->middleware('throttle:members-write', 'portal.permission:members.create');
         Route::put('/members/{member}', [MemberController::class, 'update'])->middleware('throttle:members-write', 'portal.permission:members.update');

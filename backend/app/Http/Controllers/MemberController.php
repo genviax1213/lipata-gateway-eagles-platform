@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\FormalPhoto;
 use App\Models\Member;
 use App\Models\Applicant;
 use App\Models\MemberRegistration;
@@ -116,7 +117,12 @@ class MemberController extends Controller
 
         $this->authorize('manageOwnProfile', $member);
 
-        return response()->json($member);
+        $actor->loadMissing('formalPhoto');
+
+        return response()->json([
+            ...$member->toArray(),
+            'formal_photo' => $this->formalPhotoPayload($actor->formalPhoto, true),
+        ]);
     }
 
     public function updateMyProfile(Request $request)
@@ -170,7 +176,10 @@ class MemberController extends Controller
 
         return response()->json([
             'message' => 'Profile updated successfully.',
-            'member' => $member->fresh(),
+            'member' => [
+                ...$member->fresh()->toArray(),
+                'formal_photo' => $this->formalPhotoPayload($actor->fresh('formalPhoto')->formalPhoto, true),
+            ],
         ]);
     }
 
@@ -316,5 +325,10 @@ class MemberController extends Controller
         });
 
         return response()->json(['message' => 'Member deleted']);
+    }
+
+    private function formalPhotoPayload(?FormalPhoto $formalPhoto, bool $includeOwnerRoute = false): ?array
+    {
+        return $formalPhoto?->toMetadataArray($includeOwnerRoute);
     }
 }

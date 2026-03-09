@@ -102,6 +102,11 @@ class User extends Authenticatable
         return $this->hasOne(Applicant::class);
     }
 
+    public function formalPhoto()
+    {
+        return $this->hasOne(FormalPhoto::class);
+    }
+
     public function hasPermission(string $permission): bool
     {
         $this->loadMissing('role.permissions:id,name');

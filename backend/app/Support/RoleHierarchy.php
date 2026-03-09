@@ -12,6 +12,7 @@ class RoleHierarchy
     public const SUPERADMIN = 'superadmin';
     public const ADMIN = 'admin';
     public const OFFICER = 'officer';
+    public const SECRETARY = 'secretary';
     public const MEMBERSHIP_CHAIRMAN = 'membership_chairman';
     public const MEMBER = 'member';
     public const APPLICANT = 'applicant';
@@ -113,6 +114,7 @@ class RoleHierarchy
             self::SUPERADMIN,
             self::ADMIN,
             self::OFFICER,
+            self::SECRETARY,
             self::MEMBERSHIP_CHAIRMAN,
             self::MEMBER,
             self::APPLICANT,

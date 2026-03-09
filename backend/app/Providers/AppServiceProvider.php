@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App\Models\ApplicantDocument;
 use App\Models\Contribution;
+use App\Models\FormalPhoto;
 use App\Models\ForumPost;
 use App\Models\ForumThread;
 use App\Models\Member;
@@ -13,6 +14,7 @@ use App\Models\User;
 use App\Policies\AdminUserPolicy;
 use App\Policies\ApplicantDocumentPolicy;
 use App\Policies\ContributionPolicy;
+use App\Policies\FormalPhotoPolicy;
 use App\Policies\ForumPostPolicy;
 use App\Policies\ForumThreadPolicy;
 use App\Policies\MemberPolicy;
@@ -43,6 +45,7 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(Applicant::class, ApplicantPolicy::class);
         Gate::policy(ApplicantDocument::class, ApplicantDocumentPolicy::class);
         Gate::policy(Member::class, MemberPolicy::class);
+        Gate::policy(FormalPhoto::class, FormalPhotoPolicy::class);
         Gate::policy(User::class, AdminUserPolicy::class);
         Gate::policy(Post::class, PostPolicy::class);
         Gate::policy(Contribution::class, ContributionPolicy::class);

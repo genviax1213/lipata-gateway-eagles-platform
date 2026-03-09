@@ -6,6 +6,7 @@ use App\Models\Contribution;
 use App\Models\ApplicantBatch;
 use App\Models\Member;
 use App\Models\Applicant;
+use App\Models\FormalPhoto;
 use App\Models\User;
 use App\Support\RoleHierarchy;
 use App\Support\Permissions;
@@ -16,7 +17,8 @@ class DashboardController extends Controller
     public function me(Request $request)
     {
         /** @var User $user */
-        $user = $request->user()->loadMissing('role.permissions:id,name');
+        $user = $request->user()->loadMissing('role.permissions:id,name', 'formalPhoto');
+        $formalPhoto = $this->formalPhotoPayload($user->formalPhoto, true);
 
         $application = Applicant::query()
             ->ownedByUser($user)
@@ -33,6 +35,7 @@ class DashboardController extends Controller
         if ($hasOpenApplication && $user->hasPermission(Permissions::APPLICATIONS_DASHBOARD_VIEW)) {
             return response()->json([
                 'view' => 'applicant',
+                'formal_photo' => $formalPhoto,
                 'can_upload_documents' => $user->hasPermission(Permissions::APPLICATIONS_DOCS_UPLOAD),
                 'can_review_applications' => RoleHierarchy::canReviewApplications(optional($user->role)->name ?? ''),
                 'can_set_fee' => $user->hasPermission(Permissions::APPLICATIONS_FEE_SET),
@@ -51,6 +54,7 @@ class DashboardController extends Controller
         if (!$member) {
             return response()->json([
                 'view' => 'general',
+                'formal_photo' => $formalPhoto,
                 'message' => 'No linked member profile found.',
                 'application_archive_available' => $applicationArchiveAvailable,
                 'can_manage_batch_applicant_contributions' => $canManageBatchApplicantContributions,
@@ -76,6 +80,7 @@ class DashboardController extends Controller
 
         return response()->json([
             'view' => 'member',
+            'formal_photo' => $formalPhoto,
             'application_archive_available' => $applicationArchiveAvailable,
             'can_manage_batch_applicant_contributions' => $canManageBatchApplicantContributions,
             'member' => [
@@ -97,5 +102,10 @@ class DashboardController extends Controller
         }
 
         return Member::query()->where('email', $user->email)->first();
+    }
+
+    private function formalPhotoPayload(?FormalPhoto $formalPhoto, bool $includeOwnerRoute = false): ?array
+    {
+        return $formalPhoto?->toMetadataArray($includeOwnerRoute);
     }
 }

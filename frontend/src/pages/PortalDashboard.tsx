@@ -7,6 +7,9 @@ import { roleGlossary } from "../content/portalCopy";
 import type { ApplicantDecisionStatus, ApplicantStatus } from "../types/member";
 import TaskHierarchyCard from "../components/TaskHierarchyCard";
 import FileSelectionPreview from "../components/FileSelectionPreview";
+import FormalPhotoCard from "../components/FormalPhotoCard";
+import FormalPhotoStaffViewer from "../components/FormalPhotoStaffViewer";
+import type { FormalPhotoRecord } from "../utils/formalPhoto";
 import {
   PORTAL_BUILTIN_THEMES,
   applyPortalTheme,
@@ -23,6 +26,7 @@ interface DashboardPayload {
   message?: string;
   application_archive_available?: boolean;
   can_manage_batch_applicant_contributions?: boolean;
+  formal_photo?: FormalPhotoRecord | null;
 }
 
 interface SelfMemberProfile {
@@ -41,6 +45,7 @@ interface SelfMemberProfile {
   membership_status: "active" | "inactive";
   email_verified: boolean;
   password_set: boolean;
+  formal_photo?: FormalPhotoRecord | null;
 }
 
 interface ApplicantNotice {
@@ -409,6 +414,7 @@ type PortalTab =
   | "application-archive"
   | "my-contributions"
   | "my-profile"
+  | "formal-photo-viewer"
   | "committee";
 
 const PAGE_SIZE = 10;
@@ -424,6 +430,7 @@ export default function PortalDashboard() {
   const canChairmanReviewDocs = hasPermission(user, "applications.docs.review");
   const canChairmanSetContributionTarget = hasPermission(user, "applications.fee.set");
   const canChairmanLogContributionPayment = hasPermission(user, "applications.fee.pay");
+  const canViewFormalPhotos = hasPermission(user, "formal_photos.view_private");
   const isAdmin = isAdminUser(user);
 
   const [activeTab, setActiveTab] = useState<PortalTab>("overview");
@@ -507,6 +514,16 @@ export default function PortalDashboard() {
       if (first) return first;
     }
     return fallback;
+  }, []);
+
+  const reportDashboardNotice = useCallback((message: string) => {
+    setError("");
+    setNotice(message);
+  }, []);
+
+  const reportDashboardError = useCallback((message: string) => {
+    setNotice("");
+    setError(message);
   }, []);
 
   const loadDashboard = useCallback(async () => {
@@ -1217,6 +1234,7 @@ export default function PortalDashboard() {
         {dashboard?.application_archive_available && <button type="button" onClick={() => setActiveTab("application-archive")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "application-archive" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Application Archive</button>}
         {dashboard?.view !== "applicant" && <button type="button" onClick={() => setActiveTab("my-contributions")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "my-contributions" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>My Contributions</button>}
         {canSelfEditProfile && <button type="button" onClick={() => setActiveTab("my-profile")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "my-profile" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>My Profile</button>}
+        {canViewFormalPhotos && <button type="button" onClick={() => setActiveTab("formal-photo-viewer")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "formal-photo-viewer" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Formal Photos</button>}
         {isAdmin && <button type="button" onClick={() => setActiveTab("themes")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "themes" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Themes</button>}
         {isAdmin && <button type="button" onClick={() => setActiveTab("glossary")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "glossary" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Glossary</button>}
         {(canChairmanReview || canChairmanSetContributionTarget || canChairmanLogContributionPayment || canChairmanSetNotice || canChairmanSetStage || canChairmanReviewDocs || canBatchTreasurerManagePayments) && <button type="button" onClick={() => setActiveTab("committee")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "committee" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Application Review</button>}
@@ -1731,6 +1749,16 @@ export default function PortalDashboard() {
             <p className="text-sm text-mist/80">No linked member profile found for this account.</p>
           ) : (
             <>
+              <FormalPhotoCard
+                formalPhoto={profile.formal_photo ?? null}
+                onSaved={(formalPhoto) => {
+                  setProfile((current) => (current ? { ...current, formal_photo: formalPhoto } : current));
+                  setDashboard((current) => (current ? { ...current, formal_photo: formalPhoto } : current));
+                }}
+                onNotice={reportDashboardNotice}
+                onError={reportDashboardError}
+              />
+
               <div className="mb-4 grid gap-3 rounded-lg border border-white/15 bg-white/5 p-4 md:grid-cols-2">
                 <p className="text-sm text-mist/85">Member Number: <span className="text-offwhite">{profile.member_number}</span></p>
                 <p className="text-sm text-mist/85">Email: <span className="text-offwhite">{profile.email ?? "—"}</span></p>
@@ -1781,6 +1809,13 @@ export default function PortalDashboard() {
             </>
           )}
         </div>
+      )}
+
+      {activeTab === "formal-photo-viewer" && canViewFormalPhotos && (
+        <FormalPhotoStaffViewer
+          onNotice={reportDashboardNotice}
+          onError={reportDashboardError}
+        />
       )}
 
       {activeTab === "committee" && (canChairmanReview || canChairmanSetContributionTarget || canChairmanLogContributionPayment || canChairmanSetNotice || canChairmanSetStage || canChairmanReviewDocs || canBatchTreasurerManagePayments) && (

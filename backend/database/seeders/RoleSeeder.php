@@ -40,6 +40,7 @@ class RoleSeeder extends Seeder
             'users.view' => 'View portal users, roles, and user-role mappings',
             'users.manage' => 'Create, update, and delete portal users and destructive member records',
             'users.password.reset' => 'Reset passwords for other portal users within role policy limits',
+            'formal_photos.view_private' => 'View private user formal-photo records for reporting and service workflows',
         ];
 
         $permissionIds = [];
@@ -64,6 +65,11 @@ class RoleSeeder extends Seeder
         $officer = Role::query()->updateOrCreate(
             ['name' => 'officer'],
             ['description' => 'Can create and edit posts and members']
+        );
+
+        $secretary = Role::query()->updateOrCreate(
+            ['name' => 'secretary'],
+            ['description' => 'Can access private formal-photo records for reporting and service workflows']
         );
 
         $member = Role::query()->updateOrCreate(
@@ -113,6 +119,7 @@ class RoleSeeder extends Seeder
             $permissionIds['users.view'],
             $permissionIds['users.manage'],
             $permissionIds['users.password.reset'],
+            $permissionIds['formal_photos.view_private'],
         ]);
         $admin->permissions()->sync([
             $permissionIds['posts.view'],
@@ -136,6 +143,7 @@ class RoleSeeder extends Seeder
             $permissionIds['users.view'],
             $permissionIds['users.manage'],
             $permissionIds['users.password.reset'],
+            $permissionIds['formal_photos.view_private'],
         ]);
         $officer->permissions()->sync([
             $permissionIds['posts.view'],
@@ -149,6 +157,9 @@ class RoleSeeder extends Seeder
             $permissionIds['forum.reply'],
             $permissionIds['applications.view'],
             $permissionIds['applications.notice.view'],
+        ]);
+        $secretary->permissions()->sync([
+            $permissionIds['formal_photos.view_private'],
         ]);
         $member->permissions()->sync([
             $permissionIds['applications.view'],

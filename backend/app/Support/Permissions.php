@@ -42,6 +42,7 @@ class Permissions
     public const USERS_VIEW = 'users.view';
     public const USERS_MANAGE = 'users.manage';
     public const USERS_PASSWORD_RESET = 'users.password.reset';
+    public const FORMAL_PHOTOS_VIEW_PRIVATE = 'formal_photos.view_private';
 
     // Forum Permissions
     public const FORUM_VIEW = 'forum.view';
@@ -115,6 +116,7 @@ class Permissions
             ],
             'roles' => [self::ROLES_DELEGATE],
             'users' => [self::USERS_VIEW, self::USERS_MANAGE, self::USERS_PASSWORD_RESET],
+            'formal_photos' => [self::FORMAL_PHOTOS_VIEW_PRIVATE],
             'forum' => self::forum(),
         ];
     }
