@@ -1769,6 +1769,8 @@ export default function PortalDashboard() {
                     <tr>
                       <th className="px-3 py-2 text-left">Select</th>
                       <th className="px-3 py-2 text-left">Applicant</th>
+                      <th className="px-3 py-2 text-left">Email</th>
+                      <th className="px-3 py-2 text-left">Batch</th>
                       <th className="px-3 py-2 text-left">Status</th>
                       <th className="px-3 py-2 text-left">Decision</th>
                     </tr>
@@ -1786,6 +1788,8 @@ export default function PortalDashboard() {
                           </button>
                         </td>
                         <td className="px-3 py-2">{appName(app)}</td>
+                        <td className="px-3 py-2 text-mist/85">{app.email}</td>
+                        <td className="px-3 py-2 text-mist/85">{app.batch?.name ?? "Unassigned"}</td>
                         <td className="px-3 py-2">{app.status}</td>
                         <td className="px-3 py-2">{app.decision_status}</td>
                       </tr>
