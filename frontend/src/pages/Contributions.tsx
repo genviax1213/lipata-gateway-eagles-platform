@@ -1454,11 +1454,11 @@ export default function Contributions() {
               Legacy contribution rows without an assigned treasury account: {money(unassignedContributionTotal)}
             </p>
           )}
-          <div className="mt-4 rounded-lg border border-white/20 bg-white/5 p-4">
+          <div className="mt-5">
             <p className="mb-3 text-xs uppercase tracking-[0.2em] text-gold-soft">Account Balance Graph</p>
             <VerticalBarChart items={financeSummaryGraph} valueFormatter={(value) => money(value)} emptyText="No account balances to graph." />
           </div>
-          <div className="mt-4 rounded-lg border border-white/20 bg-white/5 p-4">
+          <div className="mt-6">
             <h3 className="font-heading text-xl text-offwhite">Opening Balances</h3>
             <p className="mt-1 text-sm text-mist/80">
               Use this only for starting bank, GCash, or cash-on-hand values that existed before ledger tracking. These entries are immutable after save and must be corrected through reversal or offset.
