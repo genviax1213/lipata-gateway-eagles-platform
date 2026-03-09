@@ -119,6 +119,49 @@ class RolePermissionAuthorizationTest extends TestCase
         $response->assertStatus(200);
     }
 
+    public function test_member_directory_can_be_grouped_by_batch(): void
+    {
+        $officerRole = Role::query()->where('name', 'officer')->firstOrFail();
+        $officer = User::factory()->create(['role_id' => $officerRole->id]);
+
+        $alpha = Member::query()->create([
+            'member_number' => 'M-GROUP-001',
+            'first_name' => 'Alpha',
+            'middle_name' => 'Batch',
+            'last_name' => 'Member',
+            'email' => 'alpha-batch-member@test.local',
+            'batch' => 'Alpha Batch',
+            'membership_status' => 'active',
+        ]);
+        $unassigned = Member::query()->create([
+            'member_number' => 'M-GROUP-002',
+            'first_name' => 'No',
+            'middle_name' => 'Batch',
+            'last_name' => 'Member',
+            'email' => 'unassigned-member@test.local',
+            'batch' => null,
+            'membership_status' => 'active',
+        ]);
+        $beta = Member::query()->create([
+            'member_number' => 'M-GROUP-003',
+            'first_name' => 'Beta',
+            'middle_name' => 'Batch',
+            'last_name' => 'Member',
+            'email' => 'beta-batch-member@test.local',
+            'batch' => 'Beta Batch',
+            'membership_status' => 'active',
+        ]);
+
+        Sanctum::actingAs($officer);
+
+        $response = $this->getJson('/api/v1/members?group_by=batch')
+            ->assertOk();
+
+        $rows = collect($response->json('data'));
+
+        $this->assertSame([$alpha->id, $beta->id, $unassigned->id], $rows->pluck('id')->all());
+    }
+
     public function test_membership_chairman_can_access_forum_threads_and_create_thread(): void
     {
         $chairmanRole = Role::query()->where('name', 'membership_chairman')->firstOrFail();

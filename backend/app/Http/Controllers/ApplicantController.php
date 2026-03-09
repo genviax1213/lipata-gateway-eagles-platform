@@ -1233,7 +1233,7 @@ class ApplicantController extends Controller
         ]);
 
         return response()->json([
-            'message' => 'Pending verification applicant removed. The person may register again using the correct email address.',
+            'message' => 'Pending verification applicant deleted. The person may register again using the correct email address.',
         ]);
     }
 

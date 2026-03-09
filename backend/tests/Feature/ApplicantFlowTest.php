@@ -797,7 +797,7 @@ class ApplicantFlowTest extends TestCase
 
         $this->postJson("/api/v1/applicants/{$application->id}/recover-pending-verification")
             ->assertOk()
-            ->assertJsonPath('message', 'Pending verification applicant removed. The person may register again using the correct email address.');
+            ->assertJsonPath('message', 'Pending verification applicant deleted. The person may register again using the correct email address.');
 
         $this->assertDatabaseMissing('applicants', ['id' => $application->id]);
         $this->assertDatabaseMissing('users', ['id' => $linkedUser->id]);

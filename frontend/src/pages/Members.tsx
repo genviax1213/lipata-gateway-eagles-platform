@@ -19,6 +19,7 @@ import {
 } from "../utils/portalRefresh";
 
 type MembersTab = "members" | "applications" | "batch-workflow";
+type MemberListGrouping = "flat" | "batch";
 
 interface ApplicantBatchListRow {
   id: number;
@@ -78,6 +79,7 @@ export default function Members() {
   const [membersLoaded, setMembersLoaded] = useState(false);
   const [applicationsLoaded, setApplicationsLoaded] = useState(false);
   const [search, setSearch] = useState("");
+  const [memberGrouping, setMemberGrouping] = useState<MemberListGrouping>("flat");
   const [emailVerifiedFilter, setEmailVerifiedFilter] = useState("");
   const [passwordSetFilter, setPasswordSetFilter] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -134,15 +136,21 @@ export default function Members() {
     [activeBatchId, batches],
   );
 
-  const fetchMembers = useCallback(async (page = 1, filters?: { search: string; email_verified: string; password_set: string }) => {
+  const fetchMembers = useCallback(async (page = 1, filters?: { search: string; email_verified: string; password_set: string; group_by: MemberListGrouping }) => {
     setError("");
-    const activeFilters = filters ?? { search, email_verified: emailVerifiedFilter, password_set: passwordSetFilter };
+    const activeFilters = filters ?? {
+      search,
+      email_verified: emailVerifiedFilter,
+      password_set: passwordSetFilter,
+      group_by: memberGrouping,
+    };
     const res = await api.get("/members", {
       params: {
         page,
         search: activeFilters.search,
         email_verified: activeFilters.email_verified,
         password_set: activeFilters.password_set,
+        group_by: activeFilters.group_by === "batch" ? "batch" : undefined,
       },
     });
 
@@ -151,7 +159,30 @@ export default function Members() {
     setLastPage(res.data.last_page);
     setTotalMembers(Number(res.data.total ?? res.data.data.length));
     setMembersLoaded(true);
-  }, [emailVerifiedFilter, passwordSetFilter, search]);
+  }, [emailVerifiedFilter, memberGrouping, passwordSetFilter, search]);
+
+  const groupedMemberRows = useMemo(() => {
+    if (memberGrouping !== "batch") {
+      return members.map((member) => ({ kind: "member" as const, member }));
+    }
+
+    const rows: Array<
+      | { kind: "group"; label: string; key: string }
+      | { kind: "member"; member: Member }
+    > = [];
+    let lastGroupKey: string | null = null;
+
+    for (const member of members) {
+      const label = member.batch?.trim() || "Unassigned";
+      if (label !== lastGroupKey) {
+        rows.push({ kind: "group", label, key: label });
+        lastGroupKey = label;
+      }
+      rows.push({ kind: "member", member });
+    }
+
+    return rows;
+  }, [memberGrouping, members]);
 
   const fetchApplications = useCallback(async (page = 1) => {
     if (!canViewApplications) return;
@@ -563,7 +594,7 @@ export default function Members() {
 
       {effectiveActiveTab === "members" && canViewMembers && (
         <>
-          <div className="mb-6 grid gap-4 rounded-xl border border-white/20 bg-white/10 p-4 md:grid-cols-[1fr_220px_220px_auto]">
+          <div className="mb-6 grid gap-4 rounded-xl border border-white/20 bg-white/10 p-4 md:grid-cols-[1fr_220px_220px_200px_auto]">
             <input
               aria-label="Search members"
               placeholder="Search by member no., name, or email..."
@@ -580,6 +611,15 @@ export default function Members() {
               <option value="" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>All</option>
               <option value="true" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Email Verified</option>
               <option value="false" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Email Not Verified</option>
+            </select>
+            <select
+              aria-label="Group members list"
+              value={memberGrouping}
+              onChange={(e) => setMemberGrouping(e.target.value as MemberListGrouping)}
+              className="rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite focus:border-gold focus:outline-none"
+            >
+              <option value="flat" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Flat List</option>
+              <option value="batch" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Group By Batch</option>
             </select>
             <select
               aria-label="Filter members by password state"
@@ -624,39 +664,52 @@ export default function Members() {
                     </tr>
                   </thead>
                   <tbody>
-                    {members.map((m) => (
-                      <tr key={m.id} className="border-b border-white/15">
-                        <td className="px-4 py-3">{m.member_number}</td>
-                        <td className="px-4 py-3">{memberName(m)}</td>
-                        <td className="px-4 py-3">{m.email ?? "—"}</td>
-                        <td className="px-4 py-3">{m.batch ?? "—"}</td>
-                        <td className="px-4 py-3">{m.contact_number ?? "—"}</td>
-                        <td className="px-4 py-3">
-                          <span className={`rounded-full border px-2.5 py-1 text-xs ${m.email_verified ? "border-emerald-300/50 bg-emerald-400/10 text-emerald-200" : "border-red-300/40 bg-red-400/10 text-red-200"}`}>
-                            {m.email_verified ? "Verified" : "Not Verified"}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className={`rounded-full border px-2.5 py-1 text-xs ${m.password_set ? "border-emerald-300/50 bg-emerald-400/10 text-emerald-200" : "border-red-300/40 bg-red-400/10 text-red-200"}`}>
-                            {m.password_set ? "Set" : "Not Set"}
-                          </span>
-                        </td>
-                        {canManageMembers && (
-                          <td className="space-x-3 px-4 py-3">
-                            {canEditMembers && (
-                              <button onClick={() => setEditing(m)} className="text-gold hover:text-gold-soft hover:underline">
-                                Edit
-                              </button>
-                            )}
-                            {canDeleteMembers && (
-                              <button onClick={() => setDeleting(m)} className="text-red-300 hover:underline">
-                                Delete
-                              </button>
-                            )}
+                    {groupedMemberRows.map((row) => {
+                      if (row.kind === "group") {
+                        return (
+                          <tr key={`group-${row.key}`} className="border-b border-white/10 bg-gold/5">
+                            <td colSpan={canManageMembers ? 8 : 7} className="px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-gold-soft">
+                              Batch: {row.label}
+                            </td>
+                          </tr>
+                        );
+                      }
+
+                      const m = row.member;
+                      return (
+                        <tr key={m.id} className="border-b border-white/15">
+                          <td className="px-4 py-3">{m.member_number}</td>
+                          <td className="px-4 py-3">{memberName(m)}</td>
+                          <td className="px-4 py-3">{m.email ?? "—"}</td>
+                          <td className="px-4 py-3">{m.batch ?? "—"}</td>
+                          <td className="px-4 py-3">{m.contact_number ?? "—"}</td>
+                          <td className="px-4 py-3">
+                            <span className={`rounded-full border px-2.5 py-1 text-xs ${m.email_verified ? "border-emerald-300/50 bg-emerald-400/10 text-emerald-200" : "border-red-300/40 bg-red-400/10 text-red-200"}`}>
+                              {m.email_verified ? "Verified" : "Not Verified"}
+                            </span>
                           </td>
-                        )}
-                      </tr>
-                    ))}
+                          <td className="px-4 py-3">
+                            <span className={`rounded-full border px-2.5 py-1 text-xs ${m.password_set ? "border-emerald-300/50 bg-emerald-400/10 text-emerald-200" : "border-red-300/40 bg-red-400/10 text-red-200"}`}>
+                              {m.password_set ? "Set" : "Not Set"}
+                            </span>
+                          </td>
+                          {canManageMembers && (
+                            <td className="space-x-3 px-4 py-3">
+                              {canEditMembers && (
+                                <button onClick={() => setEditing(m)} className="text-gold hover:text-gold-soft hover:underline">
+                                  Edit
+                                </button>
+                              )}
+                              {canDeleteMembers && (
+                                <button onClick={() => setDeleting(m)} className="text-red-300 hover:underline">
+                                  Delete
+                                </button>
+                              )}
+                            </td>
+                          )}
+                        </tr>
+                      );
+                    })}
                     {members.length === 0 && (
                       <tr>
                         <td colSpan={canManageMembers ? 8 : 7} className="px-4 py-8 text-center text-mist/80">
@@ -1128,7 +1181,7 @@ export default function Members() {
             >
               <input
                 aria-label="Search members for batch assignment"
-                placeholder="Search member number, name, email, or current batch..."
+                placeholder="Search member number, name, email, or batch..."
                 value={workflowMemberSearch}
                 onChange={(e) => setWorkflowMemberSearch(e.target.value)}
                 className="rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite placeholder:text-mist/70 focus:border-gold focus:outline-none"
@@ -1150,8 +1203,7 @@ export default function Members() {
                         <th className="px-3 py-2 text-left">Member No.</th>
                         <th className="px-3 py-2 text-left">Member</th>
                         <th className="px-3 py-2 text-left">Email</th>
-                        <th className="px-3 py-2 text-left">Current Batch</th>
-                        <th className="px-3 py-2 text-left">Status</th>
+                        <th className="px-3 py-2 text-left">Batch</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1172,13 +1224,12 @@ export default function Members() {
                             <td className="px-3 py-2">{memberName(member)}</td>
                             <td className="px-3 py-2 text-mist/85">{member.email ?? "—"}</td>
                             <td className="px-3 py-2 text-mist/85">{member.batch ?? "Unassigned"}</td>
-                            <td className="px-3 py-2 text-mist/85 capitalize">{member.membership_status}</td>
                           </tr>
                         );
                       })}
                       {workflowMembers.length === 0 && (
                         <tr>
-                          <td colSpan={6} className="px-4 py-8 text-center text-mist/80">
+                          <td colSpan={5} className="px-4 py-8 text-center text-mist/80">
                             No members matched this search. Adjust the search term and try again.
                           </td>
                         </tr>

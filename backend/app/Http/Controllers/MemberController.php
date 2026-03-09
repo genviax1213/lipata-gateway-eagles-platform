@@ -55,6 +55,7 @@ class MemberController extends Controller
 
         $search = (string) $request->query('search', '');
         $status = (string) $request->query('status', '');
+        $groupBy = (string) $request->query('group_by', '');
         $emailVerified = $request->query('email_verified');
         $passwordSet = $request->query('password_set');
 
@@ -94,7 +95,17 @@ class MemberController extends Controller
             $query->where('password_set', filter_var($passwordSet, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? false);
         }
 
-        return response()->json($query->orderBy('last_name')->orderBy('first_name')->paginate(10));
+        if ($groupBy === 'batch') {
+            $query
+                ->orderByRaw("CASE WHEN batch IS NULL OR TRIM(batch) = '' THEN 1 ELSE 0 END")
+                ->orderBy('batch')
+                ->orderBy('last_name')
+                ->orderBy('first_name');
+        } else {
+            $query->orderBy('last_name')->orderBy('first_name');
+        }
+
+        return response()->json($query->paginate(10));
     }
 
     public function store(Request $request)
