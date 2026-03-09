@@ -29,7 +29,8 @@ class ApplicantPolicy
 
     public function setNotice(User $user, Applicant $applicant): bool
     {
-        return $user->hasPermission('applications.notice.set');
+        return (string) optional($user->role)->name === RoleHierarchy::MEMBERSHIP_CHAIRMAN
+            && $user->hasPermission(Permissions::APPLICATIONS_NOTICE_SET);
     }
 
     public function setFeeRequirement(User $user, Applicant $applicant): bool

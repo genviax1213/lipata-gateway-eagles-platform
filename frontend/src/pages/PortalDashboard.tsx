@@ -406,6 +406,7 @@ type PortalTab =
   | "overview"
   | "themes"
   | "glossary"
+  | "chairman-notices"
   | "applicant-status"
   | "applicant-notices"
   | "applicant-docs"
@@ -422,6 +423,10 @@ const READABLE_SELECT_CLASS = "rounded-md border border-gold/30 bg-offwhite px-2
 
 export default function PortalDashboard() {
   const { user } = useAuth();
+  const userRoleName = typeof user?.role === "object" && user?.role !== null && "name" in user.role
+    ? String((user.role as { name?: string }).name ?? "")
+    : "";
+  const isMembershipChairman = userRoleName === "membership_chairman";
   const canViewApplicantDashboard = hasPermission(user, "applications.dashboard.view");
   const canUploadApplicantDocs = hasPermission(user, "applications.docs.upload");
   const canChairmanReview = hasPermission(user, "applications.review");
@@ -432,6 +437,7 @@ export default function PortalDashboard() {
   const canChairmanLogContributionPayment = hasPermission(user, "applications.fee.pay");
   const canViewFormalPhotos = hasPermission(user, "formal_photos.view_private");
   const isAdmin = isAdminUser(user);
+  const canManageChairmanNotices = isMembershipChairman && canChairmanSetNotice;
 
   const [activeTab, setActiveTab] = useState<PortalTab>("overview");
   const [dashboard, setDashboard] = useState<DashboardPayload | null>(null);
@@ -862,17 +868,20 @@ export default function PortalDashboard() {
   }, [canChairmanReview, parseError]);
 
   useEffect(() => {
+    const needsApplicantWorkspace = activeTab === "committee" || activeTab === "chairman-notices";
     if (
-      activeTab !== "committee"
+      !needsApplicantWorkspace
       || applicationsLoaded
-      || !(canChairmanReview || canChairmanSetContributionTarget || canChairmanLogContributionPayment || canChairmanSetNotice || canChairmanSetStage || canChairmanReviewDocs || canBatchTreasurerManagePayments)
+      || !(canChairmanReview || canChairmanSetContributionTarget || canChairmanLogContributionPayment || canManageChairmanNotices || canChairmanSetStage || canChairmanReviewDocs || canBatchTreasurerManagePayments)
     ) {
       return;
     }
 
     const timer = window.setTimeout(() => {
       void loadCommitteeApplications();
-      void loadBatchSupportData();
+      if (activeTab === "committee") {
+        void loadBatchSupportData();
+      }
     }, 0);
     return () => window.clearTimeout(timer);
   }, [
@@ -882,7 +891,7 @@ export default function PortalDashboard() {
     canChairmanReview,
     canChairmanReviewDocs,
     canChairmanSetContributionTarget,
-    canChairmanSetNotice,
+    canManageChairmanNotices,
     canChairmanSetStage,
     canBatchTreasurerManagePayments,
     loadBatchSupportData,
@@ -1237,7 +1246,8 @@ export default function PortalDashboard() {
         {canViewFormalPhotos && <button type="button" onClick={() => setActiveTab("formal-photo-viewer")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "formal-photo-viewer" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Formal Photos</button>}
         {isAdmin && <button type="button" onClick={() => setActiveTab("themes")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "themes" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Themes</button>}
         {isAdmin && <button type="button" onClick={() => setActiveTab("glossary")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "glossary" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Glossary</button>}
-        {(canChairmanReview || canChairmanSetContributionTarget || canChairmanLogContributionPayment || canChairmanSetNotice || canChairmanSetStage || canChairmanReviewDocs || canBatchTreasurerManagePayments) && <button type="button" onClick={() => setActiveTab("committee")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "committee" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Application Review</button>}
+        {canManageChairmanNotices && <button type="button" onClick={() => setActiveTab("chairman-notices")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "chairman-notices" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Chairman Notices</button>}
+        {(canChairmanReview || canChairmanSetContributionTarget || canChairmanLogContributionPayment || canChairmanSetStage || canChairmanReviewDocs || canBatchTreasurerManagePayments) && <button type="button" onClick={() => setActiveTab("committee")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "committee" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Application Review</button>}
       </div>
 
       {error && <p className="mb-4 rounded-md border border-red-300/30 bg-red-400/10 px-4 py-2 text-sm text-red-200" role="alert" aria-live="polite">{error}</p>}
@@ -1738,6 +1748,145 @@ export default function PortalDashboard() {
         </div>
       )}
 
+      {activeTab === "chairman-notices" && canManageChairmanNotices && (
+        <div className="rounded-xl border border-white/20 bg-white/10 p-4">
+          <div className="mb-4">
+            <h2 className="font-heading text-2xl text-offwhite">Chairman Notices</h2>
+            <p className="mt-1 max-w-3xl text-sm text-mist/80">
+              Select an applicant, then post either an applicant-facing notice or an internal committee note. This workspace is limited to the membership chairman.
+            </p>
+          </div>
+
+          {!applicationsLoaded ? (
+            <div className="rounded-md border border-white/20 bg-white/5 px-4 py-8 text-center text-sm text-mist/80">
+              Loading applicants for notice posting...
+            </div>
+          ) : (
+            <>
+              <div className="mb-4 overflow-x-auto rounded-lg border border-white/20">
+                <table className="min-w-full text-sm text-offwhite">
+                  <thead className="bg-navy/70 text-gold-soft">
+                    <tr>
+                      <th className="px-3 py-2 text-left">Select</th>
+                      <th className="px-3 py-2 text-left">Applicant</th>
+                      <th className="px-3 py-2 text-left">Status</th>
+                      <th className="px-3 py-2 text-left">Decision</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pagedApplications.map((app) => (
+                      <tr key={app.id} className={`border-b border-white/15 ${selectedApplicationId === app.id ? "bg-gold/10" : ""}`}>
+                        <td className="px-3 py-2">
+                          <button
+                            type="button"
+                            className={`rounded border px-2 py-1 text-xs ${selectedApplicationId === app.id ? "border-gold bg-gold text-ink" : "border-white/30 text-offwhite"}`}
+                            onClick={() => setSelectedApplicationId((current) => (current === app.id ? null : app.id))}
+                          >
+                            {selectedApplicationId === app.id ? "Selected" : "Select"}
+                          </button>
+                        </td>
+                        <td className="px-3 py-2">{appName(app)}</td>
+                        <td className="px-3 py-2">{app.status}</td>
+                        <td className="px-3 py-2">{app.decision_status}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="mb-4 flex items-center justify-between text-xs text-mist/80">
+                <span>Page {applicationsPage} of {applicationsLastPage} | Total {applications.length}</span>
+                <div className="flex gap-2">
+                  <button type="button" className="btn-secondary" disabled={applicationsPage <= 1} onClick={() => setApplicationsPage((current) => Math.max(1, current - 1))}>Prev</button>
+                  <button type="button" className="btn-secondary" disabled={applicationsPage >= applicationsLastPage} onClick={() => setApplicationsPage((current) => Math.min(applicationsLastPage, current + 1))}>Next</button>
+                </div>
+              </div>
+            </>
+          )}
+
+          {selectedApplication ? (
+            <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.9fr)]">
+              <div className="space-y-4">
+                <div className="rounded-lg border border-white/15 bg-white/5 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gold-soft">Selected Applicant</p>
+                  <h3 className="mt-2 font-heading text-xl text-offwhite">{appName(selectedApplication)}</h3>
+                  <p className="mt-1 text-sm text-mist/75">
+                    Status: <span className="text-offwhite">{selectedApplication.status}</span>
+                    <span className="mx-2 text-mist/40">|</span>
+                    Decision: <span className="text-offwhite">{selectedApplication.decision_status}</span>
+                  </p>
+                </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <label htmlFor="chairman-notice-text" className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-gold-soft">
+                      Notice Message
+                    </label>
+                    <textarea
+                      id="chairman-notice-text"
+                      value={noticeText}
+                      onChange={(e) => setNoticeText(e.target.value)}
+                      placeholder="Write the applicant notice or internal committee note here."
+                      className="min-h-[140px] w-full rounded-lg border border-white/20 bg-white/10 px-4 py-3 text-sm text-offwhite focus:border-gold focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                    <div className="min-w-0 flex-1">
+                      <label htmlFor="chairman-notice-visibility" className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-gold-soft">
+                        Visibility
+                      </label>
+                      <select
+                        id="chairman-notice-visibility"
+                        value={noticeVisibility}
+                        onChange={(e) => setNoticeVisibility(e.target.value as "applicant" | "internal")}
+                        className={`${READABLE_SELECT_CLASS} w-full`}
+                      >
+                        <option value="applicant" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Applicant Visible</option>
+                        <option value="internal" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Internal Only</option>
+                      </select>
+                    </div>
+                    <button className="btn-primary sm:self-end" onClick={() => void setNoticeForApplicant()} disabled={!noticeText.trim()}>
+                      Post Notice
+                    </button>
+                  </div>
+
+                  <p className="text-xs text-mist/70">
+                    Applicant-visible notices appear in the applicant dashboard history. Internal notes stay inside chairman review surfaces only.
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-white/15 bg-white/5 p-4">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <h3 className="font-heading text-lg text-offwhite">Notice History</h3>
+                  <span className="text-xs text-mist/70">{selectedApplicationDetails?.notices.length ?? 0} total</span>
+                </div>
+
+                <div className="max-h-[28rem] space-y-3 overflow-y-auto pr-1">
+                  {selectedApplicationDetails?.notices.length ? selectedApplicationDetails.notices.map((item) => (
+                    <div key={item.id} className="rounded-lg border border-white/15 bg-navy/35 px-3 py-3 text-sm text-mist/85">
+                      <p>{item.notice_text}</p>
+                      <p className="mt-2 text-xs text-mist/70">
+                        {item.visibility === "internal" ? "Internal Only" : "Applicant Visible"} | {new Date(item.created_at).toLocaleString()} by {item.created_by?.name ?? "System"}
+                      </p>
+                    </div>
+                  )) : (
+                    <div className="rounded-lg border border-dashed border-white/15 px-4 py-8 text-center text-sm text-mist/70">
+                      No notices or internal notes yet for this applicant.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-lg border border-dashed border-white/15 px-4 py-10 text-center text-sm text-mist/70">
+              Select an applicant above to post a chairman notice.
+            </div>
+          )}
+        </div>
+      )}
+
       {activeTab === "my-profile" && canSelfEditProfile && (
         <div className="rounded-xl border border-white/20 bg-white/10 p-4">
           <h2 className="mb-2 font-heading text-2xl text-offwhite">My Profile</h2>
@@ -1759,7 +1908,7 @@ export default function PortalDashboard() {
                 onError={reportDashboardError}
               />
 
-              <div className="mb-4 grid gap-3 rounded-lg border border-white/15 bg-white/5 p-4 md:grid-cols-2">
+              <div className="mb-6 grid gap-3 md:grid-cols-2">
                 <p className="text-sm text-mist/85">Member Number: <span className="text-offwhite">{profile.member_number}</span></p>
                 <p className="text-sm text-mist/85">Email: <span className="text-offwhite">{profile.email ?? "—"}</span></p>
                 <p className="text-sm text-mist/85">Batch: <span className="text-offwhite">{profile.batch ?? "—"}</span></p>
@@ -1818,7 +1967,7 @@ export default function PortalDashboard() {
         />
       )}
 
-      {activeTab === "committee" && (canChairmanReview || canChairmanSetContributionTarget || canChairmanLogContributionPayment || canChairmanSetNotice || canChairmanSetStage || canChairmanReviewDocs || canBatchTreasurerManagePayments) && (
+      {activeTab === "committee" && (canChairmanReview || canChairmanSetContributionTarget || canChairmanLogContributionPayment || canChairmanSetStage || canChairmanReviewDocs || canBatchTreasurerManagePayments) && (
         <div className="mt-6 rounded-xl border border-white/20 bg-white/10 p-4">
           <h2 className="mb-3 font-heading text-2xl text-offwhite">Application Review Panel</h2>
           <div className="mb-3">
@@ -1967,20 +2116,9 @@ export default function PortalDashboard() {
                 </div>
               )}
 
-              {canChairmanSetNotice && (
-                <div className="flex flex-wrap items-center gap-2">
-                  <label htmlFor="committee-notice" className="text-xs font-semibold text-mist/85">Notice Text</label>
-                  <input id="committee-notice" value={noticeText} onChange={(e) => setNoticeText(e.target.value)} placeholder="Chairman notice text" className="min-w-[20rem] rounded-md border border-white/25 bg-white/10 px-2 py-1 text-offwhite" />
-                  <select
-                    aria-label="Notice visibility"
-                    value={noticeVisibility}
-                    onChange={(e) => setNoticeVisibility(e.target.value as "applicant" | "internal")}
-                    className={READABLE_SELECT_CLASS}
-                  >
-                    <option value="applicant" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Applicant Visible</option>
-                    <option value="internal" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Internal Only</option>
-                  </select>
-                  <button className="btn-secondary" onClick={() => void setNoticeForApplicant()}>Post Notice</button>
+              {canManageChairmanNotices && (
+                <div className="rounded-lg border border-white/15 bg-navy/35 px-3 py-3 text-xs text-mist/75">
+                  Need to post an applicant-facing notice or internal note? Use the dedicated <span className="text-gold-soft">Chairman Notices</span> tab so communication stays separate from review actions.
                 </div>
               )}
 

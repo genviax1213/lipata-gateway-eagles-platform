@@ -7,6 +7,7 @@ use App\Models\ApplicantDocument;
 use App\Models\ApplicantFeeRequirement;
 use App\Models\Member;
 use App\Models\Applicant;
+use App\Models\Permission;
 use App\Models\Role;
 use App\Models\User;
 use App\Notifications\ApplicantVerificationToken;
@@ -735,6 +736,34 @@ class ApplicantFlowTest extends TestCase
 
         $this->postJson("/api/v1/applicants/{$application->id}/notice", [
             'notice_text' => 'This should be denied for non-chairman.',
+        ])->assertStatus(403);
+    }
+
+    public function test_non_chairman_with_notice_permission_still_cannot_post_application_notice(): void
+    {
+        $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
+        $admin = User::factory()->create(['role_id' => $adminRole->id]);
+        $noticePermission = Permission::query()->where('name', 'applications.notice.set')->firstOrFail();
+        $admin->role->permissions()->syncWithoutDetaching([$noticePermission->id]);
+
+        $application = \App\Models\Applicant::query()->create([
+            'first_name' => 'Guarded',
+            'middle_name' => 'Notice',
+            'last_name' => 'Applicant',
+            'email' => 'guarded-notice@applicant.test',
+            'membership_status' => 'applicant',
+            'status' => 'under_review',
+            'decision_status' => 'pending',
+            'current_stage' => 'interview',
+            'is_login_blocked' => false,
+            'verification_token' => hash('sha256', 'guarded-notice-token'),
+            'email_verified_at' => now(),
+        ]);
+
+        Sanctum::actingAs($admin->fresh('role.permissions'));
+
+        $this->postJson("/api/v1/applicants/{$application->id}/notice", [
+            'notice_text' => 'This should still be denied.',
         ])->assertStatus(403);
     }
 

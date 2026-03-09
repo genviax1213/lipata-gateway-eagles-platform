@@ -28,50 +28,6 @@ function toAbsoluteApiUrl(url: string): string {
   return new URL(url, baseUrl).toString();
 }
 
-function PreviewFrame({
-  title,
-  subtitle,
-  src,
-  emptyText,
-  loading = false,
-  badge,
-}: {
-  title: string;
-  subtitle: string;
-  src: string | null;
-  emptyText: string;
-  loading?: boolean;
-  badge?: string;
-}) {
-  return (
-    <div className="rounded-xl border border-white/15 bg-navy/40 p-4">
-      <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <h3 className="font-heading text-lg text-offwhite">{title}</h3>
-          <p className="text-xs text-mist/75">{subtitle}</p>
-        </div>
-        {badge ? (
-          <span className="rounded-full border border-gold/30 bg-gold/10 px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-gold-soft">
-            {badge}
-          </span>
-        ) : null}
-      </div>
-
-      <div className="overflow-hidden rounded-xl border border-white/15 bg-white/5">
-        <div className="aspect-[4/5]">
-          {src ? (
-            <img src={src} alt={title} className="h-full w-full object-cover" />
-          ) : (
-            <div className="flex h-full items-center justify-center px-6 text-center text-sm text-mist/70">
-              {loading ? "Loading secure image..." : emptyText}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export default function FormalPhotoCard({
   formalPhoto,
   onSaved,
@@ -170,65 +126,79 @@ export default function FormalPhotoCard({
   };
 
   return (
-    <div className="mb-4 rounded-xl border border-white/20 bg-white/5 p-4">
-      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h3 className="font-heading text-xl text-offwhite">Formal Photo</h3>
-          <p className="mt-1 max-w-2xl text-sm text-mist/80">
-            Capture a front-camera selfie or choose an image, then upload it directly as your private formal photo.
-            The backend converts the saved file to WebP for storage efficiency.
-          </p>
-        </div>
-        <div className="rounded-lg border border-white/15 bg-navy/45 px-3 py-2 text-xs text-mist/80">
-          <p>Last saved: <span className="text-offwhite">{formatFormalPhotoTimestamp(formalPhoto?.updated_at ?? formalPhoto?.created_at)}</span></p>
-          <p>Status: <span className="text-offwhite">{formalPhoto?.status ?? (savedPhotoUrl ? "saved" : "not set")}</span></p>
-        </div>
-      </div>
-
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
-        <div className="space-y-4">
-          <FileSelectionPreview
-            id="formal-photo-source"
-            label="Capture or Choose Photo"
-            accept="image/*"
-            capture="user"
-            file={sourceFile}
-            buttonLabel={savedPhotoUrl ? "Retake or Choose New Photo" : "Take Selfie or Choose Image"}
-            helperText="Mobile browsers can open the front camera. The selected image is uploaded directly and optimized to WebP on save."
-            onChange={setSourceFile}
-            onClear={() => setSourceFile(null)}
-          />
-
-          <div className="flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              className="btn-primary disabled:opacity-50"
-              onClick={() => void savePhoto()}
-              disabled={!sourceFile || saving}
-            >
-              {saving ? "Saving..." : "Save Formal Photo"}
-            </button>
-            <p className="text-xs text-mist/70">
-              Saving uploads the selected image only. No outfit overlay or template is applied.
+    <div className="mb-6 grid gap-5 lg:grid-cols-[minmax(0,1fr)_220px] lg:items-start">
+      <div className="order-2 space-y-4 lg:order-1">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 className="font-heading text-xl text-offwhite">Formal Photo</h3>
+            <p className="mt-1 max-w-2xl text-sm text-mist/80">
+              Capture a front-camera selfie or choose an image, then upload it directly as your private formal photo.
+              The backend converts the saved file to WebP for storage efficiency.
             </p>
+          </div>
+          <div className="text-xs text-mist/78">
+            <p>Last saved: <span className="text-offwhite">{formatFormalPhotoTimestamp(formalPhoto?.updated_at ?? formalPhoto?.created_at)}</span></p>
+            <p>Status: <span className="text-offwhite">{formalPhoto?.status ?? (savedPhotoUrl ? "saved" : "not set")}</span></p>
           </div>
         </div>
 
-        <div className="space-y-4">
-          <PreviewFrame
-            title="Formal Photo Preview"
-            subtitle={sourceFile ? "This selected image will be saved." : "Your private saved photo appears here immediately after upload."}
-            src={visiblePreviewUrl}
-            emptyText={previewFailed ? "The secure preview endpoint could not be loaded right now." : "Take a selfie or choose a portrait image to preview the saved formal photo."}
-            loading={Boolean(savedPhotoUrl) && !sourceFile && !securePreviewUrl && !previewFailed}
-            badge={sourceFile ? "Ready to save" : savedPhotoUrl ? "Saved" : undefined}
-          />
+        <FileSelectionPreview
+          id="formal-photo-source"
+          label="Capture or Choose Photo"
+          accept="image/*"
+          capture="user"
+          file={sourceFile}
+          buttonLabel={savedPhotoUrl ? "Retake or Choose New Photo" : "Take Selfie or Choose Image"}
+          helperText="Mobile browsers can open the front camera. The selected image is uploaded directly and optimized to WebP on save."
+          onChange={setSourceFile}
+          onClear={() => setSourceFile(null)}
+        />
 
-          <div className="rounded-xl border border-white/15 bg-white/5 p-4 text-xs text-mist/75">
-            <p className="font-semibold uppercase tracking-[0.18em] text-gold-soft">Privacy</p>
-            <p className="mt-2">
-              This photo is kept separate from CMS media and applicant document uploads. It is meant for private member profile use and authorized internal reporting only.
-            </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            className="btn-primary disabled:opacity-50"
+            onClick={() => void savePhoto()}
+            disabled={!sourceFile || saving}
+          >
+            {saving ? "Saving..." : "Save Formal Photo"}
+          </button>
+          <p className="text-xs text-mist/70">
+            Saving uploads the selected image only. No outfit overlay or template is applied. This photo stays separate from CMS media and applicant documents.
+          </p>
+        </div>
+      </div>
+
+      <div className="order-1 lg:order-2">
+        <div className="mx-auto w-full max-w-[180px] sm:max-w-[220px]">
+          <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <h4 className="font-heading text-lg text-offwhite">Preview</h4>
+              <p className="text-xs text-mist/75">
+                {sourceFile ? "The selected image will be saved." : "Your saved portrait appears here immediately after upload."}
+              </p>
+            </div>
+            {(sourceFile || savedPhotoUrl) ? (
+              <span className="rounded-full border border-gold/30 bg-gold/10 px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-gold-soft">
+                {sourceFile ? "Ready" : "Saved"}
+              </span>
+            ) : null}
+          </div>
+
+          <div className="overflow-hidden rounded-lg border border-white/15 bg-white/5 shadow-[0_18px_36px_rgba(0,0,0,0.18)]">
+            <div className="aspect-[7/9]">
+              {visiblePreviewUrl ? (
+                <img src={visiblePreviewUrl} alt="Formal photo preview" className="h-full w-full object-cover" />
+              ) : (
+                <div className="flex h-full items-center justify-center px-5 text-center text-sm text-mist/70">
+                  {Boolean(savedPhotoUrl) && !sourceFile && !securePreviewUrl && !previewFailed
+                    ? "Loading secure image..."
+                    : previewFailed
+                      ? "The secure preview endpoint could not be loaded right now."
+                      : "Take a selfie or choose a portrait image to preview the saved formal photo."}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
