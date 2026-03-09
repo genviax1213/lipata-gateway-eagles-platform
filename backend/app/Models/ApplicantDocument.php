@@ -13,6 +13,8 @@ class ApplicantDocument extends Model
         'applicant_id',
         'file_path',
         'original_name',
+        'document_label',
+        'description',
         'status',
         'review_note',
         'reviewed_by_user_id',

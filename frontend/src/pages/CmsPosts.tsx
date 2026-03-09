@@ -991,7 +991,7 @@ export default function CmsPosts() {
               accept="image/*"
               file={sourceImage?.file ?? null}
               buttonLabel="Choose Cover Image"
-              helperText="After selection, drag inside the crop frame below to choose the visible area before saving."
+              helperText="After selection, drag inside the crop frame below. The saved cover is cropped to 16:9 and resized to 1920x1080 before upload."
               onChange={(file) => {
                 if (file) {
                   setForm((prev) => ({ ...prev, selected_image_path: "" }));
@@ -1037,7 +1037,7 @@ export default function CmsPosts() {
           {sourceImage && sourceImageUrl && (
             <div className="md:col-span-2 rounded-lg border border-white/20 bg-white/5 p-3">
               <p className="mb-2 text-xs text-mist/80">
-                Drag inside the frame to choose visible area. Only framed image will be resized and uploaded.
+                Drag inside the frame to choose visible area. Only the framed cover is cropped, resized to 1920x1080, and uploaded.
               </p>
               <div
                 className="relative mx-auto h-[180px] w-[320px] overflow-hidden rounded-md border border-white/35 bg-ink/40 touch-none"
@@ -1081,7 +1081,7 @@ export default function CmsPosts() {
                   disabled={processingImage}
                   className="rounded-md border border-white/30 px-3 py-1.5 text-xs text-offwhite disabled:opacity-50"
                 >
-                  Apply Crop
+                  Apply Crop & Resize
                 </button>
               </div>
             </div>

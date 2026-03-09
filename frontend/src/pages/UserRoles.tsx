@@ -3,6 +3,7 @@ import axios from "axios";
 import api from "../services/api";
 import { useAuth } from "../contexts/useAuth";
 import { hasPermission, isAdminUser } from "../utils/auth";
+import PasswordField from "../components/PasswordField";
 import {
   PORTAL_DATA_REFRESH_EVENT,
   isPortalDataRefreshScope,
@@ -799,21 +800,19 @@ export default function UserRoles() {
               </p>
             ) : (
               <div className="grid gap-3 md:grid-cols-2">
-                <input
-                  type="password"
-                  aria-label="New password"
+                <PasswordField
+                  ariaLabel="New password"
                   placeholder="New password"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+                  onChange={setPassword}
+                  className="rounded-md border border-white/25 bg-white/10 px-3 py-2 pr-12 text-offwhite"
                 />
-                <input
-                  type="password"
-                  aria-label="Confirm new password"
+                <PasswordField
+                  ariaLabel="Confirm new password"
                   placeholder="Confirm new password"
                   value={passwordConfirmation}
-                  onChange={(e) => setPasswordConfirmation(e.target.value)}
-                  className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+                  onChange={setPasswordConfirmation}
+                  className="rounded-md border border-white/25 bg-white/10 px-3 py-2 pr-12 text-offwhite"
                 />
                 <div className="md:col-span-2 flex flex-wrap gap-3">
                   <button

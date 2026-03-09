@@ -5,6 +5,7 @@ import { useAuth } from "../contexts/useAuth";
 import api from "../services/api";
 import { canonicalRoutes, microcopy } from "../content/portalCopy";
 import TaskHierarchyCard from "../components/TaskHierarchyCard";
+import PasswordField from "../components/PasswordField";
 
 type AuthMode = "login" | "forgot" | "reset";
 
@@ -221,14 +222,13 @@ export default function Login() {
 
                 <div>
                   <label htmlFor="login-password" className="mb-1 block text-xs font-semibold text-mist/85">Password</label>
-                  <input
+                  <PasswordField
                     id="login-password"
-                    type="password"
                     placeholder="Password"
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    onChange={setPassword}
                     autoComplete="current-password"
-                    className="w-full rounded-lg border border-white/20 bg-white/10 px-4 py-3 text-offwhite placeholder:text-mist/70 outline-none focus:border-gold"
+                    className="w-full rounded-lg border border-white/20 bg-white/10 px-4 py-3 pr-12 text-offwhite placeholder:text-mist/70 outline-none focus:border-gold"
                   />
                 </div>
 
@@ -326,24 +326,22 @@ export default function Login() {
                   className="w-full rounded-lg border border-white/20 bg-white/10 px-4 py-3 text-offwhite placeholder:text-mist/70 outline-none focus:border-gold"
                 />
                 <label htmlFor="reset-password" className="mb-1 block text-xs font-semibold text-mist/85">New Password</label>
-                <input
+                <PasswordField
                   id="reset-password"
-                  type="password"
                   placeholder="New password"
                   value={resetPassword}
-                  onChange={(e) => setResetPassword(e.target.value)}
+                  onChange={setResetPassword}
                   autoComplete="new-password"
-                  className="w-full rounded-lg border border-white/20 bg-white/10 px-4 py-3 text-offwhite placeholder:text-mist/70 outline-none focus:border-gold"
+                  className="w-full rounded-lg border border-white/20 bg-white/10 px-4 py-3 pr-12 text-offwhite placeholder:text-mist/70 outline-none focus:border-gold"
                 />
                 <label htmlFor="reset-password-confirmation" className="mb-1 block text-xs font-semibold text-mist/85">Confirm New Password</label>
-                <input
+                <PasswordField
                   id="reset-password-confirmation"
-                  type="password"
                   placeholder="Confirm new password"
                   value={resetPasswordConfirmation}
-                  onChange={(e) => setResetPasswordConfirmation(e.target.value)}
+                  onChange={setResetPasswordConfirmation}
                   autoComplete="new-password"
-                  className="w-full rounded-lg border border-white/20 bg-white/10 px-4 py-3 text-offwhite placeholder:text-mist/70 outline-none focus:border-gold"
+                  className="w-full rounded-lg border border-white/20 bg-white/10 px-4 py-3 pr-12 text-offwhite placeholder:text-mist/70 outline-none focus:border-gold"
                 />
                 <button
                   type="submit"

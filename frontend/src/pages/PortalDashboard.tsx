@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import api from "../services/api";
 import { useAuth } from "../contexts/useAuth";
@@ -60,8 +60,11 @@ interface ApplicantTimelineEvent {
 interface ApplicantDocument {
   id: number;
   original_name: string;
+  document_label?: string | null;
+  description?: string | null;
   status: "pending" | "approved" | "rejected";
   review_note: string | null;
+  created_at?: string | null;
 }
 
 interface ApplicantBatchDocument {
@@ -129,6 +132,14 @@ interface ApplicantFeeRequirement {
   }>;
 }
 
+type RequirementReviewStatus = "approved" | "rejected" | "pending";
+
+interface ReviewStatusCounts {
+  approved: number;
+  rejected: number;
+  pending: number;
+}
+
 interface ApplicantDetails {
   id: number;
   member_id?: number | null;
@@ -182,6 +193,149 @@ function money(value: number | string): string {
 
 function appName(app: ApplicationRow): string {
   return `${app.first_name} ${app.middle_name ? `${app.middle_name} ` : ""}${app.last_name}`;
+}
+
+function getFileExtension(filename: string): string {
+  return filename.split(".").pop()?.toUpperCase() ?? "FILE";
+}
+
+function isImageDocument(filename: string): boolean {
+  const normalized = filename.toLowerCase();
+  return [".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".svg"].some((extension) => normalized.endsWith(extension));
+}
+
+function formatReviewStatusLabel(status: "pending" | "approved" | "rejected" | RequirementReviewStatus): string {
+  if (status === "approved") return "Approved";
+  if (status === "rejected") return "Disapproved";
+  return "Pending Review";
+}
+
+function reviewStatusClasses(status: "pending" | "approved" | "rejected" | RequirementReviewStatus): string {
+  if (status === "approved") return "border-green-400/40 bg-green-400/10 text-green-100";
+  if (status === "rejected") return "border-red-400/40 bg-red-400/10 text-red-100";
+  return "border-amber-300/40 bg-amber-300/10 text-amber-100";
+}
+
+function formatTimestamp(value?: string | null): string {
+  return value ? new Date(value).toLocaleString() : "Upload date unavailable";
+}
+
+function inferRequirementReviewStatus(req: ApplicantFeeRequirement): RequirementReviewStatus {
+  const target = Number(req.target_payment ?? req.required_amount ?? 0);
+  const paid = Number(req.partial_payment_total ?? 0);
+
+  if (target > 0 && paid >= target) {
+    return "approved";
+  }
+
+  return "pending";
+}
+
+function countDocumentStatuses(documents: ApplicantDocument[]): ReviewStatusCounts {
+  return documents.reduce<ReviewStatusCounts>((counts, doc) => {
+    counts[doc.status] += 1;
+    return counts;
+  }, { approved: 0, rejected: 0, pending: 0 });
+}
+
+function countRequirementStatuses(requirements: ApplicantFeeRequirement[]): ReviewStatusCounts {
+  return requirements.reduce<ReviewStatusCounts>((counts, req) => {
+    counts[inferRequirementReviewStatus(req)] += 1;
+    return counts;
+  }, { approved: 0, rejected: 0, pending: 0 });
+}
+
+function DocumentThumbnail({ documentId, originalName }: { documentId: number; originalName: string }) {
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewFailed, setPreviewFailed] = useState(false);
+  const imageDocument = isImageDocument(originalName);
+
+  useEffect(() => {
+    if (!imageDocument) return;
+
+    let active = true;
+    let objectUrl: string | null = null;
+
+    void api.get(`/applicants/documents/${documentId}/view`, { responseType: "blob" })
+      .then((response) => {
+        if (!active) return;
+        objectUrl = URL.createObjectURL(response.data);
+        setPreviewUrl(objectUrl);
+        setPreviewFailed(false);
+      })
+      .catch(() => {
+        if (!active) return;
+        setPreviewFailed(true);
+      });
+
+    return () => {
+      active = false;
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [documentId, imageDocument]);
+
+  return (
+    <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-white/15 bg-navy/45">
+      {imageDocument && previewUrl && !previewFailed ? (
+        <img src={previewUrl} alt={originalName} className="h-full w-full object-cover" />
+      ) : (
+        <div className="px-2 text-center">
+          <span className="rounded-md border border-white/15 bg-white/10 px-2 py-1 text-[11px] font-semibold text-gold-soft">
+            {getFileExtension(originalName)}
+          </span>
+          <p className="mt-2 text-[10px] text-mist/70">
+            {imageDocument ? (previewFailed ? "Preview unavailable" : "Preview loading...") : "File thumbnail"}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ApplicantDocumentCard({
+  document,
+  onView,
+  actions,
+}: {
+  document: ApplicantDocument;
+  onView: (documentId: number, originalName: string) => void;
+  actions?: ReactNode;
+}) {
+  return (
+    <div className="rounded-xl border border-white/20 bg-white/5 p-3">
+      <div className="flex flex-col gap-3 sm:flex-row">
+        <DocumentThumbnail documentId={document.id} originalName={document.original_name} />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-offwhite">
+                {document.document_label?.trim() || document.original_name}
+              </p>
+              <p className="truncate text-xs text-mist/75">Filename: {document.original_name}</p>
+              <p className="text-xs text-mist/75">Uploaded: {formatTimestamp(document.created_at)}</p>
+            </div>
+            <span className={`rounded-full border px-2 py-1 text-[11px] font-semibold ${reviewStatusClasses(document.status)}`}>
+              {formatReviewStatusLabel(document.status)}
+            </span>
+          </div>
+          {document.description && <p className="mt-2 text-xs text-mist/85">{document.description}</p>}
+          {document.review_note && <p className="mt-2 text-xs text-gold-soft">Review note: {document.review_note}</p>}
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="rounded border border-white/30 px-2 py-1 text-xs text-offwhite"
+              onClick={() => onView(document.id, document.original_name)}
+            >
+              View
+            </button>
+            {actions}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function labelRole(value: string): string {
@@ -289,6 +443,8 @@ export default function PortalDashboard() {
   const [requiredAmount, setRequiredAmount] = useState("");
   const [paymentAmount, setPaymentAmount] = useState("");
   const [documentFile, setDocumentFile] = useState<File | null>(null);
+  const [documentLabel, setDocumentLabel] = useState("");
+  const [documentDescription, setDocumentDescription] = useState("");
   const [batchDocumentFile, setBatchDocumentFile] = useState<File | null>(null);
   const [batchName, setBatchName] = useState("");
   const [batchDescription, setBatchDescription] = useState("");
@@ -635,6 +791,17 @@ export default function PortalDashboard() {
     return documents.slice(start, start + PAGE_SIZE);
   }, [committeeDocumentsPage, selectedApplicationDetails?.documents]);
   const committeeDocumentsLastPage = Math.max(1, Math.ceil((selectedApplicationDetails?.documents?.length ?? 0) / PAGE_SIZE));
+  const selectedApplicationReviewSummary = useMemo(() => {
+    const documents = selectedApplicationDetails?.documents ?? [];
+    const requirements = selectedApplicationDetails?.fees.requirements ?? [];
+
+    return {
+      documents: countDocumentStatuses(documents),
+      requirements: countRequirementStatuses(requirements),
+      totalDocuments: documents.length,
+      totalRequirements: requirements.length,
+    };
+  }, [selectedApplicationDetails?.documents, selectedApplicationDetails?.fees.requirements]);
 
   const loadCommitteeApplications = useCallback(async () => {
     setError("");
@@ -705,8 +872,12 @@ export default function PortalDashboard() {
     loadCommitteeApplications,
   ]);
 
+  useEffect(() => {
+    setCommitteeDocumentsPage(1);
+  }, [selectedApplicationId]);
+
   const uploadDocument = async () => {
-    if (!applicantDetails || !documentFile || !canUploadApplicantDocs) return;
+    if (!applicantDetails || !documentFile || !canUploadApplicantDocs || !documentLabel.trim() || !documentDescription.trim()) return;
 
     setError("");
     setNotice("");
@@ -715,11 +886,15 @@ export default function PortalDashboard() {
     try {
       const payload = new FormData();
       payload.append("document", documentFile);
+      payload.append("document_label", documentLabel.trim());
+      payload.append("description", documentDescription.trim());
       await api.post(`/applicants/${applicantDetails.id}/documents`, payload, {
         headers: { "Content-Type": "multipart/form-data" },
       });
       setNotice("Document uploaded.");
       setDocumentFile(null);
+      setDocumentLabel("");
+      setDocumentDescription("");
       await loadDashboard();
     } catch (err) {
       setError(parseError(err, "Failed to upload document."));
@@ -1220,6 +1395,9 @@ export default function PortalDashboard() {
       {activeTab === "applicant-docs" && dashboard?.view === "applicant" && applicantDetails && (
         <div className="rounded-xl border border-white/20 bg-white/10 p-4">
           <h2 className="mb-2 font-heading text-2xl text-offwhite">Required Documents</h2>
+          <p className="mb-4 text-sm text-mist/80">
+            Your uploads are visible to your applicant account, authorized officers handling applicant documents or reviews, and your assigned batch treasurer once a batch is linked.
+          </p>
           {canUploadApplicantDocs && (
             <div className="mb-4 space-y-3">
               <FileSelectionPreview
@@ -1233,22 +1411,51 @@ export default function PortalDashboard() {
                 onChange={setDocumentFile}
                 onClear={() => setDocumentFile(null)}
               />
-              <button className="btn-secondary" onClick={() => void uploadDocument()} disabled={!documentFile}>Upload</button>
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="space-y-2">
+                  <label htmlFor="applicant-document-label" className="text-xs font-semibold uppercase tracking-[0.18em] text-mist/85">
+                    Document Label
+                  </label>
+                  <input
+                    id="applicant-document-label"
+                    value={documentLabel}
+                    onChange={(e) => setDocumentLabel(e.target.value)}
+                    maxLength={120}
+                    placeholder="Example: Valid ID Front"
+                    className="w-full rounded-md border border-white/25 bg-white/10 px-3 py-2 text-sm text-offwhite"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label htmlFor="applicant-document-description" className="text-xs font-semibold uppercase tracking-[0.18em] text-mist/85">
+                    Description
+                  </label>
+                  <textarea
+                    id="applicant-document-description"
+                    value={documentDescription}
+                    onChange={(e) => setDocumentDescription(e.target.value)}
+                    maxLength={255}
+                    placeholder="State what this file is and why it was uploaded."
+                    className="min-h-[96px] w-full rounded-md border border-white/25 bg-white/10 px-3 py-2 text-sm text-offwhite md:min-h-full"
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-mist/70">Both label and description are required before upload so the chairman can identify each file clearly.</p>
+              <button
+                className="btn-secondary"
+                onClick={() => void uploadDocument()}
+                disabled={!documentFile || !documentLabel.trim() || !documentDescription.trim()}
+              >
+                Upload
+              </button>
             </div>
           )}
           <div className="space-y-2">
             {pagedApplicantDocuments.map((doc) => (
-              <div key={doc.id} className="rounded-md border border-white/20 bg-white/5 px-3 py-2 text-sm text-mist/85">
-                <p>
-                  {doc.original_name} - <span className="text-gold-soft">{doc.status}</span> {doc.review_note ? `(${doc.review_note})` : ""}
-                </p>
-                <button
-                  className="mt-2 rounded border border-white/30 px-2 py-1 text-xs text-offwhite"
-                  onClick={() => void viewDocument(doc.id, doc.original_name)}
-                >
-                  View
-                </button>
-              </div>
+              <ApplicantDocumentCard
+                key={doc.id}
+                document={doc}
+                onView={(documentId, originalName) => void viewDocument(documentId, originalName)}
+              />
             ))}
             {applicantDetails.documents.length === 0 && <p className="text-sm text-mist/70">No documents uploaded yet.</p>}
           </div>
@@ -1372,17 +1579,11 @@ export default function PortalDashboard() {
                 <h3 className="mb-2 font-heading text-xl text-offwhite">Archive Documents</h3>
                 <div className="space-y-2">
                   {pagedApplicantDocuments.map((doc) => (
-                    <div key={doc.id} className="rounded-md border border-white/20 bg-white/5 px-3 py-2 text-sm text-mist/85">
-                      <p>
-                        {doc.original_name} - <span className="text-gold-soft">{doc.status}</span> {doc.review_note ? `(${doc.review_note})` : ""}
-                      </p>
-                      <button
-                        className="mt-2 rounded border border-white/30 px-2 py-1 text-xs text-offwhite"
-                        onClick={() => void viewDocument(doc.id, doc.original_name)}
-                      >
-                        View
-                      </button>
-                    </div>
+                    <ApplicantDocumentCard
+                      key={doc.id}
+                      document={doc}
+                      onView={(documentId, originalName) => void viewDocument(documentId, originalName)}
+                    />
                   ))}
                   {archiveDetails.documents.length === 0 && <p className="text-sm text-mist/70">No archived documents.</p>}
                 </div>
@@ -1607,7 +1808,15 @@ export default function PortalDashboard() {
                   <tbody>
                     {pagedApplications.map((app) => (
                       <tr key={app.id} className={`border-b border-white/15 ${selectedApplicationId === app.id ? "bg-gold/10" : ""}`}>
-                        <td className="px-3 py-2"><button className="rounded border border-white/30 px-2 py-1 text-xs" onClick={() => setSelectedApplicationId(app.id)}>Select</button></td>
+                        <td className="px-3 py-2">
+                          <button
+                            type="button"
+                            className={`rounded border px-2 py-1 text-xs ${selectedApplicationId === app.id ? "border-gold bg-gold text-ink" : "border-white/30 text-offwhite"}`}
+                            onClick={() => setSelectedApplicationId((current) => (current === app.id ? null : app.id))}
+                          >
+                            {selectedApplicationId === app.id ? "Selected" : "Select"}
+                          </button>
+                        </td>
                         <td className="px-3 py-2">{appName(app)}</td>
                         <td className="px-3 py-2">{app.status}</td>
                         <td className="px-3 py-2">{app.decision_status}</td>
@@ -1628,7 +1837,10 @@ export default function PortalDashboard() {
 
           {selectedApplication && (
             <div className="space-y-3">
-              <p className="text-sm text-mist/85">Selected: <span className="text-offwhite">{appName(selectedApplication)}</span></p>
+              <p className="text-sm text-mist/85">
+                Selected: <span className="text-offwhite">{appName(selectedApplication)}</span>
+                <span className="ml-2 text-xs text-mist/70">Use the Selected button again to clear this applicant.</span>
+              </p>
               {selectedApplicationDetails?.batch && (
                 <p className="text-sm text-mist/85">Assigned Batch: <span className="text-offwhite">{selectedApplicationDetails.batch.name}</span></p>
               )}
@@ -1814,16 +2026,89 @@ export default function PortalDashboard() {
                   <div className="mb-3 rounded-md border border-white/15 bg-white/5 px-3 py-2 text-xs text-mist/75">
                     Applicant-facing history includes only notices marked <span className="text-gold-soft">Applicant Visible</span>. Internal committee notes remain confined to this review workspace.
                   </div>
+                  <div className="mb-3 rounded-md border border-white/15 bg-navy/40 p-3">
+                    <p className="text-sm font-semibold text-offwhite">Applicant Record Access</p>
+                    <p className="mt-2 text-xs text-mist/75">
+                      Applicant owners can view their own documents and requirements. Committee-side access extends to authorized officers with applicant document or review access, plus assigned batch treasurers for their batch. Only document reviewers can approve or disapprove uploaded files.
+                    </p>
+                  </div>
+                  <div className="mb-4 grid gap-3 lg:grid-cols-2">
+                    <div className="rounded-lg border border-white/15 bg-white/5 p-3">
+                      <p className="text-sm font-semibold text-offwhite">Document Summary</p>
+                      <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                        <div className="rounded-md border border-green-400/30 bg-green-400/10 p-3 text-center">
+                          <p className="text-xs uppercase tracking-[0.18em] text-green-100">Approved</p>
+                          <p className="mt-1 text-lg font-semibold text-offwhite">{selectedApplicationReviewSummary.documents.approved}</p>
+                        </div>
+                        <div className="rounded-md border border-red-400/30 bg-red-400/10 p-3 text-center">
+                          <p className="text-xs uppercase tracking-[0.18em] text-red-100">Disapproved</p>
+                          <p className="mt-1 text-lg font-semibold text-offwhite">{selectedApplicationReviewSummary.documents.rejected}</p>
+                        </div>
+                        <div className="rounded-md border border-amber-300/30 bg-amber-300/10 p-3 text-center">
+                          <p className="text-xs uppercase tracking-[0.18em] text-amber-100">Pending Review</p>
+                          <p className="mt-1 text-lg font-semibold text-offwhite">{selectedApplicationReviewSummary.documents.pending}</p>
+                        </div>
+                      </div>
+                      <p className="mt-3 text-xs text-mist/70">Total uploaded documents: {selectedApplicationReviewSummary.totalDocuments}</p>
+                    </div>
+                    <div className="rounded-lg border border-white/15 bg-white/5 p-3">
+                      <p className="text-sm font-semibold text-offwhite">Requirement Summary</p>
+                      <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                        <div className="rounded-md border border-green-400/30 bg-green-400/10 p-3 text-center">
+                          <p className="text-xs uppercase tracking-[0.18em] text-green-100">Approved</p>
+                          <p className="mt-1 text-lg font-semibold text-offwhite">{selectedApplicationReviewSummary.requirements.approved}</p>
+                        </div>
+                        <div className="rounded-md border border-red-400/30 bg-red-400/10 p-3 text-center">
+                          <p className="text-xs uppercase tracking-[0.18em] text-red-100">Disapproved</p>
+                          <p className="mt-1 text-lg font-semibold text-offwhite">{selectedApplicationReviewSummary.requirements.rejected}</p>
+                        </div>
+                        <div className="rounded-md border border-amber-300/30 bg-amber-300/10 p-3 text-center">
+                          <p className="text-xs uppercase tracking-[0.18em] text-amber-100">Pending Review</p>
+                          <p className="mt-1 text-lg font-semibold text-offwhite">{selectedApplicationReviewSummary.requirements.pending}</p>
+                        </div>
+                      </div>
+                      <p className="mt-3 text-xs text-mist/70">Requirement status is inferred from payment progress: fully paid counts as Approved; unpaid or partial balances stay Pending Review.</p>
+                    </div>
+                  </div>
+                  <div className="mb-4 rounded-lg border border-white/15 bg-white/5 p-3">
+                    <p className="mb-2 text-sm font-semibold text-offwhite">Requirement Progress</p>
+                    <div className="space-y-2">
+                      {selectedApplicationDetails.fees.requirements.map((req) => {
+                        const requirementStatus = inferRequirementReviewStatus(req);
+
+                        return (
+                          <div key={req.category} className="rounded-md border border-white/15 bg-navy/35 p-3">
+                            <div className="flex flex-wrap items-start justify-between gap-2">
+                              <div>
+                                <p className="text-sm text-offwhite">{req.category_label}</p>
+                                <p className="text-xs text-mist/75">
+                                  Target: {money(req.target_payment)} | Paid: {money(req.partial_payment_total)} | Variance: {money(req.variance)}
+                                </p>
+                              </div>
+                              <span className={`rounded-full border px-2 py-1 text-[11px] font-semibold ${reviewStatusClasses(requirementStatus)}`}>
+                                {formatReviewStatusLabel(requirementStatus)}
+                              </span>
+                            </div>
+                            <p className="mt-2 text-xs text-mist/80">{req.note ?? "No requirement note yet."}</p>
+                          </div>
+                        );
+                      })}
+                      {selectedApplicationDetails.fees.requirements.length === 0 && <p className="text-xs text-mist/70">No fee requirements recorded yet.</p>}
+                    </div>
+                  </div>
                   <p className="mb-2 text-sm text-offwhite">Applicant Documents</p>
                   {pagedCommitteeDocuments.map((doc) => (
-                    <div key={doc.id} className="mb-2 rounded border border-white/20 px-2 py-2 text-xs text-mist/85">
-                      <p>{doc.original_name} - <span className="text-gold-soft">{doc.status}</span></p>
-                      <div className="mt-1 flex gap-2">
-                        <button className="rounded border border-white/30 px-2 py-1 text-offwhite" onClick={() => void viewDocument(doc.id, doc.original_name)}>View</button>
-                        <button className="rounded border border-green-400/40 px-2 py-1 text-green-200" onClick={() => void reviewDocument(doc.id, "approved")}>Approve</button>
-                        <button className="rounded border border-red-400/40 px-2 py-1 text-red-200" onClick={() => void reviewDocument(doc.id, "rejected")}>Reject</button>
-                      </div>
-                    </div>
+                    <ApplicantDocumentCard
+                      key={doc.id}
+                      document={doc}
+                      onView={(documentId, originalName) => void viewDocument(documentId, originalName)}
+                      actions={(
+                        <>
+                          <button className="rounded border border-green-400/40 px-2 py-1 text-xs text-green-200" onClick={() => void reviewDocument(doc.id, "approved")}>Approve</button>
+                          <button className="rounded border border-red-400/40 px-2 py-1 text-xs text-red-200" onClick={() => void reviewDocument(doc.id, "rejected")}>Reject</button>
+                        </>
+                      )}
+                    />
                   ))}
                   {selectedApplicationDetails.documents.length === 0 && <p className="text-xs text-mist/70">No uploaded documents yet.</p>}
                   <div className="mt-4 flex items-center justify-between text-xs text-mist/80">

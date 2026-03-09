@@ -894,7 +894,7 @@ class ApplicantFlowTest extends TestCase
 
     public function test_user_cannot_upload_document_to_other_users_application(): void
     {
-        Storage::fake('public');
+        Storage::fake('local');
 
         $applicantRole = Role::query()->where('name', 'applicant')->firstOrFail();
         $owner = User::factory()->create([
@@ -925,7 +925,84 @@ class ApplicantFlowTest extends TestCase
 
         $this->postJson("/api/v1/applicants/{$application->id}/documents", [
             'document' => UploadedFile::fake()->image('id-card.png'),
+            'document_label' => 'Government ID',
+            'description' => 'Front image of the submitted government ID.',
         ])->assertStatus(403);
+    }
+
+    public function test_application_document_upload_requires_label_and_description(): void
+    {
+        Storage::fake('local');
+
+        $applicantRole = Role::query()->where('name', 'applicant')->firstOrFail();
+        $applicant = User::factory()->create([
+            'role_id' => $applicantRole->id,
+            'email' => 'doc-metadata@applicant.test',
+        ]);
+
+        $application = Applicant::query()->create([
+            'user_id' => $applicant->id,
+            'first_name' => 'Meta',
+            'middle_name' => 'Data',
+            'last_name' => 'Applicant',
+            'email' => 'doc-metadata@applicant.test',
+            'membership_status' => 'applicant',
+            'status' => 'under_review',
+            'decision_status' => 'pending',
+            'current_stage' => 'interview',
+            'is_login_blocked' => false,
+            'verification_token' => hash('sha256', 'doc-metadata-token'),
+            'email_verified_at' => now(),
+        ]);
+
+        Sanctum::actingAs($applicant);
+
+        $this->postJson("/api/v1/applicants/{$application->id}/documents", [
+            'document' => UploadedFile::fake()->image('proof.png'),
+        ])->assertStatus(422)
+            ->assertJsonValidationErrors(['document_label', 'description']);
+    }
+
+    public function test_application_document_upload_stores_label_and_description(): void
+    {
+        Storage::fake('local');
+
+        $applicantRole = Role::query()->where('name', 'applicant')->firstOrFail();
+        $applicant = User::factory()->create([
+            'role_id' => $applicantRole->id,
+            'email' => 'doc-upload@applicant.test',
+        ]);
+
+        $application = Applicant::query()->create([
+            'user_id' => $applicant->id,
+            'first_name' => 'Upload',
+            'middle_name' => 'Meta',
+            'last_name' => 'Applicant',
+            'email' => 'doc-upload@applicant.test',
+            'membership_status' => 'applicant',
+            'status' => 'under_review',
+            'decision_status' => 'pending',
+            'current_stage' => 'interview',
+            'is_login_blocked' => false,
+            'verification_token' => hash('sha256', 'doc-upload-token'),
+            'email_verified_at' => now(),
+        ]);
+
+        Sanctum::actingAs($applicant);
+
+        $this->postJson("/api/v1/applicants/{$application->id}/documents", [
+            'document' => UploadedFile::fake()->image('proof.png'),
+            'document_label' => 'Barangay Clearance',
+            'description' => 'Scanned barangay clearance for membership verification.',
+        ])->assertStatus(201)
+            ->assertJsonPath('document.document_label', 'Barangay Clearance')
+            ->assertJsonPath('document.description', 'Scanned barangay clearance for membership verification.');
+
+        $this->assertDatabaseHas('applicant_documents', [
+            'applicant_id' => $application->id,
+            'document_label' => 'Barangay Clearance',
+            'description' => 'Scanned barangay clearance for membership verification.',
+        ]);
     }
 
     public function test_application_owner_can_view_own_document(): void

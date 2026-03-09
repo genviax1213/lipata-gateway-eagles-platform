@@ -5,6 +5,7 @@ import { microcopy } from "../content/portalCopy";
 import TaskHierarchyCard from "../components/TaskHierarchyCard";
 import { notifyPortalDataRefresh } from "../utils/portalRefresh";
 import { useSearchParams } from "react-router-dom";
+import PasswordField from "../components/PasswordField";
 
 interface ApplicationForm {
   first_name: string;
@@ -287,22 +288,20 @@ export default function ApplicantRegistration() {
             className="rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite disabled:cursor-not-allowed disabled:opacity-60"
           />
           <label htmlFor="application-password" className="text-xs font-semibold text-mist/85 md:col-span-2">Password</label>
-          <input
+          <PasswordField
             id="application-password"
             placeholder="Password"
-            type="password"
             value={form.password}
-            onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))}
-            className="rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite"
+            onChange={(value) => setForm((prev) => ({ ...prev, password: value }))}
+            className="rounded-md border border-white/25 bg-white/10 px-4 py-2 pr-12 text-offwhite"
           />
           <label htmlFor="application-password-confirmation" className="text-xs font-semibold text-mist/85 md:col-span-2">Confirm Password</label>
-          <input
+          <PasswordField
             id="application-password-confirmation"
             placeholder="Confirm Password"
-            type="password"
             value={form.password_confirmation}
-            onChange={(e) => setForm((prev) => ({ ...prev, password_confirmation: e.target.value }))}
-            className="rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite"
+            onChange={(value) => setForm((prev) => ({ ...prev, password_confirmation: value }))}
+            className="rounded-md border border-white/25 bg-white/10 px-4 py-2 pr-12 text-offwhite"
           />
           <div className="md:col-span-2">
             <label htmlFor="application-first-name" className="mb-1 block text-xs font-semibold text-mist/85">First Name</label>
@@ -365,22 +364,20 @@ export default function ApplicantRegistration() {
               className="rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite"
             />
             <label htmlFor="reapply-password" className="text-xs font-semibold text-mist/85 md:col-span-2">New Password</label>
-            <input
+            <PasswordField
               id="reapply-password"
               placeholder="New password"
-              type="password"
               value={reapplyPassword}
-              onChange={(e) => setReapplyPassword(e.target.value)}
-              className="rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite"
+              onChange={setReapplyPassword}
+              className="rounded-md border border-white/25 bg-white/10 px-4 py-2 pr-12 text-offwhite"
             />
             <label htmlFor="reapply-password-confirmation" className="text-xs font-semibold text-mist/85 md:col-span-2">Confirm New Password</label>
-            <input
+            <PasswordField
               id="reapply-password-confirmation"
               placeholder="Confirm new password"
-              type="password"
               value={reapplyPasswordConfirmation}
-              onChange={(e) => setReapplyPasswordConfirmation(e.target.value)}
-              className="rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite"
+              onChange={setReapplyPasswordConfirmation}
+              className="rounded-md border border-white/25 bg-white/10 px-4 py-2 pr-12 text-offwhite"
             />
             <div className="md:col-span-2">
               <button onClick={() => void startReapplication()} disabled={saving} className="btn-secondary">

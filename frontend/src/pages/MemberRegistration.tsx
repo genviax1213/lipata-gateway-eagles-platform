@@ -4,6 +4,7 @@ import api from "../services/api";
 import TaskHierarchyCard from "../components/TaskHierarchyCard";
 import { useSearchParams } from "react-router-dom";
 import { notifyPortalDataRefresh } from "../utils/portalRefresh";
+import PasswordField from "../components/PasswordField";
 
 interface RegistrationForm {
   first_name: string;
@@ -206,9 +207,9 @@ export default function MemberRegistration() {
             <label htmlFor="member-registration-email" className="text-xs font-semibold text-mist/85 md:col-span-2">Email Address</label>
             <input id="member-registration-email" placeholder="Email" type="email" value={form.email} onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))} disabled={googleClaimLoaded} className="rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite disabled:cursor-not-allowed disabled:opacity-60" />
             <label htmlFor="member-registration-password" className="text-xs font-semibold text-mist/85 md:col-span-2">Password</label>
-            <input id="member-registration-password" placeholder="Password" type="password" value={form.password} onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))} className="rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite" />
+            <PasswordField id="member-registration-password" placeholder="Password" value={form.password} onChange={(value) => setForm((prev) => ({ ...prev, password: value }))} className="rounded-md border border-white/25 bg-white/10 px-4 py-2 pr-12 text-offwhite" />
             <label htmlFor="member-registration-password-confirmation" className="text-xs font-semibold text-mist/85 md:col-span-2">Confirm Password</label>
-            <input id="member-registration-password-confirmation" placeholder="Confirm Password" type="password" value={form.password_confirmation} onChange={(e) => setForm((prev) => ({ ...prev, password_confirmation: e.target.value }))} className="rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite" />
+            <PasswordField id="member-registration-password-confirmation" placeholder="Confirm Password" value={form.password_confirmation} onChange={(value) => setForm((prev) => ({ ...prev, password_confirmation: value }))} className="rounded-md border border-white/25 bg-white/10 px-4 py-2 pr-12 text-offwhite" />
             <div className="md:col-span-2">
               <label htmlFor="member-registration-first-name" className="mb-1 block text-xs font-semibold text-mist/85">First Name</label>
               <input id="member-registration-first-name" placeholder="First Name" value={form.first_name} onChange={(e) => setForm((prev) => ({ ...prev, first_name: e.target.value }))} className="w-full rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite" />

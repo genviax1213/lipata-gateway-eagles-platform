@@ -329,8 +329,11 @@ class ApplicantController extends Controller
                 ->map(fn (ApplicantDocument $doc) => [
                     'id' => $doc->id,
                     'original_name' => $doc->original_name,
+                    'document_label' => $doc->document_label,
+                    'description' => $doc->description,
                     'status' => $doc->status,
                     'review_note' => $doc->review_note,
+                    'created_at' => optional($doc->created_at)?->toISOString(),
                     'reviewed_at' => optional($doc->reviewed_at)?->toISOString(),
                     'reviewed_by' => $doc->reviewedBy ? ['id' => $doc->reviewedBy->id, 'name' => $doc->reviewedBy->name] : null,
                 ]),
@@ -716,6 +719,8 @@ class ApplicantController extends Controller
 
         $validated = $request->validate([
             'document' => 'required|file|mimes:jpg,jpeg,png,webp,pdf|max:10240',
+            'document_label' => 'required|string|max:120',
+            'description' => 'required|string|max:255',
         ]);
 
         $uploadedFile = $request->file('document');
@@ -733,6 +738,8 @@ class ApplicantController extends Controller
             'applicant_id' => $applicant->id,
             'file_path' => $path,
             'original_name' => $uploadedFile->getClientOriginalName(),
+            'document_label' => trim((string) $validated['document_label']),
+            'description' => trim((string) $validated['description']),
             'status' => 'pending',
         ]);
 

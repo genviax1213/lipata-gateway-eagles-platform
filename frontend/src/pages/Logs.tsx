@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import api from "../services/api";
 import { useAuth } from "../contexts/useAuth";
-import { hasPermission, isAdminUser } from "../utils/auth";
+import { isAdminUser } from "../utils/auth";
 
 type LogEntry = {
   timestamp: string | null;
@@ -44,8 +44,8 @@ const LOGS_PAGE_SIZE = 10;
 
 export default function Logs() {
   const { user } = useAuth();
-  const canViewLogs = isAdminUser(user) || hasPermission(user, "members.view");
-  const canManageLogs = isAdminUser(user) || hasPermission(user, "members.delete");
+  const canViewLogs = isAdminUser(user);
+  const canManageLogs = isAdminUser(user);
 
   const [activeTab, setActiveTab] = useState<LogsTab>("current");
   const [entries, setEntries] = useState<LogEntry[]>([]);

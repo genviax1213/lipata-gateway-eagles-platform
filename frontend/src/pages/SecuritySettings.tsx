@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import api from "../services/api";
 import { shouldUseLegacyTokenMode } from "../services/api";
+import PasswordField from "../components/PasswordField";
 
 type SecurityTab = "password" | "policy" | "sessions";
 const SECURITY_PAGE_SIZE = 5;
@@ -149,11 +150,10 @@ export default function SecuritySettings() {
         <form className="mt-4 space-y-4" onSubmit={onSubmit}>
           <label className="block text-sm text-mist/90">
             Current password
-            <input
-              type="password"
-              className="mt-1 w-full rounded-md border border-white/15 bg-[#0b1222]/60 px-3 py-2 text-offwhite outline-none ring-gold/40 focus:ring"
+            <PasswordField
+              className="mt-1 w-full rounded-md border border-white/15 bg-[#0b1222]/60 px-3 py-2 pr-12 text-offwhite outline-none ring-gold/40 focus:ring"
               value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
+              onChange={setCurrentPassword}
               autoComplete="current-password"
               required
             />
@@ -161,11 +161,10 @@ export default function SecuritySettings() {
 
           <label className="block text-sm text-mist/90">
             New password
-            <input
-              type="password"
-              className="mt-1 w-full rounded-md border border-white/15 bg-[#0b1222]/60 px-3 py-2 text-offwhite outline-none ring-gold/40 focus:ring"
+            <PasswordField
+              className="mt-1 w-full rounded-md border border-white/15 bg-[#0b1222]/60 px-3 py-2 pr-12 text-offwhite outline-none ring-gold/40 focus:ring"
               value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
+              onChange={setNewPassword}
               autoComplete="new-password"
               minLength={8}
               required
@@ -174,11 +173,10 @@ export default function SecuritySettings() {
 
           <label className="block text-sm text-mist/90">
             Confirm new password
-            <input
-              type="password"
-              className="mt-1 w-full rounded-md border border-white/15 bg-[#0b1222]/60 px-3 py-2 text-offwhite outline-none ring-gold/40 focus:ring"
+            <PasswordField
+              className="mt-1 w-full rounded-md border border-white/15 bg-[#0b1222]/60 px-3 py-2 pr-12 text-offwhite outline-none ring-gold/40 focus:ring"
               value={newPasswordConfirmation}
-              onChange={(e) => setNewPasswordConfirmation(e.target.value)}
+              onChange={setNewPasswordConfirmation}
               autoComplete="new-password"
               minLength={8}
               required

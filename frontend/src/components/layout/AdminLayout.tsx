@@ -39,6 +39,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const isApplicant = roleName === "applicant";
   const showRoleDelegation = isAdminUser(user) || hasPermission(user, "roles.delegate");
   const canViewMembers = isAdminUser(user) || roleName === "membership_chairman";
+  const canViewLogs = isAdminUser(user);
   const canViewApplicantList = hasPermission(user, "applications.view") || hasPermission(user, "applications.review");
   const canOpenMembersSection = canViewMembers || canViewApplicantList;
   const canManageCmsPosts = hasPermission(user, "posts.create");
@@ -72,10 +73,10 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       { to: "/portal/forum", label: "Forum", icon: "forum", show: canViewForum },
       { to: "/portal/posts", label: "CMS Posts", icon: "cms", show: canManageCmsPosts },
       { to: "/portal/user-roles", label: "User Roles", icon: "roles", show: showRoleDelegation },
-      { to: "/portal/logs", label: "Logs", icon: "logs", show: canViewMembers },
+      { to: "/portal/logs", label: "Logs", icon: "logs", show: canViewLogs },
       { to: "/portal/security", label: "Security Settings", icon: "security", show: true },
     ],
-    [canManageCmsPosts, canOpenMembersSection, canViewFinance, canViewForum, canViewMembers, showRoleDelegation],
+    [canManageCmsPosts, canOpenMembersSection, canViewFinance, canViewForum, canViewLogs, showRoleDelegation],
   );
 
   const renderIcon = (icon: string) => {
