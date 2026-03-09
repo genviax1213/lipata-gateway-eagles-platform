@@ -86,7 +86,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/formal-photos/me', [FormalPhotoController::class, 'showMine'])->name('formal-photos.my');
         Route::post('/formal-photos/me', [FormalPhotoController::class, 'storeMine'])->middleware('throttle:members-write')->name('formal-photos.store');
         Route::get('/formal-photos/me/image', [FormalPhotoController::class, 'showMineImage'])->name('formal-photos.my-image');
-        Route::get('/formal-photos/members', [FormalPhotoController::class, 'indexMembers'])->name('formal-photos.members');
+        Route::get('/formal-photos/directory', [FormalPhotoController::class, 'indexDirectory'])->name('formal-photos.directory');
         Route::get('/formal-photos/{formalPhoto}/image', [FormalPhotoController::class, 'showImage'])->name('formal-photos.show-image');
 
         Route::get('/cms/posts', [PostController::class, 'index'])->middleware('portal.permission:posts.create,posts.update,posts.delete');
@@ -102,7 +102,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/members', [MemberController::class, 'index'])->middleware('portal.permission:members.view');
         Route::get('/members/{member}', [MemberController::class, 'show'])->middleware('portal.permission:members.view');
         Route::get('/members/me/profile', [MemberController::class, 'myProfile']);
-        Route::get('/members/{member}/formal-photo', [FormalPhotoController::class, 'showForMember']);
+        Route::get('/members/{member}/formal-photo', [FormalPhotoController::class, 'showForMember'])->name('formal-photos.members.show');
         Route::post('/members/{member}/assign-applicant-batch', [MemberController::class, 'assignApplicantBatch'])->middleware('throttle:members-write', 'portal.permission:applications.review');
         Route::put('/members/me/profile', [MemberController::class, 'updateMyProfile']);
         Route::post('/members', [MemberController::class, 'store'])->middleware('throttle:members-write', 'portal.permission:members.create');
@@ -112,6 +112,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/applicants/me', [ApplicantController::class, 'myApplication'])->middleware('portal.permission:applications.dashboard.view');
         Route::post('/applicants/me/withdraw', [ApplicantController::class, 'withdraw']);
         Route::get('/applicants/archive/me', [ApplicantController::class, 'myArchive']);
+        Route::get('/applicants/{applicant}/formal-photo', [FormalPhotoController::class, 'showForApplicant'])->name('formal-photos.applicants.show');
         Route::get('/applicants/{applicant}', [ApplicantController::class, 'show']);
         Route::delete('/applicants/{applicant}', [ApplicantController::class, 'destroy']);
         Route::post('/applicants/{applicant}/documents', [ApplicantController::class, 'uploadDocument'])->middleware('portal.permission:applications.docs.upload');

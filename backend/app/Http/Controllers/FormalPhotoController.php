@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\FormalPhoto;
+use App\Models\Applicant;
 use App\Models\Member;
 use App\Models\User;
 use App\Support\ImageUploadOptimizer;
@@ -135,30 +136,63 @@ class FormalPhotoController extends Controller
             'user_id' => $user->id,
             'member' => [
                 'id' => $member->id,
-                'member_number' => $member->member_number,
+                'subject_key' => 'member:' . $member->id,
+                'subject_type' => 'member',
+                'identifier' => $member->member_number,
                 'full_name' => trim(implode(' ', array_filter([
                     $member->first_name,
                     $member->middle_name,
                     $member->last_name,
                 ]))),
                 'email' => $member->email,
+                'subtitle' => 'Member',
+                'lookup_url' => route('formal-photos.members.show', ['member' => $member->id], false),
             ],
             'formal_photo' => $user->formalPhoto?->toMetadataArray(),
         ]);
     }
 
-    public function indexMembers(Request $request)
+    public function showForApplicant(Request $request, Applicant $applicant)
+    {
+        $this->ensurePortalPermission($request, Permissions::FORMAL_PHOTOS_VIEW_PRIVATE);
+
+        $user = $applicant->user()->first();
+        if (!$user) {
+            return response()->json(['message' => 'No linked portal user found for this applicant.'], 404);
+        }
+
+        return response()->json([
+            'applicant_id' => $applicant->id,
+            'user_id' => $user->id,
+            'applicant' => [
+                'id' => $applicant->id,
+                'subject_key' => 'applicant:' . $applicant->id,
+                'subject_type' => 'applicant',
+                'identifier' => strtoupper(str_replace('_', ' ', (string) $applicant->status)),
+                'full_name' => trim(implode(' ', array_filter([
+                    $applicant->first_name,
+                    $applicant->middle_name,
+                    $applicant->last_name,
+                ]))),
+                'email' => $applicant->email,
+                'subtitle' => 'Applicant',
+                'lookup_url' => route('formal-photos.applicants.show', ['applicant' => $applicant->id], false),
+            ],
+            'formal_photo' => $user->formalPhoto?->toMetadataArray(),
+        ]);
+    }
+
+    public function indexDirectory(Request $request)
     {
         $this->ensurePortalPermission($request, Permissions::FORMAL_PHOTOS_VIEW_PRIVATE);
 
         $search = trim((string) $request->query('search', ''));
-
-        $query = Member::query()
+        $members = Member::query()
             ->whereNotNull('user_id')
             ->with('user.formalPhoto');
 
         if ($search !== '') {
-            $query->where(function ($builder) use ($search): void {
+            $members->where(function ($builder) use ($search): void {
                 $builder->where('member_number', 'like', "%{$search}%")
                     ->orWhere('first_name', 'like', "%{$search}%")
                     ->orWhere('middle_name', 'like', "%{$search}%")
@@ -167,28 +201,80 @@ class FormalPhotoController extends Controller
             });
         }
 
-        $results = $query
+        $memberRows = $members
             ->orderBy('last_name')
             ->orderBy('first_name')
-            ->paginate(10)
-            ->through(function (Member $member) {
+            ->limit(15)
+            ->get()
+            ->map(function (Member $member) {
                 $formalPhoto = $member->user?->formalPhoto;
 
                 return [
                     'id' => $member->id,
-                    'member_number' => $member->member_number,
+                    'subject_type' => 'member',
+                    'subject_key' => 'member:' . $member->id,
+                    'identifier' => $member->member_number,
                     'full_name' => trim(implode(' ', array_filter([
                         $member->first_name,
                         $member->middle_name,
                         $member->last_name,
                     ]))),
                     'email' => $member->email,
+                    'subtitle' => 'Member',
+                    'lookup_url' => route('formal-photos.members.show', ['member' => $member->id], false),
                     'formal_photo' => $formalPhoto?->toMetadataArray(),
                     'has_formal_photo' => $formalPhoto !== null,
                 ];
             });
 
-        return response()->json($results);
+        $applicants = Applicant::query()
+            ->whereNotNull('user_id')
+            ->with('user.formalPhoto');
+
+        if ($search !== '') {
+            $applicants->where(function ($builder) use ($search): void {
+                $builder->where('first_name', 'like', "%{$search}%")
+                    ->orWhere('middle_name', 'like', "%{$search}%")
+                    ->orWhere('last_name', 'like', "%{$search}%")
+                    ->orWhere('email', 'like', "%{$search}%")
+                    ->orWhere('status', 'like', "%{$search}%")
+                    ->orWhere('decision_status', 'like', "%{$search}%");
+            });
+        }
+
+        $applicantRows = $applicants
+            ->orderBy('last_name')
+            ->orderBy('first_name')
+            ->limit(15)
+            ->get()
+            ->map(function (Applicant $applicant) {
+                $formalPhoto = $applicant->user?->formalPhoto;
+
+                return [
+                    'id' => $applicant->id,
+                    'subject_type' => 'applicant',
+                    'subject_key' => 'applicant:' . $applicant->id,
+                    'identifier' => strtoupper(str_replace('_', ' ', (string) $applicant->status)),
+                    'full_name' => trim(implode(' ', array_filter([
+                        $applicant->first_name,
+                        $applicant->middle_name,
+                        $applicant->last_name,
+                    ]))),
+                    'email' => $applicant->email,
+                    'subtitle' => 'Applicant',
+                    'lookup_url' => route('formal-photos.applicants.show', ['applicant' => $applicant->id], false),
+                    'formal_photo' => $formalPhoto?->toMetadataArray(),
+                    'has_formal_photo' => $formalPhoto !== null,
+                ];
+            });
+
+        $results = $memberRows
+            ->concat($applicantRows)
+            ->sortBy(fn (array $row) => strtolower($row['full_name'] . '|' . $row['subject_type']))
+            ->values()
+            ->all();
+
+        return response()->json(['data' => $results]);
     }
 
     private function streamPhoto(FormalPhoto $formalPhoto)

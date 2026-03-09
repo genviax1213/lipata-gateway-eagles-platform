@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\FormalPhoto;
+use App\Models\Applicant;
 use App\Models\Member;
 use App\Models\Role;
 use App\Models\User;
@@ -107,7 +108,7 @@ class FormalPhotoFeatureTest extends TestCase
             ->assertForbidden();
     }
 
-    public function test_admin_and_secretary_can_lookup_private_member_formal_photo(): void
+    public function test_admin_secretary_and_chairman_can_lookup_private_member_and_applicant_formal_photos(): void
     {
         $owner = $this->memberUser('formal-staff-target@example.com');
         $member = $this->memberProfile($owner, 'M-FORMAL-003');
@@ -123,6 +124,37 @@ class FormalPhotoFeatureTest extends TestCase
         ]);
         Storage::disk('local')->put($photo->file_path, 'fake-image');
 
+        $applicantRole = Role::query()->where('name', 'applicant')->firstOrFail();
+        $applicantUser = User::factory()->create([
+            'role_id' => $applicantRole->id,
+            'email' => 'formal-applicant-target@example.com',
+        ]);
+        $applicant = Applicant::query()->create([
+            'user_id' => $applicantUser->id,
+            'first_name' => 'Formal',
+            'middle_name' => 'Applicant',
+            'last_name' => 'Viewer',
+            'email' => 'formal-applicant-target@example.com',
+            'membership_status' => 'applicant',
+            'status' => Applicant::STATUS_UNDER_REVIEW,
+            'decision_status' => 'pending',
+            'current_stage' => 'interview',
+            'verification_token' => hash('sha256', 'formal-applicant-viewer-token'),
+            'email_verified_at' => now(),
+            'is_login_blocked' => false,
+        ]);
+        $applicantPhoto = FormalPhoto::query()->create([
+            'user_id' => $applicantUser->id,
+            'disk' => 'local',
+            'file_path' => 'formal-photos/' . $applicantUser->id . '/staff-applicant.jpg',
+            'mime_type' => 'image/jpeg',
+            'file_size' => 1024,
+            'width' => 480,
+            'height' => 640,
+            'template_key' => 'staff-template',
+        ]);
+        Storage::disk('local')->put($applicantPhoto->file_path, 'fake-applicant-image');
+
         $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
         $admin = User::factory()->create(['role_id' => $adminRole->id]);
         Sanctum::actingAs($admin);
@@ -131,10 +163,15 @@ class FormalPhotoFeatureTest extends TestCase
             ->assertOk()
             ->assertJsonPath('formal_photo.id', $photo->id);
 
-        $this->getJson('/api/v1/formal-photos/members?search=M-FORMAL-003')
+        $this->getJson('/api/v1/formal-photos/directory?search=viewer')
             ->assertOk()
-            ->assertJsonPath('data.0.id', $member->id)
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.subject_type', 'applicant')
             ->assertJsonPath('data.0.has_formal_photo', true);
+
+        $this->getJson("/api/v1/applicants/{$applicant->id}/formal-photo")
+            ->assertOk()
+            ->assertJsonPath('formal_photo.id', $applicantPhoto->id);
 
         $this->get("/api/v1/formal-photos/{$photo->id}/image")
             ->assertOk();
@@ -149,6 +186,22 @@ class FormalPhotoFeatureTest extends TestCase
 
         $this->get("/api/v1/formal-photos/{$photo->id}/image")
             ->assertOk();
+
+        $chairmanRole = Role::query()->where('name', 'membership_chairman')->firstOrFail();
+        $chairman = User::factory()->create(['role_id' => $chairmanRole->id]);
+        Sanctum::actingAs($chairman);
+
+        $this->getJson("/api/v1/members/{$member->id}/formal-photo")
+            ->assertOk()
+            ->assertJsonPath('formal_photo.id', $photo->id);
+
+        $this->getJson("/api/v1/applicants/{$applicant->id}/formal-photo")
+            ->assertOk()
+            ->assertJsonPath('formal_photo.id', $applicantPhoto->id);
+
+        $this->getJson('/api/v1/formal-photos/directory?search=formal')
+            ->assertOk()
+            ->assertJsonPath('data.0.has_formal_photo', true);
     }
 
     public function test_lookup_returns_null_formal_photo_when_member_has_no_saved_image(): void

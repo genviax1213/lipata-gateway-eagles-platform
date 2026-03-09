@@ -250,8 +250,10 @@ class RoleSeeder extends Seeder
             $permissionIds['forum.view'],
             $permissionIds['forum.create_thread'],
             $permissionIds['forum.reply'],
+            $permissionIds['formal_photos.view_private'],
             $permissionIds['identity.qr.view'],
             $permissionIds['calendar.view'],
+            $permissionIds['calendar.manage'],
         ]);
     }
 }

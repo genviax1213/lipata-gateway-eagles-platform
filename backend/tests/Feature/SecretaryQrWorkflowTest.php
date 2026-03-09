@@ -135,6 +135,37 @@ class SecretaryQrWorkflowTest extends TestCase
             ->assertJsonPath('message', 'Events with attendance records are immutable and cannot be deleted.');
     }
 
+    public function test_membership_chairman_can_manage_calendar_events(): void
+    {
+        $chairmanRole = Role::query()->where('name', 'membership_chairman')->firstOrFail();
+        $chairman = User::factory()->create([
+            'role_id' => $chairmanRole->id,
+            'email' => 'chairman-calendar@example.test',
+        ]);
+
+        Sanctum::actingAs($chairman);
+
+        $response = $this->postJson('/api/v1/calendar/events', [
+            'title' => 'Chairman Planning Meeting',
+            'event_type' => 'meeting',
+            'starts_at' => '2026-03-20 19:00:00',
+            'location' => 'Board Room',
+            'description' => 'Chairman-created schedule',
+        ])->assertCreated();
+
+        $eventId = $response->json('event.id');
+        $this->assertNotNull($eventId);
+
+        $this->putJson("/api/v1/calendar/events/{$eventId}", [
+            'title' => 'Chairman Planning Meeting Updated',
+            'event_type' => 'meeting',
+            'starts_at' => '2026-03-20 19:30:00',
+            'location' => 'Board Room',
+            'description' => 'Updated by chairman',
+        ])->assertOk()
+            ->assertJsonPath('event.title', 'Chairman Planning Meeting Updated');
+    }
+
     public function test_secretary_can_access_forum_and_directory_exports(): void
     {
         Storage::fake('local');
