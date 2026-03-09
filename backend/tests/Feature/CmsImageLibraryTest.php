@@ -115,6 +115,35 @@ class CmsImageLibraryTest extends TestCase
         ]);
     }
 
+    public function test_store_post_preserves_utf8_punctuation_in_rich_content(): void
+    {
+        $officer = $this->officerUser();
+
+        Sanctum::actingAs($officer);
+
+        $content = '<p>Chairman’s note — “quoted text”, it’s still readable, and plain hyphen - plus double hyphen -- stay intact.</p>';
+
+        $response = $this->postJson('/api/v1/cms/posts', [
+            'title' => 'UTF8 Punctuation Post',
+            'section' => 'news',
+            'excerpt' => 'UTF-8 punctuation check',
+            'content' => $content,
+            'status' => 'published',
+        ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('content', $content);
+
+        $post = Post::query()->where('title', 'UTF8 Punctuation Post')->firstOrFail();
+
+        $this->assertSame($content, $post->content);
+
+        $publicResponse = $this->getJson("/api/v1/content/post/{$post->slug}");
+
+        $publicResponse->assertOk()
+            ->assertJsonPath('content', $content);
+    }
+
     public function test_store_post_mirrors_uploaded_image_when_public_mirror_root_is_configured(): void
     {
         $officer = $this->officerUser();

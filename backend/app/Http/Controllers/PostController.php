@@ -622,7 +622,10 @@ class PostController extends Controller
         $wrapped = '<!DOCTYPE html><html><body>' . $content . '</body></html>';
         $dom = new \DOMDocument('1.0', 'UTF-8');
         $previous = libxml_use_internal_errors(true);
-        $dom->loadHTML($wrapped, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+        $dom->loadHTML(
+            '<?xml encoding="UTF-8">' . $wrapped,
+            LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD
+        );
         libxml_clear_errors();
         libxml_use_internal_errors($previous);
 
