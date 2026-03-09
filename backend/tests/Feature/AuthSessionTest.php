@@ -3,7 +3,10 @@
 namespace Tests\Feature;
 
 use App\Models\Applicant;
+use App\Models\Role;
 use App\Models\User;
+use App\Support\RoleHierarchy;
+use Database\Seeders\RoleSeeder;
 use Illuminate\Support\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
@@ -12,6 +15,13 @@ use Tests\TestCase;
 class AuthSessionTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->seed(RoleSeeder::class);
+    }
 
     public function test_login_creates_session_for_follow_up_user_request(): void
     {
@@ -156,7 +166,9 @@ class AuthSessionTest extends TestCase
 
     public function test_inactive_token_is_forced_logged_out_after_thirty_minutes(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->create([
+            'role_id' => $this->roleId(RoleHierarchy::ADMIN),
+        ]);
         $token = $user->createToken('auth_token');
 
         $user->forceFill([
@@ -170,6 +182,72 @@ class AuthSessionTest extends TestCase
             ->assertJsonPath('code', 'session_inactive');
 
         $this->assertFalse($user->fresh()->tokens()->whereKey($token->accessToken->id)->exists());
+    }
+
+    public function test_inactive_token_does_not_force_logout_for_applicant_accounts(): void
+    {
+        $user = User::factory()->create([
+            'role_id' => $this->roleId(RoleHierarchy::APPLICANT),
+        ]);
+        $token = $user->createToken('auth_token');
+
+        $user->forceFill([
+            'active_token_id' => $token->accessToken->id,
+            'last_activity_at' => Carbon::now()->subMinutes(31),
+        ])->save();
+
+        $this->withToken($token->plainTextToken)
+            ->getJson('/api/v1/user')
+            ->assertOk()
+            ->assertJsonPath('id', $user->id);
+
+        $this->assertTrue($user->fresh()->tokens()->whereKey($token->accessToken->id)->exists());
+    }
+
+    public function test_inactive_token_does_not_force_logout_for_non_admin_member_accounts(): void
+    {
+        $user = User::factory()->create([
+            'role_id' => $this->roleId(RoleHierarchy::MEMBER),
+        ]);
+        $token = $user->createToken('auth_token');
+
+        $user->forceFill([
+            'active_token_id' => $token->accessToken->id,
+            'last_activity_at' => Carbon::now()->subMinutes(31),
+        ])->save();
+
+        $this->withToken($token->plainTextToken)
+            ->getJson('/api/v1/user')
+            ->assertOk()
+            ->assertJsonPath('id', $user->id);
+
+        $this->assertTrue($user->fresh()->tokens()->whereKey($token->accessToken->id)->exists());
+    }
+
+    public function test_inactive_token_is_forced_logged_out_for_treasurer_accounts(): void
+    {
+        $user = User::factory()->create([
+            'role_id' => $this->roleId(RoleHierarchy::MEMBER),
+            'finance_role' => RoleHierarchy::FINANCE_TREASURER,
+        ]);
+        $token = $user->createToken('auth_token');
+
+        $user->forceFill([
+            'active_token_id' => $token->accessToken->id,
+            'last_activity_at' => Carbon::now()->subMinutes(31),
+        ])->save();
+
+        $this->withToken($token->plainTextToken)
+            ->getJson('/api/v1/user')
+            ->assertStatus(401)
+            ->assertJsonPath('code', 'session_inactive');
+
+        $this->assertFalse($user->fresh()->tokens()->whereKey($token->accessToken->id)->exists());
+    }
+
+    private function roleId(string $roleName): int
+    {
+        return (int) Role::query()->where('name', $roleName)->value('id');
     }
 
     public function test_authenticated_user_can_change_password_and_rotate_token(): void

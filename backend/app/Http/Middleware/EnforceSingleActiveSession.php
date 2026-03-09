@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\User;
+use App\Support\RoleHierarchy;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -49,6 +50,10 @@ class EnforceSingleActiveSession
 
     private function isInactive(User $user): bool
     {
+        if (!$this->shouldEnforceInactivityTimeout($user)) {
+            return false;
+        }
+
         if (!$user->last_activity_at) {
             return false;
         }
@@ -58,6 +63,21 @@ class EnforceSingleActiveSession
             : Carbon::parse((string) $user->last_activity_at);
 
         return now()->diffInMinutes($last, true) >= self::INACTIVITY_MINUTES;
+    }
+
+    private function shouldEnforceInactivityTimeout(User $user): bool
+    {
+        $user->loadMissing('role:id,name');
+
+        $primaryRole = (string) ($user->role?->name ?? '');
+        if (in_array($primaryRole, [RoleHierarchy::SUPERADMIN, RoleHierarchy::ADMIN], true)) {
+            return true;
+        }
+
+        return in_array((string) ($user->finance_role ?? ''), [
+            RoleHierarchy::FINANCE_TREASURER,
+            RoleHierarchy::FINANCE_AUDITOR,
+        ], true);
     }
 
     private function wasReplacedByAnotherLogin(Request $request, User $user): bool
