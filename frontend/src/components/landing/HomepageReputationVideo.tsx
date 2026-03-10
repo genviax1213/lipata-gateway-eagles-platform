@@ -170,7 +170,6 @@ export default function HomepageReputationVideo({
               >
                 <div className="homepage-video-modal-header">
                   <div>
-                    <p className="homepage-video-eyebrow">{video.eyebrow}</p>
                     <h3 id={titleId} className="homepage-video-modal-title">
                       {video.title}
                     </h3>

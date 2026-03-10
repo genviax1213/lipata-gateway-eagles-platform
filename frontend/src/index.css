@@ -300,6 +300,17 @@ input::-ms-clear {
   box-shadow: 0 14px 24px rgba(2, 6, 23, 0.32);
 }
 
+.hero-media-stack {
+  display: grid;
+  gap: 1rem;
+  justify-items: stretch;
+}
+
+.hero-media-thumbnail-wrap {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .homepage-video-eyebrow {
   margin: 0;
   color: var(--color-gold-soft);

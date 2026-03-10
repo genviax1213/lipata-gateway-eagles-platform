@@ -258,9 +258,7 @@ export default function Landing() {
     return () => clearInterval(timer);
   }, [communitySlideCount]);
 
-  const heroGridClassName = homepageVideo
-    ? "section-wrap grid min-h-[calc(100vh-148px)] items-center gap-8 py-16 lg:grid-cols-[minmax(0,1.04fr)_minmax(14rem,16.75rem)_minmax(0,0.92fr)] lg:gap-6"
-    : "section-wrap grid min-h-[calc(100vh-148px)] items-center gap-8 py-16 lg:grid-cols-[1.1fr_0.9fr]";
+  const heroGridClassName = "section-wrap grid min-h-[calc(100vh-148px)] items-center gap-8 py-16 lg:grid-cols-[1.1fr_0.9fr]";
 
   return (
     <section className="hero-gradient relative overflow-hidden">
@@ -319,21 +317,23 @@ export default function Landing() {
           </div>
         </div>
 
-        {homepageVideo ? (
-          <div className="relative z-10 hidden lg:flex lg:justify-center">
-            <HomepageReputationVideo video={homepageVideo} layout="desktop" />
-          </div>
-        ) : null}
-
         <aside className="relative z-10 hidden lg:block">
-          <HeroFeatureCard
-            post={heroPost}
-            contentPreview={heroContentPreview}
-            imageHeightClassName="h-[26rem]"
-            imageLoaded={heroImageLoaded}
-            prioritizeImage
-            isLoading={heroLoading}
-          />
+          <div className="hero-media-stack">
+            {homepageVideo ? (
+              <div className="hero-media-thumbnail-wrap">
+                <HomepageReputationVideo video={homepageVideo} layout="desktop" />
+              </div>
+            ) : null}
+
+            <HeroFeatureCard
+              post={heroPost}
+              contentPreview={heroContentPreview}
+              imageHeightClassName="h-[26rem]"
+              imageLoaded={heroImageLoaded}
+              prioritizeImage
+              isLoading={heroLoading}
+            />
+          </div>
         </aside>
       </div>
 
