@@ -44,13 +44,6 @@ function buildPlaybackUrl(video: HomepageReputationVideoData): string {
   }
 }
 
-function normalizeProviderLabel(provider: string): string {
-  if (!provider) return "Featured Video";
-  return provider
-    .replace(/[_-]+/g, " ")
-    .replace(/\b\w/g, (match) => match.toUpperCase());
-}
-
 export default function HomepageReputationVideo({
   video,
   layout = "desktop",
@@ -62,8 +55,6 @@ export default function HomepageReputationVideo({
   const titleId = useId();
   const descriptionId = useId();
   const playbackUrl = useMemo(() => buildPlaybackUrl(video), [video]);
-  const providerLabel = normalizeProviderLabel(video.provider);
-
   useEffect(() => {
     if (!isOpen || typeof document === "undefined") return;
 
@@ -142,7 +133,6 @@ export default function HomepageReputationVideo({
             </div>
           )}
           <div className="homepage-video-teaser-overlay" aria-hidden="true" />
-          <span className="homepage-video-provider-badge">{providerLabel}</span>
           <span className="homepage-video-play-badge" aria-hidden="true">
             <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current" focusable="false">
               <path d="M8 6.5v11l9-5.5-9-5.5Z" />

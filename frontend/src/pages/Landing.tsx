@@ -272,11 +272,18 @@ export default function Landing() {
 
       <div className={heroGridClassName}>
         <div className="relative z-10 max-w-3xl">
-          <img
-            src="/images/lgec-logo.png"
-            alt="LGEC Logo"
-            className="reveal mb-6 h-36 w-36 object-contain md:h-44 md:w-44"
-          />
+          <div className="hero-brand-row reveal mb-6">
+            <img
+              src="/images/lgec-logo.png"
+              alt="LGEC Logo"
+              className="h-36 w-36 object-contain md:h-44 md:w-44"
+            />
+            {homepageVideo ? (
+              <div className="hidden lg:flex lg:items-center">
+                <HomepageReputationVideo video={homepageVideo} layout="desktop" />
+              </div>
+            ) : null}
+          </div>
           <h1 className="reveal reveal-delay-1 mb-6 font-heading text-5xl leading-tight text-offwhite md:text-7xl">
             {heroPost?.title ?? "Lipata Gateway Eagles Club"}
           </h1>
@@ -292,6 +299,11 @@ export default function Landing() {
               View Activities
             </Link>
           </div>
+          {homepageVideo ? (
+            <div className="mt-6 lg:hidden">
+              <HomepageReputationVideo video={homepageVideo} layout="mobile" />
+            </div>
+          ) : null}
           <p className="reveal reveal-delay-2 mt-5 text-sm text-mist/80">
             Already a member?{" "}
             <Link to={canonicalRoutes.login} className="font-semibold text-gold-soft hover:text-gold">
@@ -299,12 +311,6 @@ export default function Landing() {
             </Link>
             .
           </p>
-
-          {homepageVideo ? (
-            <div className="mt-6 lg:hidden">
-              <HomepageReputationVideo video={homepageVideo} layout="mobile" />
-            </div>
-          ) : null}
 
           <div className="mt-6 lg:hidden">
             <HeroFeatureCard
@@ -318,22 +324,14 @@ export default function Landing() {
         </div>
 
         <aside className="relative z-10 hidden lg:block">
-          <div className="hero-media-stack">
-            {homepageVideo ? (
-              <div className="hero-media-thumbnail-wrap">
-                <HomepageReputationVideo video={homepageVideo} layout="desktop" />
-              </div>
-            ) : null}
-
-            <HeroFeatureCard
-              post={heroPost}
-              contentPreview={heroContentPreview}
-              imageHeightClassName="h-[26rem]"
-              imageLoaded={heroImageLoaded}
-              prioritizeImage
-              isLoading={heroLoading}
-            />
-          </div>
+          <HeroFeatureCard
+            post={heroPost}
+            contentPreview={heroContentPreview}
+            imageHeightClassName="h-[26rem]"
+            imageLoaded={heroImageLoaded}
+            prioritizeImage
+            isLoading={heroLoading}
+          />
         </aside>
       </div>
 
