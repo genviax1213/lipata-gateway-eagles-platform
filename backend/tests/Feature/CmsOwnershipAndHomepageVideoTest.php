@@ -104,22 +104,35 @@ class CmsOwnershipAndHomepageVideoTest extends TestCase
 
         Sanctum::actingAs($member);
         $this->putJson('/api/v1/homepage/reputation-video', [
-            'video_url' => 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+            'videos' => [
+                ['video_url' => 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'],
+            ],
         ])->assertForbidden();
 
         Sanctum::actingAs($admin);
         $this->putJson('/api/v1/homepage/reputation-video', [
-            'video_url' => 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-            'title' => 'LGEC Reputation',
-            'caption' => 'Service and brotherhood in action',
+            'videos' => [
+                [
+                    'video_url' => 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+                    'title' => 'LGEC Reputation',
+                    'caption' => 'Service and brotherhood in action',
+                ],
+                [
+                    'video_url' => 'https://www.youtube.com/watch?v=9bZkp7q19f0',
+                    'title' => 'LGEC Community',
+                    'caption' => 'Second video',
+                ],
+            ],
         ])->assertOk()
-            ->assertJsonPath('provider', 'youtube')
-            ->assertJsonPath('embed_url', 'https://www.youtube.com/embed/dQw4w9WgXcQ');
+            ->assertJsonPath('videos.0.provider', 'youtube')
+            ->assertJsonPath('videos.0.embed_url', 'https://www.youtube.com/embed/dQw4w9WgXcQ')
+            ->assertJsonPath('videos.1.embed_url', 'https://www.youtube.com/embed/9bZkp7q19f0');
 
         $this->getJson('/api/v1/content/homepage-reputation-video')
             ->assertOk()
-            ->assertJsonPath('title', 'LGEC Reputation')
-            ->assertJsonPath('provider', 'youtube');
+            ->assertJsonPath('videos.0.title', 'LGEC Reputation')
+            ->assertJsonPath('videos.0.provider', 'youtube')
+            ->assertJsonCount(2, 'videos');
     }
 
     public function test_post_sanitization_keeps_allowed_video_embeds_and_rejects_unapproved_iframes(): void

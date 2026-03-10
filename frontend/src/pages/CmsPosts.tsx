@@ -78,7 +78,7 @@ type ProcessedImageMeta = {
   height: number;
 };
 
-type HomepageVideoFormState = {
+type HomepageVideoSlotState = {
   video_url: string;
   title: string;
   caption: string;
@@ -112,12 +112,16 @@ const initialForm: FormState = {
   selected_image_path: "",
 };
 
-const initialHomepageVideoForm: HomepageVideoFormState = {
+const initialHomepageVideoSlot: HomepageVideoSlotState = {
   video_url: "",
   title: "",
   caption: "",
   thumbnail_url: "",
 };
+
+function createHomepageVideoSlots(): HomepageVideoSlotState[] {
+  return Array.from({ length: 3 }, () => ({ ...initialHomepageVideoSlot }));
+}
 
 function titleCaseWords(value: string): string {
   return value
@@ -367,7 +371,7 @@ export default function CmsPosts() {
   const [sourceImage, setSourceImage] = useState<SourceImageState | null>(null);
   const [crop, setCrop] = useState<CropState>({ x: 0, y: 0, zoom: 1 });
   const [sourceImageUrl, setSourceImageUrl] = useState("");
-  const [homepageVideoForm, setHomepageVideoForm] = useState<HomepageVideoFormState>(initialHomepageVideoForm);
+  const [homepageVideoSlots, setHomepageVideoSlots] = useState<HomepageVideoSlotState[]>(() => createHomepageVideoSlots());
   const [homepageVideoLoaded, setHomepageVideoLoaded] = useState(false);
   const [savingHomepageVideo, setSavingHomepageVideo] = useState(false);
   const [homepageVideoUpdatedAt, setHomepageVideoUpdatedAt] = useState<string | null>(null);
@@ -383,9 +387,9 @@ export default function CmsPosts() {
     : { width: CROP_FRAME_WIDTH, height: CROP_FRAME_HEIGHT };
 
   const previewHtml = useMemo(() => sanitizeRichHtml(form.content), [form.content]);
-  const homepageVideoPreview = useMemo(
-    () => parseApprovedVideoEmbed(homepageVideoForm.video_url),
-    [homepageVideoForm.video_url],
+  const homepageVideoPreviews = useMemo(
+    () => homepageVideoSlots.map((slot) => parseApprovedVideoEmbed(slot.video_url)),
+    [homepageVideoSlots],
   );
   const previewWordCount = useMemo(
     () => (plainContent.trim().length ? plainContent.trim().split(/\s+/).length : 0),
@@ -646,19 +650,25 @@ export default function CmsPosts() {
 
     try {
       const response = await api.get<{
-        title?: string | null;
-        caption?: string | null;
-        thumbnail_url?: string | null;
-        source_url?: string | null;
+        videos?: Array<{
+          title?: string | null;
+          caption?: string | null;
+          thumbnail_url?: string | null;
+          source_url?: string | null;
+        }>;
         updated_at?: string | null;
       }>("/homepage/reputation-video");
 
-      setHomepageVideoForm({
-        video_url: response.data?.source_url ?? "",
-        title: response.data?.title ?? "",
-        caption: response.data?.caption ?? "",
-        thumbnail_url: response.data?.thumbnail_url ?? "",
+      const slots = createHomepageVideoSlots();
+      (response.data?.videos ?? []).slice(0, 3).forEach((video, index) => {
+        slots[index] = {
+          video_url: video?.source_url ?? "",
+          title: video?.title ?? "",
+          caption: video?.caption ?? "",
+          thumbnail_url: video?.thumbnail_url ?? "",
+        };
       });
+      setHomepageVideoSlots(slots);
       setHomepageVideoUpdatedAt(response.data?.updated_at ?? null);
       setHomepageVideoLoaded(true);
     } catch {
@@ -961,16 +971,18 @@ export default function CmsPosts() {
       const response = await api.put<{
         updated_at?: string | null;
       }>("/homepage/reputation-video", {
-        video_url: homepageVideoForm.video_url.trim() || null,
-        title: homepageVideoForm.title.trim() || null,
-        caption: homepageVideoForm.caption.trim() || null,
-        thumbnail_url: homepageVideoForm.thumbnail_url.trim() || null,
+        videos: homepageVideoSlots.map((slot) => ({
+          video_url: slot.video_url.trim() || null,
+          title: slot.title.trim() || null,
+          caption: slot.caption.trim() || null,
+          thumbnail_url: slot.thumbnail_url.trim() || null,
+        })),
       });
 
       setHomepageVideoUpdatedAt(response.data?.updated_at ?? null);
       setHomepageVideoLoaded(true);
       setMessage(
-        homepageVideoForm.video_url.trim() || homepageVideoForm.title.trim() || homepageVideoForm.caption.trim() || homepageVideoForm.thumbnail_url.trim()
+        homepageVideoSlots.some((slot) => slot.video_url.trim() || slot.title.trim() || slot.caption.trim() || slot.thumbnail_url.trim())
           ? "Homepage reputation video updated."
           : "Homepage reputation video cleared.",
       );
@@ -979,6 +991,23 @@ export default function CmsPosts() {
     } finally {
       setSavingHomepageVideo(false);
     }
+  }
+
+  function updateHomepageVideoSlot(
+    index: number,
+    field: keyof HomepageVideoSlotState,
+    value: string,
+  ) {
+    setHomepageVideoSlots((prev) => prev.map((slot, slotIndex) => (
+      slotIndex === index ? { ...slot, [field]: value } : slot
+    )));
+  }
+
+  function clearHomepageVideoSlots() {
+    setHomepageVideoSlots(createHomepageVideoSlots());
+    setHomepageVideoUpdatedAt(null);
+    setMessage("Homepage video form cleared. Save to remove it from the site.");
+    setError("");
   }
 
   async function remove(id: number) {
@@ -1299,8 +1328,9 @@ export default function CmsPosts() {
             <div>
               <h2 className="font-heading text-2xl text-offwhite">Homepage Reputation Video</h2>
               <p className="mt-2 max-w-3xl text-sm text-mist/80">
-                This teaser appears beside the landing hero on desktop and opens a modal video player when clicked.
-                Only YouTube and Facebook links are allowed here to keep the homepage stable and reviewable.
+                Add up to three reputation videos for the landing hero. The site renders them as compact centered
+                thumbnails below the CTA, and opens each one in a modal player when clicked. Only YouTube and
+                Facebook links are allowed here to keep the homepage stable and reviewable.
               </p>
             </div>
             {homepageVideoUpdatedAt && (
@@ -1314,95 +1344,118 @@ export default function CmsPosts() {
             <p className="text-sm text-mist/80">Loading homepage video settings...</p>
           ) : (
             <>
-              <div className="grid gap-4 md:grid-cols-2">
-                <label className="block text-sm text-offwhite">
-                  <span className="mb-2 block text-mist/80">Video URL</span>
-                  <input
-                    value={homepageVideoForm.video_url}
-                    onChange={(event) => setHomepageVideoForm((prev) => ({ ...prev, video_url: event.target.value }))}
-                    placeholder="Paste YouTube or Facebook video URL"
-                    className="w-full rounded-md border border-white/25 bg-white/10 px-4 py-2.5 text-offwhite placeholder:text-mist/65"
-                  />
-                </label>
+              <div className="space-y-5">
+                {homepageVideoSlots.map((slot, index) => {
+                  const preview = homepageVideoPreviews[index];
+                  const slotNumber = index + 1;
 
-                <label className="block text-sm text-offwhite">
-                  <span className="mb-2 block text-mist/80">Thumbnail URL</span>
-                  <input
-                    value={homepageVideoForm.thumbnail_url}
-                    onChange={(event) => setHomepageVideoForm((prev) => ({ ...prev, thumbnail_url: event.target.value }))}
-                    placeholder="Optional thumbnail image URL"
-                    className="w-full rounded-md border border-white/25 bg-white/10 px-4 py-2.5 text-offwhite placeholder:text-mist/65"
-                  />
-                </label>
-
-                <label className="block text-sm text-offwhite">
-                  <span className="mb-2 block text-mist/80">Teaser Title</span>
-                  <input
-                    value={homepageVideoForm.title}
-                    onChange={(event) => setHomepageVideoForm((prev) => ({ ...prev, title: event.target.value }))}
-                    placeholder="Watch LGEC in action"
-                    className="w-full rounded-md border border-white/25 bg-white/10 px-4 py-2.5 text-offwhite placeholder:text-mist/65"
-                  />
-                </label>
-
-                <label className="block text-sm text-offwhite">
-                  <span className="mb-2 block text-mist/80">Caption</span>
-                  <input
-                    value={homepageVideoForm.caption}
-                    onChange={(event) => setHomepageVideoForm((prev) => ({ ...prev, caption: event.target.value }))}
-                    placeholder="Short supporting line under the teaser title"
-                    className="w-full rounded-md border border-white/25 bg-white/10 px-4 py-2.5 text-offwhite placeholder:text-mist/65"
-                  />
-                </label>
-              </div>
-
-              <div className="mt-5 rounded-lg border border-white/15 bg-ink/35 p-4">
-                <p className="mb-3 text-xs uppercase tracking-[0.22em] text-gold-soft">Homepage Preview</p>
-                <div className="grid gap-4 lg:grid-cols-[minmax(0,300px)_1fr]">
-                  <div className="overflow-hidden rounded-2xl border border-white/18 bg-white/8">
-                    {homepageVideoForm.thumbnail_url ? (
-                      <img
-                        src={homepageVideoForm.thumbnail_url}
-                        alt={homepageVideoForm.title || "Homepage reputation video thumbnail"}
-                        className="h-44 w-full object-cover"
-                      />
-                    ) : (
-                      <div className="flex h-44 items-center justify-center bg-[radial-gradient(circle_at_top,rgba(243,219,152,0.22),transparent_52%),linear-gradient(150deg,rgba(9,24,46,0.96),rgba(20,48,88,0.85))] text-gold-soft">
-                        Thumbnail Preview
+                  return (
+                    <div key={`homepage-video-slot-${slotNumber}`} className="rounded-lg border border-white/15 bg-ink/35 p-4">
+                      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="text-xs uppercase tracking-[0.22em] text-gold-soft">Video Slot {slotNumber}</p>
+                          <p className="mt-2 text-sm text-mist/78">
+                            Leave the fields blank to keep this slot empty.
+                          </p>
+                        </div>
+                        <p className="text-xs text-mist/70">
+                          {preview
+                            ? `Approved provider: ${preview.provider === "youtube" ? "YouTube" : "Facebook"}`
+                            : "Awaiting a valid YouTube or Facebook link"}
+                        </p>
                       </div>
-                    )}
-                    <div className="p-4">
-                      <p className="text-sm font-semibold text-offwhite">
-                        {homepageVideoForm.title.trim() || "Watch LGEC in action"}
-                      </p>
-                      <p className="mt-2 text-sm text-mist/80">
-                        {homepageVideoForm.caption.trim() || "A compact trust signal for the homepage hero."}
-                      </p>
-                    </div>
-                  </div>
 
-                  <div className="rounded-2xl border border-white/15 bg-white/6 p-4">
-                    <p className="text-sm text-mist/80">
-                      {homepageVideoPreview
-                        ? `Approved provider: ${homepageVideoPreview.provider === "youtube" ? "YouTube" : "Facebook"}`
-                        : "Enter a valid YouTube or Facebook URL to activate the teaser."}
-                    </p>
-                    <p className="mt-3 text-sm text-mist/72">
-                      Browser security policy can block inline provider previews here even when the video is public.
-                      Save the link, then verify it from the homepage popup or open the source directly.
-                    </p>
-                    {homepageVideoPreview && (
-                      <a
-                        href={homepageVideoPreview.canonicalUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="mt-4 inline-flex rounded-full border border-gold/35 px-4 py-2 text-sm font-semibold text-gold-soft transition hover:bg-gold/10 hover:text-gold"
-                      >
-                        Open source video
-                      </a>
-                    )}
-                  </div>
-                </div>
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <label className="block text-sm text-offwhite">
+                          <span className="mb-2 block text-mist/80">Video URL</span>
+                          <input
+                            value={slot.video_url}
+                            onChange={(event) => updateHomepageVideoSlot(index, "video_url", event.target.value)}
+                            placeholder="Paste YouTube or Facebook video URL"
+                            className="w-full rounded-md border border-white/25 bg-white/10 px-4 py-2.5 text-offwhite placeholder:text-mist/65"
+                          />
+                        </label>
+
+                        <label className="block text-sm text-offwhite">
+                          <span className="mb-2 block text-mist/80">Thumbnail URL</span>
+                          <input
+                            value={slot.thumbnail_url}
+                            onChange={(event) => updateHomepageVideoSlot(index, "thumbnail_url", event.target.value)}
+                            placeholder="Optional thumbnail image URL"
+                            className="w-full rounded-md border border-white/25 bg-white/10 px-4 py-2.5 text-offwhite placeholder:text-mist/65"
+                          />
+                        </label>
+
+                        <label className="block text-sm text-offwhite">
+                          <span className="mb-2 block text-mist/80">Dialog Title</span>
+                          <input
+                            value={slot.title}
+                            onChange={(event) => updateHomepageVideoSlot(index, "title", event.target.value)}
+                            placeholder="Watch LGEC in action"
+                            className="w-full rounded-md border border-white/25 bg-white/10 px-4 py-2.5 text-offwhite placeholder:text-mist/65"
+                          />
+                        </label>
+
+                        <label className="block text-sm text-offwhite">
+                          <span className="mb-2 block text-mist/80">Dialog Caption</span>
+                          <input
+                            value={slot.caption}
+                            onChange={(event) => updateHomepageVideoSlot(index, "caption", event.target.value)}
+                            placeholder="Short supporting line inside the popup"
+                            className="w-full rounded-md border border-white/25 bg-white/10 px-4 py-2.5 text-offwhite placeholder:text-mist/65"
+                          />
+                        </label>
+                      </div>
+
+                      <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,300px)_1fr]">
+                        <div className="overflow-hidden rounded-2xl border border-white/18 bg-white/8">
+                          {slot.thumbnail_url ? (
+                            <img
+                              src={slot.thumbnail_url}
+                              alt={slot.title || `Homepage reputation video ${slotNumber}`}
+                              className="h-44 w-full object-cover"
+                            />
+                          ) : (
+                            <div className="flex h-44 items-center justify-center bg-[radial-gradient(circle_at_top,rgba(243,219,152,0.22),transparent_52%),linear-gradient(150deg,rgba(9,24,46,0.96),rgba(20,48,88,0.85))] text-gold-soft">
+                              Thumbnail Preview
+                            </div>
+                          )}
+                          <div className="p-4">
+                            <p className="text-sm font-semibold text-offwhite">
+                              {slot.title.trim() || `LGEC Highlight ${slotNumber}`}
+                            </p>
+                            <p className="mt-2 text-sm text-mist/80">
+                              {slot.caption.trim() || "Compact homepage video trigger."}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="rounded-2xl border border-white/15 bg-white/6 p-4">
+                          <p className="text-sm text-mist/80">
+                            {preview
+                              ? "This video is valid and can appear in the centered hero stack."
+                              : "Enter a valid YouTube or Facebook URL to activate this slot."}
+                          </p>
+                          <p className="mt-3 text-sm text-mist/72">
+                            Browser security policy can block inline provider previews here even when the video is
+                            public. Save the links, then verify them from the homepage popup or open the source
+                            directly.
+                          </p>
+                          {preview && (
+                            <a
+                              href={preview.canonicalUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="mt-4 inline-flex rounded-full border border-gold/35 px-4 py-2 text-sm font-semibold text-gold-soft transition hover:bg-gold/10 hover:text-gold"
+                            >
+                              Open source video
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
 
               <div className="mt-5 flex flex-wrap gap-3">
@@ -1412,20 +1465,15 @@ export default function CmsPosts() {
                   disabled={savingHomepageVideo}
                   className="btn-primary"
                 >
-                  {savingHomepageVideo ? "Saving..." : "Save Homepage Video"}
+                  {savingHomepageVideo ? "Saving..." : "Save Homepage Videos"}
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    setHomepageVideoForm(initialHomepageVideoForm);
-                    setHomepageVideoUpdatedAt(null);
-                    setMessage("Homepage video form cleared. Save to remove it from the site.");
-                    setError("");
-                  }}
+                  onClick={clearHomepageVideoSlots}
                   disabled={savingHomepageVideo}
                   className="btn-secondary"
                 >
-                  Clear Form
+                  Clear All Slots
                 </button>
               </div>
             </>

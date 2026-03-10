@@ -19,6 +19,7 @@ type HeroCachePayload = {
 };
 
 type HomepageVideoApiPayload = {
+  videos?: unknown;
   title?: unknown;
   caption?: unknown;
   description?: unknown;
@@ -39,7 +40,7 @@ function readString(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-function normalizeHomepageVideo(payload: unknown): HomepageReputationVideoData | null {
+function normalizeHomepageVideoItem(payload: unknown): HomepageReputationVideoData | null {
   if (!payload || typeof payload !== "object") return null;
 
   const candidate = payload as HomepageVideoApiPayload;
@@ -64,6 +65,30 @@ function normalizeHomepageVideo(payload: unknown): HomepageReputationVideoData |
     sourceUrl: readString(candidate.source_url) ?? readString(candidate.sourceUrl),
     thumbnailUrl: readString(candidate.thumbnail_url) ?? readString(candidate.thumbnailUrl),
   };
+}
+
+function normalizeHomepageVideos(payload: unknown): HomepageReputationVideoData[] {
+  if (Array.isArray(payload)) {
+    return payload
+      .map((item) => normalizeHomepageVideoItem(item))
+      .filter((item): item is HomepageReputationVideoData => Boolean(item))
+      .slice(0, 3);
+  }
+
+  if (payload && typeof payload === "object") {
+    const candidate = payload as HomepageVideoApiPayload;
+    if (Array.isArray(candidate.videos)) {
+      return candidate.videos
+        .map((item) => normalizeHomepageVideoItem(item))
+        .filter((item): item is HomepageReputationVideoData => Boolean(item))
+        .slice(0, 3);
+    }
+
+    const single = normalizeHomepageVideoItem(payload);
+    return single ? [single] : [];
+  }
+
+  return [];
 }
 
 function contentSnippet(value: string, max = 120): string {
@@ -112,7 +137,7 @@ export default function Landing() {
   const [heroPost, setHeroPost] = useState<CmsPost | null>(() => selectInitialHeroPost(cachedHeroPosts));
   const [heroImageLoaded, setHeroImageLoaded] = useState(false);
   const [heroLoading, setHeroLoading] = useState(cachedHeroPosts.length === 0);
-  const [homepageVideo, setHomepageVideo] = useState<HomepageReputationVideoData | null>(null);
+  const [homepageVideos, setHomepageVideos] = useState<HomepageReputationVideoData[]>([]);
   const [communityPosts, setCommunityPosts] = useState<CmsPost[]>([]);
   const [loadingCommunity, setLoadingCommunity] = useState(true);
   const [communitySlide, setCommunitySlide] = useState(0);
@@ -166,10 +191,10 @@ export default function Landing() {
       try {
         const res = await api.get("/content/homepage-reputation-video");
         if (!mounted) return;
-        setHomepageVideo(normalizeHomepageVideo(res.data));
+        setHomepageVideos(normalizeHomepageVideos(res.data));
       } catch {
         if (!mounted) return;
-        setHomepageVideo(null);
+        setHomepageVideos([]);
       }
     };
 
@@ -278,11 +303,6 @@ export default function Landing() {
               alt="LGEC Logo"
               className="h-36 w-36 object-contain md:h-44 md:w-44"
             />
-            {homepageVideo ? (
-              <div className="hidden lg:flex lg:items-center">
-                <HomepageReputationVideo video={homepageVideo} layout="desktop" />
-              </div>
-            ) : null}
           </div>
           <h1 className="reveal reveal-delay-1 mb-6 font-heading text-5xl leading-tight text-offwhite md:text-7xl">
             {heroPost?.title ?? "Lipata Gateway Eagles Club"}
@@ -299,9 +319,19 @@ export default function Landing() {
               View Activities
             </Link>
           </div>
-          {homepageVideo ? (
-            <div className="mt-6 lg:hidden">
-              <HomepageReputationVideo video={homepageVideo} layout="mobile" />
+          {homepageVideos.length > 0 ? (
+            <div
+              className={`homepage-video-stack reveal reveal-delay-2 mt-6 ${
+                homepageVideos.length === 1 ? "homepage-video-stack-single" : "homepage-video-stack-multi"
+              }`}
+            >
+              {homepageVideos.map((video, index) => (
+                <HomepageReputationVideo
+                  key={`${video.embedUrl}-${index}`}
+                  video={video}
+                  layout="stack"
+                />
+              ))}
             </div>
           ) : null}
           <p className="reveal reveal-delay-2 mt-5 text-sm text-mist/80">

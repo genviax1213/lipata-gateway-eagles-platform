@@ -27,6 +27,16 @@ class PostController extends Controller
             ->latest('published_at')
             ->latest('id');
 
+        if ($request->filled('q')) {
+            $term = trim((string) $request->string('q'));
+            $query->where(function ($q) use ($term) {
+                $q->where('title', 'like', "%{$term}%")
+                    ->orWhere('slug', 'like', "%{$term}%")
+                    ->orWhere('excerpt', 'like', "%{$term}%")
+                    ->orWhere('content', 'like', "%{$term}%");
+            });
+        }
+
         if (filter_var($request->query('featured_only', false), FILTER_VALIDATE_BOOLEAN)) {
             $query->where('is_featured', true);
         }

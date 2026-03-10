@@ -1,6 +1,6 @@
-Task: Update local repo state, remote branch, and deployed host with the recent hero-loading fix. Do not seed or change existing account passwords.
-Plan step: Inspect git/deploy context, commit changed files, push branch, then deploy to host if target is discoverable.
-Branch/commit: recovery/applicant-member-flow @ current HEAD before commit
-Expected files: frontend/src/pages/Landing.tsx, frontend/src/components/landing/HeroFeatureCard.tsx, frontend/src/index.css, .codex/continuity-checkpoint.md
-Verification: frontend build passed; targeted eslint passed; repo-wide lint has unrelated pre-existing issue in frontend/src/components/SecretaryAttendancePanel.tsx.
-Next action: Discover deployment host/process, then commit and push hero fix before updating the host.
+Task: Finish the homepage reputation video expansion to up to 3 links, rendered as a centered stack below the hero CTA. If one video exists, center it; if 2 or 3 exist, stack them vertically and center the stack. Keep activities search changes and other unrelated work intact. No seeding or password changes.
+Plan step: Implementation complete locally. Admin homepage settings now use 3 slots, landing consumes an array payload and renders a centered stack below CTA, and teaser styles support stacked centered thumbnails.
+Branch/commit: recovery/applicant-member-flow @ a21cbde plus uncommitted work in backend/app/Http/Controllers/HomepageVideoController.php, backend/tests/Feature/CmsOwnershipAndHomepageVideoTest.php, backend/app/Http/Controllers/PostController.php, frontend/src/pages/Activities.tsx, frontend/src/pages/CmsPosts.tsx, frontend/src/pages/Landing.tsx, frontend/src/components/landing/HomepageReputationVideo.tsx, frontend/src/index.css
+Expected files: frontend/src/pages/CmsPosts.tsx, frontend/src/pages/Landing.tsx, frontend/src/components/landing/HomepageReputationVideo.tsx, frontend/src/index.css, backend/app/Http/Controllers/HomepageVideoController.php, backend/tests/Feature/CmsOwnershipAndHomepageVideoTest.php, backend/app/Http/Controllers/PostController.php, frontend/src/pages/Activities.tsx, .codex/continuity-checkpoint.md
+Verification: `frontend npm run build` passed. `npx eslint frontend/src/pages/CmsPosts.tsx frontend/src/pages/Landing.tsx frontend/src/components/landing/HomepageReputationVideo.tsx` passed. `php artisan test --filter=CmsOwnershipAndHomepageVideoTest` passed.
+Next action: wait for user instruction on whether to push/deploy this combined local worktree, since it now contains both activities search and homepage-video multi-slot changes.

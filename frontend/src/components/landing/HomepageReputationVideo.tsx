@@ -13,7 +13,7 @@ export type HomepageReputationVideoData = {
 
 type HomepageReputationVideoProps = {
   video: HomepageReputationVideoData;
-  layout?: "desktop" | "mobile";
+  layout?: "desktop" | "mobile" | "stack";
 };
 
 const FOCUSABLE_SELECTOR = [
@@ -110,8 +110,10 @@ export default function HomepageReputationVideo({
         type="button"
         className={`homepage-video-teaser surface-card card-lift reveal reveal-delay-2 ${
           layout === "desktop"
-            ? "homepage-video-teaser-desktop mx-auto w-full max-w-[16.5rem]"
-            : "homepage-video-teaser-mobile w-full"
+            ? "homepage-video-teaser-desktop"
+            : layout === "mobile"
+              ? "homepage-video-teaser-mobile"
+              : "homepage-video-teaser-stack"
         }`}
         onClick={() => setIsOpen(true)}
         aria-haspopup="dialog"
