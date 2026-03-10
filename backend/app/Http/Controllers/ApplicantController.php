@@ -1390,6 +1390,12 @@ class ApplicantController extends Controller
     {
         $this->authorize('reviewDecision', $applicant);
 
+        if (!in_array($applicant->status, Applicant::OPEN_STATUSES, true)) {
+            return response()->json([
+                'message' => 'Only open applicant records can be assigned to a batch.',
+            ], 422);
+        }
+
         $validated = $request->validate([
             'batch_id' => 'required|integer|exists:applicant_batches,id',
         ]);

@@ -24,6 +24,13 @@ import { useSearchParams } from "react-router-dom";
 type MembersTab = "members" | "applications" | "batch-workflow";
 type MemberListGrouping = "flat" | "batch";
 
+const ASSIGNABLE_APPLICANT_BATCH_STATUSES: ReadonlySet<ApplicantStatus> = new Set([
+  "pending_verification",
+  "under_review",
+  "official_applicant",
+  "eligible_for_activation",
+]);
+
 interface ApplicantBatchListRow {
   id: number;
   name: string;
@@ -86,6 +93,10 @@ function memberName(member: Member): string {
   return `${member.first_name} ${member.middle_name ? `${member.middle_name} ` : ""}${member.last_name}`;
 }
 
+function canAssignApplicantToBatch(applicant: Applicant): boolean {
+  return ASSIGNABLE_APPLICANT_BATCH_STATUSES.has(applicant.status);
+}
+
 function fallbackExportFilename(path: string): string {
   if (path.includes("member-photos")) return "lgec_member_photos.zip";
   if (path.includes("applicants")) return "lgec_applicants.csv";
@@ -120,7 +131,7 @@ export default function Members() {
   const canUseExports = canExportDirectory || canExportPhotos;
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const resolveActiveTab = (rawTab: string | null): MembersTab => {
+  const resolveActiveTab = useCallback((rawTab: string | null): MembersTab => {
     if (rawTab === "members" && canViewMembers) return "members";
     if (rawTab === "applications" && canViewApplications) return "applications";
     if (rawTab === "batch-workflow" && canManageBatchWorkflow) return "batch-workflow";
@@ -130,7 +141,7 @@ export default function Members() {
     if (canViewApplications) return "applications";
 
     return "members";
-  };
+  }, [canManageBatchWorkflow, canViewApplications, canViewMembers]);
 
   const [activeTab, setActiveTab] = useState<MembersTab>(() => resolveActiveTab(searchParams.get("tab")));
 
@@ -217,13 +228,26 @@ export default function Members() {
     () => batches.find((item) => String(item.id) === activeBatchId) ?? null,
     [activeBatchId, batches],
   );
+  const selectedWorkflowApplicantBatchAssigned = Boolean(
+    selectedWorkflowApplicant && selectedWorkflowBatch
+      && Number(selectedWorkflowApplicant.batch?.id ?? 0) === Number(selectedWorkflowBatch.id),
+  );
+  const selectedWorkflowMemberBatchAssigned = Boolean(
+    selectedWorkflowMember && selectedWorkflowBatch
+      && selectedWorkflowMember.batch?.trim().toLowerCase() === selectedWorkflowBatch.name.toLowerCase().trim(),
+  );
+
+  const canExecuteApplicantBatchAssign = Boolean(
+    selectedWorkflowApplicant && selectedWorkflowBatch && canAssignApplicantToBatch(selectedWorkflowApplicant),
+  );
+  const canExecuteMemberBatchAssign = Boolean(selectedWorkflowMember && selectedWorkflowBatch);
 
   useEffect(() => {
     const nextTab = resolveActiveTab(searchParams.get("tab"));
     if (nextTab !== activeTab) {
       setActiveTab(nextTab);
     }
-  }, [activeTab, searchParams, canManageBatchWorkflow, canViewApplications, canViewMembers]);
+  }, [activeTab, searchParams, resolveActiveTab]);
 
   useEffect(() => {
     setEditingBatchName(selectedWorkflowBatch?.name ?? "");
@@ -675,6 +699,16 @@ export default function Members() {
       return;
     }
 
+    if (!canAssignApplicantToBatch(selectedWorkflowApplicant)) {
+      setError(`Cannot assign ${applicantName(selectedWorkflowApplicant)} because this applicant is not in an active workflow status.`);
+      return;
+    }
+
+    if (selectedWorkflowApplicant.batch?.id === Number(activeBatchId)) {
+      setNotice(`Applicant ${applicantName(selectedWorkflowApplicant)} is already assigned to this batch.`);
+      return;
+    }
+
     try {
       setError("");
       await api.post(`/applicants/${selectedWorkflowApplicant.id}/assign-batch`, {
@@ -693,6 +727,11 @@ export default function Members() {
   async function handleAssignMemberBatch() {
     if (!selectedWorkflowMember || !activeBatchId) {
       setError("Choose a working batch and a member before assigning.");
+      return;
+    }
+
+    if (selectedWorkflowMember.batch?.trim().toLowerCase() === selectedWorkflowBatch?.name.toLowerCase().trim()) {
+      setNotice(`Member ${memberName(selectedWorkflowMember)} is already assigned to this batch.`);
       return;
     }
 
@@ -1137,7 +1176,7 @@ export default function Members() {
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <p className="text-xs uppercase tracking-[0.18em] text-gold-soft">Step 1</p>
-                <h3 className="mt-1 font-heading text-2xl text-offwhite">Choose Or Create Batch</h3>
+                <h3 className="mt-1 font-heading text-2xl text-offwhite">Choose and Create Batch</h3>
                 <p className="mt-2 max-w-2xl text-sm text-mist/80">
                   Start by setting one working batch. The same working batch is then reused by the applicant and member assignment forms below.
                 </p>
@@ -1511,20 +1550,37 @@ export default function Members() {
               </>
             )}
 
-            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-white/15 bg-navy/35 px-4 py-4">
-              <div className="text-sm text-mist/80">
-                <p>Applicant: <span className="text-offwhite">{selectedWorkflowApplicant ? applicantName(selectedWorkflowApplicant) : "Choose an applicant"}</span></p>
-                <p className="mt-1">Batch: <span className="text-offwhite">{selectedWorkflowBatch?.name ?? "Choose a working batch above"}</span></p>
-              </div>
-              <button
-                type="button"
-                onClick={() => void handleAssignApplicantBatch()}
-                disabled={!selectedWorkflowApplicant || !selectedWorkflowBatch}
-                className="btn-primary disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Assign Applicant To Working Batch
-              </button>
-            </div>
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-white/15 bg-navy/35 px-4 py-4">
+                  <div className="text-sm text-mist/80">
+                    <p>Applicant: <span className="text-offwhite">{selectedWorkflowApplicant ? applicantName(selectedWorkflowApplicant) : "Choose an applicant"}</span></p>
+                    <p className="mt-1">Batch: <span className="text-offwhite">{selectedWorkflowBatch?.name ?? "Choose a working batch above"}</span></p>
+                    {selectedWorkflowApplicant && (
+                      <p className="mt-1">
+                        Current batch: <span className="text-offwhite">{selectedWorkflowApplicant.batch?.name ?? "Unassigned"}</span>
+                      </p>
+                    )}
+                    {selectedWorkflowApplicant && !canAssignApplicantToBatch(selectedWorkflowApplicant) && (
+                      <p className="mt-2 rounded-md border border-red-300/40 bg-red-400/15 px-2 py-1 text-xs text-red-200">
+                        This applicant status is not eligible for batch assignment.
+                      </p>
+                    )}
+                    {selectedWorkflowApplicantBatchAssigned && (
+                      <p className="mt-2 rounded-md border border-gold/40 bg-gold/12 px-2 py-1 text-xs text-gold-soft">
+                        Selected applicant is already on this batch.
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void handleAssignApplicantBatch()}
+                    disabled={!canExecuteApplicantBatchAssign || selectedWorkflowApplicantBatchAssigned}
+                    className="btn-primary disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {selectedWorkflowApplicantBatchAssigned
+                      ? "Applicant Already Assigned"
+                      : "Assign Applicant To Working Batch"}
+                  </button>
+                </div>
           </section>
 
           <section className="rounded-xl border border-white/20 bg-white/10 p-5">
@@ -1634,19 +1690,31 @@ export default function Members() {
             )}
 
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-white/15 bg-navy/35 px-4 py-4">
-              <div className="text-sm text-mist/80">
-                <p>Member: <span className="text-offwhite">{selectedWorkflowMember ? memberName(selectedWorkflowMember) : "Choose a member"}</span></p>
-                <p className="mt-1">Batch: <span className="text-offwhite">{selectedWorkflowBatch?.name ?? "Choose a working batch above"}</span></p>
-              </div>
-              <button
-                type="button"
-                onClick={() => void handleAssignMemberBatch()}
-                disabled={!selectedWorkflowMember || !selectedWorkflowBatch}
-                className="btn-primary disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Assign Member To Working Batch
-              </button>
-            </div>
+                  <div className="text-sm text-mist/80">
+                    <p>Member: <span className="text-offwhite">{selectedWorkflowMember ? memberName(selectedWorkflowMember) : "Choose a member"}</span></p>
+                    <p className="mt-1">Batch: <span className="text-offwhite">{selectedWorkflowBatch?.name ?? "Choose a working batch above"}</span></p>
+                    {selectedWorkflowMember && (
+                      <p className="mt-1">
+                        Current batch: <span className="text-offwhite">{selectedWorkflowMember.batch ?? "Unassigned"}</span>
+                      </p>
+                    )}
+                    {selectedWorkflowMemberBatchAssigned && (
+                      <p className="mt-2 rounded-md border border-gold/40 bg-gold/12 px-2 py-1 text-xs text-gold-soft">
+                        Selected member is already on this batch.
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void handleAssignMemberBatch()}
+                    disabled={!canExecuteMemberBatchAssign || selectedWorkflowMemberBatchAssigned}
+                    className="btn-primary disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {selectedWorkflowMemberBatchAssigned
+                      ? "Member Already Assigned"
+                      : "Assign Member To Working Batch"}
+                  </button>
+                </div>
           </section>
         </div>
       )}
