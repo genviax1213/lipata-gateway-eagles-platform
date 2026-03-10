@@ -122,6 +122,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const navItems = useMemo(
     () => [
       { to: "/portal", label: "Dashboard", icon: "dashboard", show: true, end: true },
+      { to: "/", label: "Website Home", icon: "home", show: true },
       { to: "/portal/members", label: "Directory", icon: "members", show: canOpenMembersSection },
       { to: "/portal/contributions", label: canViewFinance ? "Finance" : "My Contributions", icon: "finance", show: true },
       { to: "/portal/forum", label: "Forum", icon: "forum", show: canViewForum },
@@ -137,6 +138,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     switch (icon) {
       case "dashboard":
         return <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current stroke-2"><path d="M3 13h8V3H3zM13 21h8v-6h-8zM13 11h8V3h-8zM3 21h8v-6H3z" /></svg>;
+      case "home":
+        return <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current stroke-2"><path d="M3 10.5 12 3l9 7.5" /><path d="M5 9.8V21h14V9.8" /><path d="M9.5 21v-6h5v6" /></svg>;
       case "members":
         return <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current stroke-2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="8.5" cy="7" r="4" /><path d="M20 8v6M23 11h-6" /></svg>;
       case "finance":

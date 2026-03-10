@@ -40,12 +40,26 @@ export default function AppRoutes() {
           <Route path="/" element={<Layout><Landing /></Layout>} />
           <Route path="/about" element={<Layout><About /></Layout>} />
           <Route path="/history" element={<Layout><History /></Layout>} />
-          <Route path="/magna-carta" element={<Layout><MagnaCarta /></Layout>} />
+          <Route
+            path="/magna-carta"
+            element={
+              <ProtectedRoute>
+                <Layout><MagnaCarta /></Layout>
+              </ProtectedRoute>
+            }
+          />
           <Route path="/activities" element={<Layout><Activities /></Layout>} />
           <Route path="/schedules" element={<Layout><Schedules /></Layout>} />
           <Route path="/news" element={<Layout><News /></Layout>} />
           <Route path="/hymnals" element={<Layout><Hymnals /></Layout>} />
-          <Route path="/downloads" element={<Layout><Downloads /></Layout>} />
+          <Route
+            path="/downloads"
+            element={
+              <ProtectedRoute>
+                <Layout><Downloads /></Layout>
+              </ProtectedRoute>
+            }
+          />
           <Route path="/contact" element={<Layout><Contact /></Layout>} />
           <Route
             path="/applicant-registration"

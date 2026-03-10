@@ -18,6 +18,9 @@ export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
+  const redirectTarget = typeof (location.state as { from?: unknown } | null)?.from === "string"
+    ? (location.state as { from: string }).from
+    : "/portal";
 
   const [mode, setMode] = useState<AuthMode>("login");
   const [error, setError] = useState("");
@@ -86,7 +89,7 @@ export default function Login() {
 
     try {
       await login(email, password);
-      navigate("/portal");
+      navigate(redirectTarget, { replace: true });
     } catch (err) {
       setError(parseError(err, "Unable to log in right now. Please try again."));
     } finally {
