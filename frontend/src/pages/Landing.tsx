@@ -7,6 +7,14 @@ import { canonicalRoutes } from "../content/portalCopy";
 import HeroFeatureCard from "../components/landing/HeroFeatureCard";
 import CommunityCarousel from "../components/landing/CommunityCarousel";
 
+const HERO_CACHE_KEY = "landing:homepage-hero";
+const HERO_CACHE_MAX_AGE_MS = 10 * 60 * 1000;
+
+type HeroCachePayload = {
+  savedAt: number;
+  posts: CmsPost[];
+};
+
 function contentSnippet(value: string, max = 120): string {
   const plain = htmlToPlainText(value).replace(/\s+/g, " ").trim();
   if (!plain) return "";
@@ -14,9 +22,45 @@ function contentSnippet(value: string, max = 120): string {
   return `${plain.slice(0, max).trim()}...`;
 }
 
+function selectInitialHeroPost(posts: CmsPost[]): CmsPost | null {
+  return posts.find((item) => Boolean(item.image_url)) ?? posts[0] ?? null;
+}
+
+function readHeroCache(): CmsPost[] {
+  if (typeof window === "undefined") return [];
+
+  try {
+    const raw = window.localStorage.getItem(HERO_CACHE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as HeroCachePayload;
+    if (!Array.isArray(parsed.posts) || typeof parsed.savedAt !== "number") return [];
+    if (Date.now() - parsed.savedAt > HERO_CACHE_MAX_AGE_MS) return [];
+    return parsed.posts;
+  } catch {
+    return [];
+  }
+}
+
+function writeHeroCache(posts: CmsPost[]): void {
+  if (typeof window === "undefined") return;
+
+  try {
+    const payload: HeroCachePayload = {
+      savedAt: Date.now(),
+      posts,
+    };
+    window.localStorage.setItem(HERO_CACHE_KEY, JSON.stringify(payload));
+  } catch {
+    // Ignore storage failures and continue with network-backed rendering.
+  }
+}
+
 export default function Landing() {
-  const [heroPosts, setHeroPosts] = useState<CmsPost[]>([]);
-  const [heroPost, setHeroPost] = useState<CmsPost | null>(null);
+  const cachedHeroPosts = useMemo(() => readHeroCache(), []);
+  const [heroPosts, setHeroPosts] = useState<CmsPost[]>(cachedHeroPosts);
+  const [heroPost, setHeroPost] = useState<CmsPost | null>(() => selectInitialHeroPost(cachedHeroPosts));
+  const [heroImageLoaded, setHeroImageLoaded] = useState(false);
+  const [heroLoading, setHeroLoading] = useState(cachedHeroPosts.length === 0);
   const [communityPosts, setCommunityPosts] = useState<CmsPost[]>([]);
   const [loadingCommunity, setLoadingCommunity] = useState(true);
   const [communitySlide, setCommunitySlide] = useState(0);
@@ -41,12 +85,17 @@ export default function Landing() {
         if (!mounted) return;
         const heroItems = Array.isArray(res.data) ? (res.data as CmsPost[]) : [];
         setHeroPosts(heroItems);
-        const initial = heroItems.find((item) => Boolean(item.image_url)) ?? heroItems[0] ?? null;
+        const initial = selectInitialHeroPost(heroItems);
         setHeroPost(initial);
+        writeHeroCache(heroItems);
       } catch {
         if (mounted) {
           setHeroPosts([]);
           setHeroPost(null);
+        }
+      } finally {
+        if (mounted) {
+          setHeroLoading(false);
         }
       }
     };
@@ -57,6 +106,35 @@ export default function Landing() {
       mounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    const imageUrl = heroPost?.image_url;
+    if (!imageUrl) {
+      setHeroImageLoaded(false);
+      return;
+    }
+
+    setHeroImageLoaded(false);
+
+    const image = new Image();
+    image.decoding = "async";
+    image.loading = "eager";
+    image.fetchPriority = "high";
+    image.src = imageUrl;
+
+    const markLoaded = () => setHeroImageLoaded(true);
+    image.addEventListener("load", markLoaded);
+    image.addEventListener("error", markLoaded);
+
+    if (image.complete) {
+      setHeroImageLoaded(true);
+    }
+
+    return () => {
+      image.removeEventListener("load", markLoaded);
+      image.removeEventListener("error", markLoaded);
+    };
+  }, [heroPost?.image_url]);
 
   useEffect(() => {
     let mounted = true;
@@ -152,6 +230,8 @@ export default function Landing() {
               post={heroPost}
               contentPreview={heroContentPreview}
               imageHeightClassName="h-56"
+              imageLoaded={heroImageLoaded}
+              isLoading={heroLoading}
             />
           </div>
         </div>
@@ -161,6 +241,9 @@ export default function Landing() {
             post={heroPost}
             contentPreview={heroContentPreview}
             imageHeightClassName="h-[26rem]"
+            imageLoaded={heroImageLoaded}
+            prioritizeImage
+            isLoading={heroLoading}
           />
         </aside>
       </div>

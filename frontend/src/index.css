@@ -189,6 +189,29 @@ input::-ms-clear {
   box-shadow: 0 24px 40px rgba(2, 6, 23, 0.35);
 }
 
+.hero-image-skeleton,
+.hero-text-skeleton {
+  background:
+    linear-gradient(
+      110deg,
+      rgba(255, 255, 255, 0.08) 8%,
+      rgba(243, 219, 152, 0.24) 18%,
+      rgba(255, 255, 255, 0.08) 33%
+    ),
+    linear-gradient(160deg, rgba(255, 255, 255, 0.1), rgba(189, 214, 246, 0.08));
+  background-size: 200% 100%;
+  animation: hero-shimmer 1.35s linear infinite;
+}
+
+@keyframes hero-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
 @media (max-width: 768px) {
   .section-wrap {
     padding-inline: 1rem;
@@ -206,6 +229,11 @@ input::-ms-clear {
   .card-lift:hover {
     transition: none;
     transform: none;
+  }
+
+  .hero-image-skeleton,
+  .hero-text-skeleton {
+    animation: none;
   }
 }
 
