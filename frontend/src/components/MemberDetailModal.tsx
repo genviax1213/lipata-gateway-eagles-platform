@@ -27,10 +27,11 @@ interface MemberDetail {
 
 interface MemberDetailModalProps {
   member: MemberDetail;
+  showAccountDetails?: boolean;
   onClose: () => void;
 }
 
-export default function MemberDetailModal({ member, onClose }: MemberDetailModalProps) {
+export default function MemberDetailModal({ member, onClose, showAccountDetails = false }: MemberDetailModalProps) {
   const fullName = `${member.first_name} ${member.middle_name ? `${member.middle_name} ` : ""}${member.last_name}`;
 
   return (
@@ -72,11 +73,13 @@ export default function MemberDetailModal({ member, onClose }: MemberDetailModal
               <div className="md:col-span-2">
                 <p className="text-sm text-mist/85">Address: <span className="text-offwhite">{member.address ?? "—"}</span></p>
               </div>
-              <div className="md:col-span-2 rounded-xl border border-white/15 bg-white/5 p-4">
-                <p className="text-xs uppercase tracking-[0.18em] text-gold-soft">Linked Portal Account</p>
-                <p className="mt-2 text-sm text-mist/85">Account Name: <span className="text-offwhite">{member.user?.name ?? "No linked user"}</span></p>
-                <p className="text-sm text-mist/85">Role: <span className="text-offwhite">{member.user?.role?.name ?? "—"}</span></p>
-              </div>
+              {showAccountDetails && (
+                <div className="md:col-span-2 rounded-xl border border-white/15 bg-white/5 p-4">
+                  <p className="text-xs uppercase tracking-[0.18em] text-gold-soft">Linked Portal Account</p>
+                  <p className="mt-2 text-sm text-mist/85">Account Name: <span className="text-offwhite">{member.user?.name ?? "No linked user"}</span></p>
+                  <p className="text-sm text-mist/85">Role: <span className="text-offwhite">{member.user?.role?.name ?? "—"}</span></p>
+                </div>
+              )}
             </div>
           </div>
         </div>

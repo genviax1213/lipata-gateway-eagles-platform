@@ -119,6 +119,7 @@ function resolveDownloadFilename(contentDisposition: string | undefined, fallbac
 export default function Members() {
   const { user } = useAuth();
   const userRoleName = roleNameOf(user);
+  const isSecretaryMembersOnly = userRoleName === "secretary";
   const canViewMembers = hasPermission(user, "members.view");
   const canViewApplications = hasPermission(user, "applications.view") || hasPermission(user, "applications.review");
   const canApproveApplications = hasPermission(user, "applications.review");
@@ -130,19 +131,21 @@ export default function Members() {
   const canExportDirectory = hasPermission(user, "directory.export");
   const canExportPhotos = hasPermission(user, "photos.export");
   const canUseExports = canExportDirectory || canExportPhotos;
+  const canAccessApplicationsTab = canViewApplications && !isSecretaryMembersOnly;
+  const canAccessBatchWorkflowTab = canManageBatchWorkflow && !isSecretaryMembersOnly;
   const [searchParams, setSearchParams] = useSearchParams();
 
   const resolveActiveTab = useCallback((rawTab: string | null): MembersTab => {
     if (rawTab === "members" && canViewMembers) return "members";
-    if (rawTab === "applications" && canViewApplications) return "applications";
-    if (rawTab === "batch-workflow" && canManageBatchWorkflow) return "batch-workflow";
+    if (rawTab === "applications" && canAccessApplicationsTab) return "applications";
+    if (rawTab === "batch-workflow" && canAccessBatchWorkflowTab) return "batch-workflow";
 
     if (canViewMembers) return "members";
-    if (canManageBatchWorkflow) return "batch-workflow";
-    if (canViewApplications) return "applications";
+    if (canAccessBatchWorkflowTab) return "batch-workflow";
+    if (canAccessApplicationsTab) return "applications";
 
     return "members";
-  }, [canManageBatchWorkflow, canViewApplications, canViewMembers]);
+  }, [canAccessApplicationsTab, canAccessBatchWorkflowTab, canViewMembers]);
 
   const [activeTab, setActiveTab] = useState<MembersTab>(() => resolveActiveTab(searchParams.get("tab")));
   const [batchWorkflowStep, setBatchWorkflowStep] = useState<BatchWorkflowStep>(1);
@@ -166,6 +169,7 @@ export default function Members() {
   const [applicationsLoaded, setApplicationsLoaded] = useState(false);
   const [search, setSearch] = useState("");
   const [memberGrouping, setMemberGrouping] = useState<MemberListGrouping>("flat");
+  const [membershipStatusFilter, setMembershipStatusFilter] = useState("");
   const [emailVerifiedFilter, setEmailVerifiedFilter] = useState("");
   const [passwordSetFilter, setPasswordSetFilter] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -214,6 +218,7 @@ export default function Members() {
   const [errors, setErrors] = useState<ValidationErrors>({});
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [selectedMembers, setSelectedMembers] = useState<Record<number, Member>>({});
   const [isWindowVisible, setIsWindowVisible] = useState(
     () => typeof document === "undefined" || document.visibilityState === "visible",
   );
@@ -271,6 +276,7 @@ export default function Members() {
       params: {
         page,
         search: activeFilters.search,
+        status: membershipStatusFilter || undefined,
         email_verified: activeFilters.email_verified,
         password_set: activeFilters.password_set,
         group_by: activeFilters.group_by === "batch" ? "batch" : undefined,
@@ -282,7 +288,82 @@ export default function Members() {
     setLastPage(res.data.last_page);
     setTotalMembers(Number(res.data.total ?? res.data.data.length));
     setMembersLoaded(true);
-  }, [emailVerifiedFilter, memberGrouping, passwordSetFilter, search]);
+  }, [emailVerifiedFilter, memberGrouping, membershipStatusFilter, passwordSetFilter, search]);
+
+  const selectedMemberList = useMemo(
+    () => Object.values(selectedMembers).sort((left, right) => memberName(left).localeCompare(memberName(right))),
+    [selectedMembers],
+  );
+
+  const visibleMemberIds = useMemo(
+    () => members.map((member) => member.id),
+    [members],
+  );
+
+  const allVisibleMembersSelected = useMemo(
+    () => visibleMemberIds.length > 0 && visibleMemberIds.every((memberId) => selectedMembers[memberId]),
+    [selectedMembers, visibleMemberIds],
+  );
+
+  const toggleSelectedMember = (member: Member) => {
+    setSelectedMembers((current) => {
+      const next = { ...current };
+      if (next[member.id]) {
+        delete next[member.id];
+      } else {
+        next[member.id] = member;
+      }
+      return next;
+    });
+  };
+
+  const toggleSelectVisibleMembers = () => {
+    setSelectedMembers((current) => {
+      const next = { ...current };
+      if (allVisibleMembersSelected) {
+        visibleMemberIds.forEach((memberId) => {
+          delete next[memberId];
+        });
+      } else {
+        members.forEach((member) => {
+          next[member.id] = member;
+        });
+      }
+      return next;
+    });
+  };
+
+  const exportSelectedMembers = () => {
+    if (selectedMemberList.length === 0) {
+      setError("Choose at least one member before exporting a secretary submission list.");
+      return;
+    }
+
+    const csvContent = [
+      ["Member Number", "Name", "Email", "Batch", "Membership Status", "Contact Number"],
+      ...selectedMemberList.map((member) => [
+        member.member_number,
+        memberName(member),
+        member.email ?? "",
+        member.batch ?? "",
+        member.membership_status,
+        member.contact_number ?? "",
+      ]),
+    ]
+      .map((row) => row.map((value) => `"${String(value ?? "").replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `lgec-secretary-members-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+    setNotice(`Exported ${selectedMemberList.length} selected member${selectedMemberList.length === 1 ? "" : "s"}.`);
+  };
 
   const groupedMemberRows = useMemo(() => {
     if (memberGrouping !== "batch") {
@@ -791,7 +872,7 @@ export default function Members() {
         </div>
       )}
 
-      {activeTab === "applications" && canViewApplications && applicationsLoaded && (
+      {activeTab === "applications" && canAccessApplicationsTab && applicationsLoaded && (
         <div className="mb-4 rounded-lg border border-white/15 bg-white/5 px-4 py-3 text-sm text-mist/90">
           Total applicants: <span className="font-semibold text-offwhite">{totalApplications}</span>
           {" | "}
@@ -811,7 +892,7 @@ export default function Members() {
             Members
           </button>
         )}
-        {canViewApplications && (
+        {canAccessApplicationsTab && (
           <button
             type="button"
             onClick={() => setActiveTabWithRoute("applications")}
@@ -820,7 +901,7 @@ export default function Members() {
             Applicants
           </button>
         )}
-        {canManageBatchWorkflow && (
+        {canAccessBatchWorkflowTab && (
           <button
             type="button"
             onClick={() => setActiveTabWithRoute("batch-workflow")}
@@ -861,7 +942,7 @@ export default function Members() {
                   {downloadingExport === "members" ? "Preparing Members CSV..." : "Export Members CSV"}
                 </button>
               )}
-              {canExportDirectory && (
+              {canExportDirectory && !isSecretaryMembersOnly && (
                 <button
                   type="button"
                   onClick={() => void handleExport(`/directory/exports/applicants?target=${exportTarget}`, "applicants")}
@@ -871,7 +952,7 @@ export default function Members() {
                   {downloadingExport === "applicants" ? "Preparing Applicants CSV..." : "Export Applicants CSV"}
                 </button>
               )}
-              {canExportPhotos && (
+              {canExportPhotos && !isSecretaryMembersOnly && (
                 <>
                   <input
                     value={photoArchiveLabel}
@@ -899,6 +980,49 @@ export default function Members() {
 
       {activeTab === "members" && canViewMembers && (
         <>
+          {isSecretaryMembersOnly && (
+            <section className="mb-6 rounded-xl border border-gold/20 bg-navy/35 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <h2 className="font-heading text-2xl text-offwhite">Secretary Submission List</h2>
+                  <p className="mt-2 max-w-3xl text-sm text-mist/80">
+                    Select members from the directory, then export the checked list for active-member, ID-eligibility, or other secretary submissions.
+                  </p>
+                </div>
+                <div className="rounded-lg border border-white/15 bg-white/5 px-4 py-3 text-sm text-mist/85">
+                  <p>Selected members: <span className="text-offwhite">{selectedMemberList.length}</span></p>
+                  <p className="mt-1">Visible page rows: <span className="text-offwhite">{members.length}</span></p>
+                </div>
+              </div>
+              <div className="mt-4 flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={toggleSelectVisibleMembers}
+                  disabled={members.length === 0}
+                  className="rounded-md border border-white/25 px-4 py-2 text-sm text-offwhite disabled:opacity-50"
+                >
+                  {allVisibleMembersSelected ? "Clear Visible Page" : "Select Visible Page"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedMembers({})}
+                  disabled={selectedMemberList.length === 0}
+                  className="rounded-md border border-white/25 px-4 py-2 text-sm text-offwhite disabled:opacity-50"
+                >
+                  Clear All Selected
+                </button>
+                <button
+                  type="button"
+                  onClick={exportSelectedMembers}
+                  disabled={selectedMemberList.length === 0}
+                  className="btn-primary disabled:opacity-50"
+                >
+                  Export Selected Members CSV
+                </button>
+              </div>
+            </section>
+          )}
+
           <div className="mb-6 grid gap-4 rounded-xl border border-white/20 bg-white/10 p-4 md:grid-cols-[1fr_220px_220px_200px_auto]">
             <input
               aria-label="Search members"
@@ -907,6 +1031,17 @@ export default function Members() {
               onChange={(e) => setSearch(e.target.value)}
               className="rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite placeholder:text-mist/70 focus:border-gold focus:outline-none"
             />
+            <select
+              aria-label="Filter members by membership status"
+              value={membershipStatusFilter}
+              onChange={(e) => setMembershipStatusFilter(e.target.value)}
+              className="rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite focus:border-gold focus:outline-none"
+            >
+              <option value="" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>All Statuses</option>
+              <option value="active" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Active Members</option>
+              <option value="inactive" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Inactive Members</option>
+            </select>
+            {!isSecretaryMembersOnly && (
             <select
               aria-label="Filter members by email verification"
               value={emailVerifiedFilter}
@@ -917,6 +1052,7 @@ export default function Members() {
               <option value="true" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Email Verified</option>
               <option value="false" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Email Not Verified</option>
             </select>
+            )}
             <select
               aria-label="Group members list"
               value={memberGrouping}
@@ -926,6 +1062,7 @@ export default function Members() {
               <option value="flat" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Flat List</option>
               <option value="batch" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Group By Batch</option>
             </select>
+            {!isSecretaryMembersOnly && (
             <select
               aria-label="Filter members by password state"
               value={passwordSetFilter}
@@ -936,6 +1073,7 @@ export default function Members() {
               <option value="true" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Password Set</option>
               <option value="false" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Password Not Set</option>
             </select>
+            )}
             <button
               onClick={() => {
                 setCurrentPage(1);
@@ -958,13 +1096,20 @@ export default function Members() {
                 <table className="min-w-full text-sm text-offwhite">
                   <thead className="bg-navy/70 text-gold-soft">
                     <tr>
+                      {isSecretaryMembersOnly && <th className="px-4 py-3 text-left">Select</th>}
                       <th className="px-4 py-3 text-left">#</th>
                       <th className="px-4 py-3 text-left">Name</th>
                       <th className="px-4 py-3 text-left">Email</th>
                       <th className="px-4 py-3 text-left">Batch</th>
                       <th className="px-4 py-3 text-left">Contact</th>
-                      <th className="px-4 py-3 text-left">Email Verified</th>
-                      <th className="px-4 py-3 text-left">Password Set</th>
+                      {isSecretaryMembersOnly ? (
+                        <th className="px-4 py-3 text-left">Membership Status</th>
+                      ) : (
+                        <>
+                          <th className="px-4 py-3 text-left">Email Verified</th>
+                          <th className="px-4 py-3 text-left">Password Set</th>
+                        </>
+                      )}
                       {(canViewMemberDetails || canManageMembers) && <th className="px-4 py-3 text-left">Actions</th>}
                     </tr>
                   </thead>
@@ -973,7 +1118,7 @@ export default function Members() {
                       if (row.kind === "group") {
                         return (
                           <tr key={`group-${row.key}`} className="border-b border-white/10 bg-gold/5">
-                            <td colSpan={canViewMemberDetails || canManageMembers ? 8 : 7} className="px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-gold-soft">
+                            <td colSpan={isSecretaryMembersOnly ? (canViewMemberDetails || canManageMembers ? 8 : 7) : (canViewMemberDetails || canManageMembers ? 8 : 7)} className="px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-gold-soft">
                               Batch: {row.label}
                             </td>
                           </tr>
@@ -983,21 +1128,42 @@ export default function Members() {
                       const m = row.member;
                       return (
                         <tr key={m.id} className="border-b border-white/15">
+                          {isSecretaryMembersOnly && (
+                            <td className="px-4 py-3">
+                              <input
+                                type="checkbox"
+                                checked={Boolean(selectedMembers[m.id])}
+                                onChange={() => toggleSelectedMember(m)}
+                                aria-label={`Select ${memberName(m)}`}
+                                className="h-4 w-4 rounded border-white/25 bg-white/10"
+                              />
+                            </td>
+                          )}
                           <td className="px-4 py-3">{m.member_number}</td>
                           <td className="px-4 py-3">{memberName(m)}</td>
                           <td className="px-4 py-3">{m.email ?? "—"}</td>
                           <td className="px-4 py-3">{m.batch ?? "—"}</td>
                           <td className="px-4 py-3">{m.contact_number ?? "—"}</td>
-                          <td className="px-4 py-3">
-                            <span className={`rounded-full border px-2.5 py-1 text-xs ${m.email_verified ? "border-emerald-300/50 bg-emerald-400/10 text-emerald-200" : "border-red-300/40 bg-red-400/10 text-red-200"}`}>
-                              {m.email_verified ? "Verified" : "Not Verified"}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className={`rounded-full border px-2.5 py-1 text-xs ${m.password_set ? "border-emerald-300/50 bg-emerald-400/10 text-emerald-200" : "border-red-300/40 bg-red-400/10 text-red-200"}`}>
-                              {m.password_set ? "Set" : "Not Set"}
-                            </span>
-                          </td>
+                          {isSecretaryMembersOnly ? (
+                            <td className="px-4 py-3">
+                              <span className={`rounded-full border px-2.5 py-1 text-xs ${m.membership_status === "active" ? "border-emerald-300/50 bg-emerald-400/10 text-emerald-200" : "border-white/25 bg-white/5 text-mist/85"}`}>
+                                {m.membership_status}
+                              </span>
+                            </td>
+                          ) : (
+                            <>
+                              <td className="px-4 py-3">
+                                <span className={`rounded-full border px-2.5 py-1 text-xs ${m.email_verified ? "border-emerald-300/50 bg-emerald-400/10 text-emerald-200" : "border-red-300/40 bg-red-400/10 text-red-200"}`}>
+                                  {m.email_verified ? "Verified" : "Not Verified"}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3">
+                                <span className={`rounded-full border px-2.5 py-1 text-xs ${m.password_set ? "border-emerald-300/50 bg-emerald-400/10 text-emerald-200" : "border-red-300/40 bg-red-400/10 text-red-200"}`}>
+                                  {m.password_set ? "Set" : "Not Set"}
+                                </span>
+                              </td>
+                            </>
+                          )}
                           {(canViewMemberDetails || canManageMembers) && (
                             <td className="space-x-3 px-4 py-3">
                               {canViewMemberDetails && (
@@ -1022,7 +1188,7 @@ export default function Members() {
                     })}
                     {members.length === 0 && (
                       <tr>
-                        <td colSpan={canViewMemberDetails || canManageMembers ? 8 : 7} className="px-4 py-8 text-center text-mist/80">
+                        <td colSpan={isSecretaryMembersOnly ? (canViewMemberDetails || canManageMembers ? 8 : 7) : (canViewMemberDetails || canManageMembers ? 8 : 7)} className="px-4 py-8 text-center text-mist/80">
                           No members found for the current filters.
                         </td>
                       </tr>
@@ -1053,7 +1219,7 @@ export default function Members() {
         </>
       )}
 
-      {activeTab === "applications" && canViewApplications && (
+      {activeTab === "applications" && canAccessApplicationsTab && (
         <>
           <div className="mb-6 rounded-xl border border-white/20 bg-white/10 p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1771,6 +1937,7 @@ export default function Members() {
       {viewingMember && (
         <MemberDetailModal
           member={viewingMember}
+          showAccountDetails={canManageMembers}
           onClose={() => setViewingMember(null)}
         />
       )}

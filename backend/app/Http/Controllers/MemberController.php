@@ -140,10 +140,12 @@ class MemberController extends Controller
             abort(404);
         }
 
+        $canViewLinkedAccount = in_array(optional($viewer->role)->name, [RoleHierarchy::SUPERADMIN, RoleHierarchy::ADMIN], true);
+
         return response()->json([
             ...$member->toArray(),
             'email' => BootstrapSuperadminPrivacy::maskEmailForViewer($viewer, $member->email),
-            'user' => $member->user ? [
+            'user' => $canViewLinkedAccount && $member->user ? [
                 'id' => $member->user->id,
                 'name' => $member->user->name,
                 'email' => BootstrapSuperadminPrivacy::maskEmailForViewer($viewer, $member->user->email),
