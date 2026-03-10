@@ -21,6 +21,7 @@ export function hasPermission(user: AuthUser, permissionName: string): boolean {
 
   const role = user.role;
   const forumRole = (user as { forum_role?: unknown }).forum_role;
+  const financeRole = (user as { finance_role?: unknown }).finance_role;
 
   if (role && typeof role === "object") {
     const permissions = (role as { permissions?: unknown }).permissions;
@@ -40,5 +41,16 @@ export function hasPermission(user: AuthUser, permissionName: string): boolean {
     forumRole === "forum_moderator" &&
     ["forum.view", "forum.create_thread", "forum.reply", "forum.moderate"].includes(permissionName);
 
-  return forumPermission;
+  if (forumPermission) {
+    return true;
+  }
+
+  const financePermission = typeof financeRole === "string" && [
+    "finance.view",
+    "finance.input",
+  ].includes(permissionName)
+    ? financeRole === "treasurer" || financeRole === "auditor" && permissionName === "finance.view"
+    : false;
+
+  return financePermission;
 }

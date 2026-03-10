@@ -19,6 +19,7 @@ import {
   notifyPortalDataRefresh,
   parsePortalDataRefresh,
 } from "../utils/portalRefresh";
+import { useSearchParams } from "react-router-dom";
 
 type MembersTab = "members" | "applications" | "batch-workflow";
 type MemberListGrouping = "flat" | "batch";
@@ -117,13 +118,34 @@ export default function Members() {
   const canExportDirectory = hasPermission(user, "directory.export");
   const canExportPhotos = hasPermission(user, "photos.export");
   const canUseExports = canExportDirectory || canExportPhotos;
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  const [activeTab, setActiveTab] = useState<MembersTab>(() => (canViewMembers ? "members" : "applications"));
-  const effectiveActiveTab: MembersTab = !canViewMembers && canManageBatchWorkflow
-    ? "batch-workflow"
-    : !canViewMembers && canViewApplications
-      ? "applications"
-      : activeTab;
+  const resolveActiveTab = (rawTab: string | null): MembersTab => {
+    if (rawTab === "members" && canViewMembers) return "members";
+    if (rawTab === "applications" && canViewApplications) return "applications";
+    if (rawTab === "batch-workflow" && canManageBatchWorkflow) return "batch-workflow";
+
+    if (canViewMembers) return "members";
+    if (canManageBatchWorkflow) return "batch-workflow";
+    if (canViewApplications) return "applications";
+
+    return "members";
+  };
+
+  const [activeTab, setActiveTab] = useState<MembersTab>(() => resolveActiveTab(searchParams.get("tab")));
+
+  const setActiveTabWithRoute = (nextTab: MembersTab) => {
+    setActiveTab(nextTab);
+    setSearchParams((params) => {
+      const next = new URLSearchParams(params);
+      if (nextTab === "members") {
+        next.delete("tab");
+      } else {
+        next.set("tab", nextTab);
+      }
+      return next;
+    }, { replace: true });
+  };
 
   const [members, setMembers] = useState<Member[]>([]);
   const [applications, setApplications] = useState<Applicant[]>([]);
@@ -195,6 +217,13 @@ export default function Members() {
     () => batches.find((item) => String(item.id) === activeBatchId) ?? null,
     [activeBatchId, batches],
   );
+
+  useEffect(() => {
+    const nextTab = resolveActiveTab(searchParams.get("tab"));
+    if (nextTab !== activeTab) {
+      setActiveTab(nextTab);
+    }
+  }, [activeTab, searchParams, canManageBatchWorkflow, canViewApplications, canViewMembers]);
 
   useEffect(() => {
     setEditingBatchName(selectedWorkflowBatch?.name ?? "");
@@ -328,15 +357,15 @@ export default function Members() {
   const refreshVisibleData = useCallback(() => {
     if (!isWindowVisible) return;
 
-    if (effectiveActiveTab === "members" && canViewMembers && membersLoaded && !editing && !deleting) {
+    if (activeTab === "members" && canViewMembers && membersLoaded && !editing && !deleting) {
       void fetchMembers(currentPage);
     }
 
-    if (effectiveActiveTab === "applications" && canViewApplications && applicationsLoaded) {
+    if (activeTab === "applications" && canViewApplications && applicationsLoaded) {
       void fetchApplications(applicationsPage);
     }
 
-    if (effectiveActiveTab === "batch-workflow" && canManageBatchWorkflow) {
+    if (activeTab === "batch-workflow" && canManageBatchWorkflow) {
       if (workflowSupportLoaded) {
         void fetchWorkflowSupport();
       }
@@ -358,7 +387,7 @@ export default function Members() {
     currentPage,
     deleting,
     editing,
-    effectiveActiveTab,
+    activeTab,
     fetchApplications,
     fetchMembers,
     fetchWorkflowApplicants,
@@ -421,15 +450,15 @@ export default function Members() {
   }, [canViewMembers, fetchMembers, membersLoaded]);
 
   useEffect(() => {
-    if (effectiveActiveTab !== "applications" || !canViewApplications || applicationsLoaded) return;
+    if (activeTab !== "applications" || !canViewApplications || applicationsLoaded) return;
     const timer = window.setTimeout(() => {
       void fetchApplications(1);
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [applicationsLoaded, canViewApplications, effectiveActiveTab, fetchApplications]);
+  }, [applicationsLoaded, canViewApplications, activeTab, fetchApplications]);
 
   useEffect(() => {
-    if (effectiveActiveTab !== "batch-workflow" || !canManageBatchWorkflow) return;
+    if (activeTab !== "batch-workflow" || !canManageBatchWorkflow) return;
     if (workflowSupportLoaded && workflowApplicantsLoaded && workflowMembersLoaded) return;
 
     const timer = window.setTimeout(() => {
@@ -443,7 +472,7 @@ export default function Members() {
     return () => window.clearTimeout(timer);
   }, [
     canManageBatchWorkflow,
-    effectiveActiveTab,
+    activeTab,
     fetchWorkflowApplicants,
     fetchWorkflowMembers,
     fetchWorkflowSupport,
@@ -711,7 +740,7 @@ export default function Members() {
         </p>
       )}
 
-      {effectiveActiveTab === "members" && canViewMembers && membersLoaded && (
+      {activeTab === "members" && canViewMembers && membersLoaded && (
         <div className="mb-4 rounded-lg border border-white/15 bg-white/5 px-4 py-3 text-sm text-mist/90">
           Total members: <span className="font-semibold text-offwhite">{totalMembers}</span>
           {" | "}
@@ -721,7 +750,7 @@ export default function Members() {
         </div>
       )}
 
-      {effectiveActiveTab === "applications" && canViewApplications && applicationsLoaded && (
+      {activeTab === "applications" && canViewApplications && applicationsLoaded && (
         <div className="mb-4 rounded-lg border border-white/15 bg-white/5 px-4 py-3 text-sm text-mist/90">
           Total applicants: <span className="font-semibold text-offwhite">{totalApplications}</span>
           {" | "}
@@ -735,8 +764,8 @@ export default function Members() {
         {canViewMembers && (
           <button
             type="button"
-            onClick={() => setActiveTab("members")}
-            className={`rounded-md border px-4 py-2 text-sm ${effectiveActiveTab === "members" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}
+            onClick={() => setActiveTabWithRoute("members")}
+            className={`rounded-md border px-4 py-2 text-sm ${activeTab === "members" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}
           >
             Members
           </button>
@@ -744,8 +773,8 @@ export default function Members() {
         {canViewApplications && (
           <button
             type="button"
-            onClick={() => setActiveTab("applications")}
-            className={`rounded-md border px-4 py-2 text-sm ${effectiveActiveTab === "applications" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}
+            onClick={() => setActiveTabWithRoute("applications")}
+            className={`rounded-md border px-4 py-2 text-sm ${activeTab === "applications" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}
           >
             Applicants
           </button>
@@ -753,8 +782,8 @@ export default function Members() {
         {canManageBatchWorkflow && (
           <button
             type="button"
-            onClick={() => setActiveTab("batch-workflow")}
-            className={`rounded-md border px-4 py-2 text-sm ${effectiveActiveTab === "batch-workflow" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}
+            onClick={() => setActiveTabWithRoute("batch-workflow")}
+            className={`rounded-md border px-4 py-2 text-sm ${activeTab === "batch-workflow" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}
           >
             Batch Workflow
           </button>
@@ -827,7 +856,7 @@ export default function Members() {
         </section>
       )}
 
-      {effectiveActiveTab === "members" && canViewMembers && (
+      {activeTab === "members" && canViewMembers && (
         <>
           <div className="mb-6 grid gap-4 rounded-xl border border-white/20 bg-white/10 p-4 md:grid-cols-[1fr_220px_220px_200px_auto]">
             <input
@@ -983,7 +1012,7 @@ export default function Members() {
         </>
       )}
 
-      {effectiveActiveTab === "applications" && canViewApplications && (
+      {activeTab === "applications" && canViewApplications && (
         <>
           <div className="mb-6 rounded-xl border border-white/20 bg-white/10 p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1078,7 +1107,7 @@ export default function Members() {
         </>
       )}
 
-      {effectiveActiveTab === "batch-workflow" && canManageBatchWorkflow && (
+      {activeTab === "batch-workflow" && canManageBatchWorkflow && (
         <div className="space-y-6">
           <section className="rounded-xl border border-white/20 bg-white/10 p-5">
             <h2 className="font-heading text-3xl text-offwhite">Batch Workflow</h2>

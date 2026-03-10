@@ -2122,8 +2122,15 @@ export default function PortalDashboard() {
 
               {canChairmanReview && (
                 <div className="space-y-3">
-                  <div className="rounded-lg border border-white/15 bg-navy/35 px-3 py-3 text-xs text-mist/75">
-                    Batch creation and batch assignments also have a clearer sequence in <span className="text-gold-soft">Members &gt; Batch Workflow</span>. Use that workspace when you want a focused batch-only flow.
+                <div className="rounded-lg border border-white/15 bg-navy/35 px-3 py-3 text-xs text-mist/75">
+                    Batch creation and batch assignments now run in{" "}
+                    <a
+                      href="/portal/members?tab=batch-workflow"
+                      className="inline-flex items-baseline border-b border-gold/70 text-gold-soft transition hover:border-gold hover:text-gold"
+                    >
+                      Members &gt; Batch Workflow
+                    </a>
+                    . Use that workspace when you want a focused batch-only flow.
                   </div>
                   <div className="rounded-lg border border-white/20 bg-white/5 p-3">
                   <p className="mb-2 text-sm text-offwhite">Applicant Batch</p>
