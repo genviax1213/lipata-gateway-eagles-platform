@@ -23,6 +23,7 @@ import { useSearchParams } from "react-router-dom";
 
 type MembersTab = "members" | "applications" | "batch-workflow";
 type MemberListGrouping = "flat" | "batch";
+type BatchWorkflowStep = 1 | 2 | 3;
 
 const ASSIGNABLE_APPLICANT_BATCH_STATUSES: ReadonlySet<ApplicantStatus> = new Set([
   "pending_verification",
@@ -144,6 +145,7 @@ export default function Members() {
   }, [canManageBatchWorkflow, canViewApplications, canViewMembers]);
 
   const [activeTab, setActiveTab] = useState<MembersTab>(() => resolveActiveTab(searchParams.get("tab")));
+  const [batchWorkflowStep, setBatchWorkflowStep] = useState<BatchWorkflowStep>(1);
 
   const setActiveTabWithRoute = (nextTab: MembersTab) => {
     setActiveTab(nextTab);
@@ -1148,6 +1150,35 @@ export default function Members() {
 
       {activeTab === "batch-workflow" && canManageBatchWorkflow && (
         <div className="space-y-6">
+          <div className="mb-2 flex w-full gap-2 overflow-x-auto pb-1 lg:hidden">
+            <button
+              type="button"
+              onClick={() => setBatchWorkflowStep(1)}
+              className={`inline-flex shrink-0 items-center rounded-full border px-3 py-1.5 text-xs whitespace-nowrap ${batchWorkflowStep === 1
+                ? "border-gold bg-gold text-ink"
+                : "border-white/30 text-offwhite hover:border-gold/70 hover:text-gold-soft"}`}
+            >
+              Step 1: Batch
+            </button>
+            <button
+              type="button"
+              onClick={() => setBatchWorkflowStep(2)}
+              className={`inline-flex shrink-0 items-center rounded-full border px-3 py-1.5 text-xs whitespace-nowrap ${batchWorkflowStep === 2
+                ? "border-gold bg-gold text-ink"
+                : "border-white/30 text-offwhite hover:border-gold/70 hover:text-gold-soft"}`}
+            >
+              Step 2: Applicant
+            </button>
+            <button
+              type="button"
+              onClick={() => setBatchWorkflowStep(3)}
+              className={`inline-flex shrink-0 items-center rounded-full border px-3 py-1.5 text-xs whitespace-nowrap ${batchWorkflowStep === 3
+                ? "border-gold bg-gold text-ink"
+                : "border-white/30 text-offwhite hover:border-gold/70 hover:text-gold-soft"}`}
+            >
+              Step 3: Member
+            </button>
+          </div>
           <section className="rounded-xl border border-white/20 bg-white/10 p-5">
             <h2 className="font-heading text-3xl text-offwhite">Batch Workflow</h2>
             <p className="mt-2 max-w-3xl text-sm text-mist/85">
@@ -1172,7 +1203,7 @@ export default function Members() {
             </div>
           </section>
 
-          <section className="rounded-xl border border-white/20 bg-white/10 p-5">
+          <section className={`rounded-xl border border-white/20 bg-white/10 p-4 lg:p-5 ${batchWorkflowStep === 1 ? "block" : "hidden"} lg:block`}>
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <p className="text-xs uppercase tracking-[0.18em] text-gold-soft">Step 1</p>
@@ -1428,7 +1459,7 @@ export default function Members() {
             )}
           </section>
 
-          <section className="rounded-xl border border-white/20 bg-white/10 p-5">
+          <section className={`rounded-xl border border-white/20 bg-white/10 p-4 lg:p-5 ${batchWorkflowStep === 2 ? "block" : "hidden"} lg:block`}>
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <p className="text-xs uppercase tracking-[0.18em] text-gold-soft">Step 2</p>
@@ -1583,7 +1614,7 @@ export default function Members() {
                 </div>
           </section>
 
-          <section className="rounded-xl border border-white/20 bg-white/10 p-5">
+          <section className={`rounded-xl border border-white/20 bg-white/10 p-4 lg:p-5 ${batchWorkflowStep === 3 ? "block" : "hidden"} lg:block`}>
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <p className="text-xs uppercase tracking-[0.18em] text-gold-soft">Step 3</p>
