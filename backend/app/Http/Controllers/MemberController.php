@@ -8,6 +8,7 @@ use App\Models\Member;
 use App\Models\Applicant;
 use App\Models\MemberRegistration;
 use App\Models\User;
+use App\Support\BootstrapSuperadminPrivacy;
 use App\Support\RoleHierarchy;
 use App\Support\TextCase;
 use App\Support\Permissions;
@@ -61,7 +62,9 @@ class MemberController extends Controller
         $passwordSet = $request->query('password_set');
 
         $query = Member::query();
-        $query->whereRaw('LOWER(TRIM(COALESCE(email, ""))) <> ?', [$this->bootstrapEmail()]);
+        if (BootstrapSuperadminPrivacy::shouldFilterBootstrapEmail($viewer)) {
+            $query->whereRaw('LOWER(TRIM(COALESCE(email, ""))) <> ?', [BootstrapSuperadminPrivacy::bootstrapEmail()]);
+        }
 
         if (optional($viewer->role)->name !== RoleHierarchy::SUPERADMIN) {
             $query->where(function ($builder) {
@@ -125,7 +128,7 @@ class MemberController extends Controller
         $member->loadMissing('user.role:id,name', 'user.formalPhoto');
 
         $normalizedEmail = $this->normalizeEmail((string) ($member->email ?? ''));
-        if ($normalizedEmail === $this->bootstrapEmail()) {
+        if ($normalizedEmail === $this->bootstrapEmail() && BootstrapSuperadminPrivacy::shouldFilterBootstrapEmail($viewer)) {
             abort(404);
         }
 
@@ -139,10 +142,11 @@ class MemberController extends Controller
 
         return response()->json([
             ...$member->toArray(),
+            'email' => BootstrapSuperadminPrivacy::maskEmailForViewer($viewer, $member->email),
             'user' => $member->user ? [
                 'id' => $member->user->id,
                 'name' => $member->user->name,
-                'email' => $member->user->email,
+                'email' => BootstrapSuperadminPrivacy::maskEmailForViewer($viewer, $member->user->email),
                 'role' => $member->user->role ? [
                     'id' => $member->user->role->id,
                     'name' => $member->user->role->name,

@@ -4,19 +4,22 @@ namespace App\Http\Controllers;
 
 use App\Models\AttendanceRecord;
 use App\Models\CalendarEvent;
+use App\Models\User;
+use App\Support\BootstrapSuperadminPrivacy;
 use App\Support\IdentityQrToken;
 use Illuminate\Http\Request;
 
 class AttendanceController extends Controller
 {
-    public function roster(CalendarEvent $calendarEvent)
+    public function roster(Request $request, CalendarEvent $calendarEvent)
     {
+        $viewer = $request->user();
         $records = AttendanceRecord::query()
             ->with(['attendee:id,name,email', 'member:id,member_number,first_name,middle_name,last_name,email,batch', 'applicant:id,first_name,middle_name,last_name,email,status,batch_id', 'scannedBy:id,name'])
             ->where('calendar_event_id', $calendarEvent->id)
             ->orderBy('scanned_at')
             ->get()
-            ->map(fn (AttendanceRecord $record) => $this->recordPayload($record));
+            ->map(fn (AttendanceRecord $record) => $this->recordPayload($record, $viewer));
 
         return response()->json([
             'event' => [
@@ -60,17 +63,17 @@ class AttendanceController extends Controller
         if (!$record->wasRecentlyCreated) {
             return response()->json([
                 'message' => 'Attendance already recorded for this user.',
-                'record' => $this->recordPayload($record->fresh()->load(['attendee:id,name,email', 'member:id,member_number,first_name,middle_name,last_name,email,batch', 'applicant:id,first_name,middle_name,last_name,email,status,batch_id', 'scannedBy:id,name'])),
+                'record' => $this->recordPayload($record->fresh()->load(['attendee:id,name,email', 'member:id,member_number,first_name,middle_name,last_name,email,batch', 'applicant:id,first_name,middle_name,last_name,email,status,batch_id', 'scannedBy:id,name']), $request->user()),
             ], 200);
         }
 
         return response()->json([
             'message' => 'Attendance recorded.',
-            'record' => $this->recordPayload($record->fresh()->load(['attendee:id,name,email', 'member:id,member_number,first_name,middle_name,last_name,email,batch', 'applicant:id,first_name,middle_name,last_name,email,status,batch_id', 'scannedBy:id,name'])),
+            'record' => $this->recordPayload($record->fresh()->load(['attendee:id,name,email', 'member:id,member_number,first_name,middle_name,last_name,email,batch', 'applicant:id,first_name,middle_name,last_name,email,status,batch_id', 'scannedBy:id,name']), $request->user()),
         ], 201);
     }
 
-    private function recordPayload(AttendanceRecord $record): array
+    private function recordPayload(AttendanceRecord $record, ?User $viewer = null): array
     {
         $subjectType = $record->member ? 'member' : ($record->applicant ? 'applicant' : 'user');
         $subjectName = $record->member
@@ -84,7 +87,7 @@ class AttendanceController extends Controller
             'subject_type' => $subjectType,
             'subject_name' => $subjectName,
             'member_number' => $record->member?->member_number,
-            'email' => $record->member?->email ?? $record->applicant?->email ?? $record->attendee?->email,
+            'email' => BootstrapSuperadminPrivacy::maskEmailForViewer($viewer, $record->member?->email ?? $record->applicant?->email ?? $record->attendee?->email),
             'batch' => $record->member?->batch,
             'applicant_status' => $record->applicant?->status,
             'scanned_at' => optional($record->scanned_at)?->toISOString(),

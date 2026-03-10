@@ -7,6 +7,7 @@ use App\Models\Applicant;
 use App\Models\Member;
 use App\Models\User;
 use App\Support\ImageUploadOptimizer;
+use App\Support\BootstrapSuperadminPrivacy;
 use App\Support\Permissions;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
@@ -125,6 +126,14 @@ class FormalPhotoController extends Controller
     public function showForMember(Request $request, Member $member)
     {
         $this->ensurePortalPermission($request, Permissions::FORMAL_PHOTOS_VIEW_PRIVATE);
+        $viewer = $request->user();
+
+        if (
+            BootstrapSuperadminPrivacy::isBootstrapEmail($member->email)
+            && BootstrapSuperadminPrivacy::shouldFilterBootstrapEmail($viewer)
+        ) {
+            abort(404);
+        }
 
         $user = $this->resolveMemberUser($member);
         if (!$user) {
@@ -144,7 +153,7 @@ class FormalPhotoController extends Controller
                     $member->middle_name,
                     $member->last_name,
                 ]))),
-                'email' => $member->email,
+                'email' => BootstrapSuperadminPrivacy::maskEmailForViewer($viewer, $member->email),
                 'subtitle' => 'Member',
                 'lookup_url' => route('formal-photos.members.show', ['member' => $member->id], false),
             ],
@@ -185,11 +194,16 @@ class FormalPhotoController extends Controller
     public function indexDirectory(Request $request)
     {
         $this->ensurePortalPermission($request, Permissions::FORMAL_PHOTOS_VIEW_PRIVATE);
+        $viewer = $request->user();
 
         $search = trim((string) $request->query('search', ''));
         $members = Member::query()
             ->whereNotNull('user_id')
             ->with('user.formalPhoto');
+
+        if (BootstrapSuperadminPrivacy::shouldFilterBootstrapEmail($viewer)) {
+            $members->whereRaw('LOWER(TRIM(COALESCE(email, ""))) <> ?', [BootstrapSuperadminPrivacy::bootstrapEmail()]);
+        }
 
         if ($search !== '') {
             $members->where(function ($builder) use ($search): void {
@@ -206,7 +220,7 @@ class FormalPhotoController extends Controller
             ->orderBy('first_name')
             ->limit(15)
             ->get()
-            ->map(function (Member $member) {
+            ->map(function (Member $member) use ($viewer) {
                 $formalPhoto = $member->user?->formalPhoto;
 
                 return [
@@ -219,7 +233,7 @@ class FormalPhotoController extends Controller
                         $member->middle_name,
                         $member->last_name,
                     ]))),
-                    'email' => $member->email,
+                    'email' => BootstrapSuperadminPrivacy::maskEmailForViewer($viewer, $member->email),
                     'subtitle' => 'Member',
                     'lookup_url' => route('formal-photos.members.show', ['member' => $member->id], false),
                     'formal_photo' => $formalPhoto?->toMetadataArray(),

@@ -7,6 +7,7 @@ use App\Models\FinanceAccount;
 use App\Models\Member;
 use App\Models\Post;
 use App\Models\User;
+use App\Support\BootstrapSuperadminPrivacy;
 use App\Support\RoleHierarchy;
 use App\Support\TextCase;
 use Illuminate\Http\Request;
@@ -261,11 +262,16 @@ class FinanceController extends Controller
     public function searchMembers(Request $request)
     {
         $this->authorize('viewFinanceDirectory', Member::class);
+        $viewer = $request->user();
 
         $search = (string) $request->query('search', '');
         // Limit search string length to prevent performance issues
         $search = substr(trim($search), 0, 50);
         $query = Member::query()->with('user.role:id,name');
+
+        if (BootstrapSuperadminPrivacy::shouldFilterBootstrapEmail($viewer)) {
+            $query->whereRaw('LOWER(TRIM(COALESCE(email, ""))) <> ?', [BootstrapSuperadminPrivacy::bootstrapEmail()]);
+        }
 
         if ($search !== '') {
             $query->where(function ($q) use ($search) {
@@ -310,6 +316,9 @@ class FinanceController extends Controller
 
         $members = Member::query()
             ->select(['id', 'member_number', 'first_name', 'middle_name', 'last_name', 'email'])
+            ->when(BootstrapSuperadminPrivacy::shouldFilterBootstrapEmail($actor), function ($query) {
+                $query->whereRaw('LOWER(TRIM(COALESCE(email, ""))) <> ?', [BootstrapSuperadminPrivacy::bootstrapEmail()]);
+            })
             ->orderBy('last_name')
             ->orderBy('first_name')
             ->get();
@@ -391,7 +400,7 @@ class FinanceController extends Controller
                     'first_name' => $member->first_name,
                     'middle_name' => $member->middle_name,
                     'last_name' => $member->last_name,
-                    'email' => $member->email,
+                    'email' => BootstrapSuperadminPrivacy::maskEmailForViewer($actor, $member->email),
                 ],
                 'month' => $month,
                 'has_monthly_for_month' => $hasMonthlyForMonth,
@@ -450,6 +459,16 @@ class FinanceController extends Controller
                 'financeAccount:id,code,name,account_type',
                 'reversals:id,reversal_of_contribution_id',
             ]);
+
+        if (BootstrapSuperadminPrivacy::shouldFilterBootstrapEmail($request->user())) {
+            $query->where(function ($builder): void {
+                $builder
+                    ->whereNull('member_id')
+                    ->orWhereHas('member', function ($memberQuery): void {
+                        $memberQuery->whereRaw('LOWER(TRIM(COALESCE(email, ""))) <> ?', [BootstrapSuperadminPrivacy::bootstrapEmail()]);
+                    });
+            });
+        }
 
         if (isset($validated['finance_account_id'])) {
             $query->where('finance_account_id', (int) $validated['finance_account_id']);
@@ -531,7 +550,7 @@ class FinanceController extends Controller
                         'id' => $member->id,
                         'member_number' => $member->member_number,
                         'name' => $this->formatMemberName($member),
-                        'email' => $member->email,
+                        'email' => BootstrapSuperadminPrivacy::maskEmailForViewer($request->user(), $member->email),
                     ] : null,
                     'amount' => (float) $row->amount,
                     'note' => $row->note,

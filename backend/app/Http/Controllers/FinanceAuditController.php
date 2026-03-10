@@ -6,6 +6,7 @@ use App\Models\Contribution;
 use App\Models\FinanceAuditNote;
 use App\Models\Member;
 use App\Models\User;
+use App\Support\BootstrapSuperadminPrivacy;
 use App\Support\RoleHierarchy;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -105,6 +106,9 @@ class FinanceAuditController extends Controller
 
         $members = Member::query()
             ->select(['id', 'member_number', 'first_name', 'middle_name', 'last_name', 'email'])
+            ->when(BootstrapSuperadminPrivacy::shouldFilterBootstrapEmail($request->user()), function ($query) {
+                $query->whereRaw('LOWER(TRIM(COALESCE(email, ""))) <> ?', [BootstrapSuperadminPrivacy::bootstrapEmail()]);
+            })
             ->when($memberSearch !== '', function ($query) use ($memberSearch): void {
                 $query->where(function ($builder) use ($memberSearch): void {
                     $builder
@@ -298,7 +302,7 @@ class FinanceAuditController extends Controller
                     'id' => $member->id,
                     'member_number' => $member->member_number,
                     'name' => $this->formatMemberName($member),
-                    'email' => $member->email,
+                    'email' => BootstrapSuperadminPrivacy::maskEmailForViewer($request->user(), $member->email),
                 ] : null,
                 'contribution_id' => $row['contribution_id'],
                 'target_month' => $row['target_month'],

@@ -671,8 +671,9 @@ export default function PortalDashboard() {
 
   const filteredRows = useMemo(() => {
     if (!memberData) return [];
+    const rows = Array.isArray(memberData.data) ? memberData.data : [];
 
-    return memberData.data.filter((row) => {
+    return rows.filter((row) => {
       if (row.category !== selectedTab) return false;
 
       if (yearFilter && !row.contribution_date.startsWith(yearFilter)) return false;

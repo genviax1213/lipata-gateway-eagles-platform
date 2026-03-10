@@ -6,6 +6,7 @@ use App\Models\Member;
 use App\Models\Applicant;
 use App\Models\Role;
 use App\Models\User;
+use App\Support\BootstrapSuperadminPrivacy;
 use App\Support\RoleHierarchy;
 use App\Support\TextCase;
 use Illuminate\Http\Request;
@@ -68,7 +69,9 @@ class AdminUserController extends Controller
         $users = User::query()
             ->with('role:id,name')
             ->select(['id', 'name', 'email', 'role_id', 'finance_role', 'forum_role', 'created_at'])
-            ->whereRaw('LOWER(TRIM(email)) <> ?', [$this->bootstrapEmail()])
+            ->when(BootstrapSuperadminPrivacy::shouldFilterBootstrapEmail($viewer), function ($query) {
+                $query->whereRaw('LOWER(TRIM(email)) <> ?', [BootstrapSuperadminPrivacy::bootstrapEmail()]);
+            })
             ->when($search !== '', function ($query) use ($search) {
                 $query->where(function ($inner) use ($search) {
                     $inner->where('name', 'like', "%{$search}%")
@@ -107,7 +110,9 @@ class AdminUserController extends Controller
         $query = Member::query()
             ->with(['user.role:id,name'])
             ->select(['id', 'member_number', 'first_name', 'middle_name', 'last_name', 'email', 'membership_status', 'email_verified', 'password_set', 'user_id'])
-            ->whereRaw('LOWER(TRIM(COALESCE(email, ""))) <> ?', [$this->bootstrapEmail()])
+            ->when(BootstrapSuperadminPrivacy::shouldFilterBootstrapEmail($viewer), function ($builder) {
+                $builder->whereRaw('LOWER(TRIM(COALESCE(email, ""))) <> ?', [BootstrapSuperadminPrivacy::bootstrapEmail()]);
+            })
             ->when(optional($viewer->role)->name !== RoleHierarchy::SUPERADMIN, function ($builder) {
                 $builder->where(function ($query) {
                     $query->whereNull('user_id')

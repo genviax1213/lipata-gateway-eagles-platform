@@ -203,9 +203,20 @@ function RichTextEditorImpl({
     side: "left" | "right";
   } | null>(null);
 
+  const getEditorDom = () => {
+    if (!editor || editor.isDestroyed) return null;
+    try {
+      return editor.view.dom;
+    } catch {
+      return null;
+    }
+  };
+
   const editor = useEditor({
     extensions: [
-      StarterKit,
+      StarterKit.configure({
+        link: false,
+      }),
       ResizableImage.configure({
         inline: false,
       }),
@@ -452,9 +463,12 @@ function RichTextEditorImpl({
       }
     };
 
-    editor.view.dom.addEventListener("click", onClick);
+    const editorDom = getEditorDom();
+    if (!editorDom) return;
+
+    editorDom.addEventListener("click", onClick);
     return () => {
-      editor.view.dom.removeEventListener("click", onClick);
+      editorDom.removeEventListener("click", onClick);
     };
   }, [editor]);
 

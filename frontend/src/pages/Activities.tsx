@@ -29,8 +29,18 @@ export default function Activities() {
           },
         });
         if (!mounted) return;
-        setPosts(Array.isArray(res.data?.data) ? (res.data.data as CmsPost[]) : []);
-        setLastPage(Number(res.data?.last_page ?? 1));
+        const activityPosts = Array.isArray(res.data?.data) ? (res.data.data as CmsPost[]) : [];
+        if (activityPosts.length > 0) {
+          setPosts(activityPosts);
+          setLastPage(Number(res.data?.last_page ?? 1));
+          return;
+        }
+
+        const fallback = await api.get("/content/homepage-community");
+        if (!mounted) return;
+        const communityPosts = Array.isArray(fallback.data) ? (fallback.data as CmsPost[]) : [];
+        setPosts(communityPosts);
+        setLastPage(1);
       } catch {
         if (!mounted) return;
         setPosts([]);
