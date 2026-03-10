@@ -7,7 +7,7 @@ import { useAuth } from "../contexts/useAuth";
 import { hasPermission } from "../utils/auth";
 import FileSelectionPreview from "../components/FileSelectionPreview";
 import RichTextEditor from "../components/RichTextEditor";
-import { htmlToPlainText, sanitizeRichHtml } from "../utils/richText";
+import { htmlToPlainText, parseApprovedVideoEmbed, sanitizeRichHtml } from "../utils/richText";
 
 const sectionOptions = [
   "homepage_hero",
@@ -78,6 +78,13 @@ type ProcessedImageMeta = {
   height: number;
 };
 
+type HomepageVideoFormState = {
+  video_url: string;
+  title: string;
+  caption: string;
+  thumbnail_url: string;
+};
+
 type CropState = {
   x: number;
   y: number;
@@ -90,7 +97,7 @@ type SourceImageState = {
   height: number;
 };
 
-type CmsTab = "editor" | "images" | "preview" | "posts";
+type CmsTab = "editor" | "images" | "preview" | "posts" | "homepage";
 
 const initialForm: FormState = {
   title: "",
@@ -103,6 +110,13 @@ const initialForm: FormState = {
   published_at: "",
   image: null,
   selected_image_path: "",
+};
+
+const initialHomepageVideoForm: HomepageVideoFormState = {
+  video_url: "",
+  title: "",
+  caption: "",
+  thumbnail_url: "",
 };
 
 function titleCaseWords(value: string): string {
@@ -295,14 +309,32 @@ async function optimizeCroppedImageForUpload(
 
 export default function CmsPosts() {
   const { user } = useAuth();
-  const canManageCmsPosts =
+  const currentUserId = typeof user?.id === "number" ? user.id : Number(user?.id ?? 0);
+  const roleName = typeof (user?.role as { name?: unknown } | undefined)?.name === "string"
+    ? String((user?.role as { name?: string }).name)
+    : "";
+  const financeRole = typeof (user as { finance_role?: unknown } | null)?.finance_role === "string"
+    ? String((user as { finance_role?: string }).finance_role)
+    : "";
+  const hasAuthoredPosts = Boolean((user as { has_authored_posts?: unknown } | null)?.has_authored_posts);
+  const hasCmsRoleAccess =
     hasPermission(user, "posts.create")
     || hasPermission(user, "posts.update")
-    || hasPermission(user, "posts.delete");
-  const canCreatePosts = hasPermission(user, "posts.create");
-  const canUpdatePosts = hasPermission(user, "posts.update");
-  const canDeletePosts = hasPermission(user, "posts.delete");
-  const [activeTab, setActiveTab] = useState<CmsTab>("editor");
+    || hasPermission(user, "posts.delete")
+    || roleName === "superadmin"
+    || roleName === "admin"
+    || roleName === "officer"
+    || roleName === "secretary"
+    || roleName === "membership_chairman"
+    || financeRole === "treasurer"
+    || financeRole === "auditor";
+  const canManageCmsPosts = hasCmsRoleAccess || hasAuthoredPosts;
+  const limitedMode = canManageCmsPosts && !hasCmsRoleAccess;
+  const canCreatePosts = hasCmsRoleAccess;
+  const canUpdatePosts = hasCmsRoleAccess;
+  const canDeletePosts = hasPermission(user, "posts.delete") || roleName === "superadmin" || roleName === "admin";
+  const canManageHomepageVideo = roleName === "superadmin" || roleName === "admin";
+  const [activeTab, setActiveTab] = useState<CmsTab>(limitedMode ? "posts" : "editor");
   const [posts, setPosts] = useState<CmsPost[]>([]);
   const [postsMeta, setPostsMeta] = useState<PaginatedMeta>({ current_page: 1, last_page: 1, per_page: 12, total: 0 });
   const [postsLoaded, setPostsLoaded] = useState(false);
@@ -335,6 +367,10 @@ export default function CmsPosts() {
   const [sourceImage, setSourceImage] = useState<SourceImageState | null>(null);
   const [crop, setCrop] = useState<CropState>({ x: 0, y: 0, zoom: 1 });
   const [sourceImageUrl, setSourceImageUrl] = useState("");
+  const [homepageVideoForm, setHomepageVideoForm] = useState<HomepageVideoFormState>(initialHomepageVideoForm);
+  const [homepageVideoLoaded, setHomepageVideoLoaded] = useState(false);
+  const [savingHomepageVideo, setSavingHomepageVideo] = useState(false);
+  const [homepageVideoUpdatedAt, setHomepageVideoUpdatedAt] = useState<string | null>(null);
   const pointerDragRef = useRef<{ pointerId: number; startX: number; startY: number; originX: number; originY: number } | null>(null);
   const editingPost = editingId ? posts.find((p) => p.id === editingId) : null;
   const selectedLibraryImage = useMemo(
@@ -347,6 +383,10 @@ export default function CmsPosts() {
     : { width: CROP_FRAME_WIDTH, height: CROP_FRAME_HEIGHT };
 
   const previewHtml = useMemo(() => sanitizeRichHtml(form.content), [form.content]);
+  const homepageVideoPreview = useMemo(
+    () => parseApprovedVideoEmbed(homepageVideoForm.video_url),
+    [homepageVideoForm.video_url],
+  );
   const previewWordCount = useMemo(
     () => (plainContent.trim().length ? plainContent.trim().split(/\s+/).length : 0),
     [plainContent],
@@ -362,6 +402,27 @@ export default function CmsPosts() {
       sourceImage !== null
     );
   }, [editingId, form.title, form.excerpt, form.content, form.image, form.selected_image_path, sourceImage]);
+  const submitDisabled = saving
+    || processingImage
+    || (!editingId && !canCreatePosts)
+    || (editingId !== null && (!editingPost || !canEditPost(editingPost)));
+
+  function isOwnPost(post: CmsPost): boolean {
+    if (post.is_owned !== undefined) return Boolean(post.is_owned);
+    return Boolean(post.author?.id && post.author.id === currentUserId);
+  }
+
+  function canEditPost(post: CmsPost): boolean {
+    if (post.can_edit !== undefined) return Boolean(post.can_edit);
+    if (canUpdatePosts) return true;
+    return isOwnPost(post);
+  }
+
+  function canDeletePost(post: CmsPost): boolean {
+    if (post.can_delete !== undefined) return Boolean(post.can_delete);
+    if (canDeletePosts) return true;
+    return limitedMode && isOwnPost(post);
+  }
 
   function getApiErrorMessage(err: unknown): string {
     if (!axios.isAxiosError(err)) return "Unexpected error while saving post.";
@@ -422,6 +483,12 @@ export default function CmsPosts() {
   }, [appliedImageFilter, appliedImageQuery]);
 
   async function pickExistingInlineImage(): Promise<string | null> {
+    if (limitedMode) {
+      setError("Shared image library is unavailable in My Posts mode.");
+      setMessage("");
+      return null;
+    }
+
     setActiveTab("images");
     setError("");
     setMessage("Open Image Library and use 'Insert into article' on the image you want to reuse.");
@@ -566,13 +633,44 @@ export default function CmsPosts() {
 
   useEffect(() => {
     if (!canManageCmsPosts) return;
-    if (activeTab === "images" && !imagesLoaded) {
+    if (!limitedMode && activeTab === "images" && !imagesLoaded) {
       void runImageSearch(1);
     }
     if (activeTab === "posts" && !postsLoaded) {
       void runPostSearch(1);
     }
-  }, [activeTab, canManageCmsPosts, imagesLoaded, postsLoaded, runImageSearch, runPostSearch]);
+  }, [activeTab, canManageCmsPosts, imagesLoaded, limitedMode, postsLoaded, runImageSearch, runPostSearch]);
+
+  const loadHomepageVideo = useCallback(async () => {
+    if (!canManageHomepageVideo) return;
+
+    try {
+      const response = await api.get<{
+        title?: string | null;
+        caption?: string | null;
+        thumbnail_url?: string | null;
+        source_url?: string | null;
+        updated_at?: string | null;
+      }>("/homepage/reputation-video");
+
+      setHomepageVideoForm({
+        video_url: response.data?.source_url ?? "",
+        title: response.data?.title ?? "",
+        caption: response.data?.caption ?? "",
+        thumbnail_url: response.data?.thumbnail_url ?? "",
+      });
+      setHomepageVideoUpdatedAt(response.data?.updated_at ?? null);
+      setHomepageVideoLoaded(true);
+    } catch {
+      setHomepageVideoLoaded(true);
+      setError("Unable to load homepage reputation video settings.");
+    }
+  }, [canManageHomepageVideo]);
+
+  useEffect(() => {
+    if (!canManageHomepageVideo || homepageVideoLoaded || activeTab !== "homepage") return;
+    void loadHomepageVideo();
+  }, [activeTab, canManageHomepageVideo, homepageVideoLoaded, loadHomepageVideo]);
 
   useEffect(() => {
     if (!form.image) {
@@ -733,7 +831,7 @@ export default function CmsPosts() {
     setSourceImage(null);
     setCrop({ x: 0, y: 0, zoom: 1 });
     setEditingId(null);
-    setActiveTab("editor");
+    setActiveTab(limitedMode ? "posts" : "editor");
   }
 
   function cancelOrDiscardForm() {
@@ -750,7 +848,7 @@ export default function CmsPosts() {
   }
 
   function startEdit(post: CmsPost) {
-    if (!canUpdatePosts) return;
+    if (!canEditPost(post)) return;
 
     setEditingId(post.id);
     setActiveTab("editor");
@@ -779,7 +877,7 @@ export default function CmsPosts() {
       setError("You do not have permission to create posts.");
       return;
     }
-    if (editingId && !canUpdatePosts) {
+    if (editingId && editingPost && !canEditPost(editingPost)) {
       setError("You do not have permission to edit posts.");
       return;
     }
@@ -849,8 +947,43 @@ export default function CmsPosts() {
     }
   }
 
+  async function saveHomepageVideo() {
+    if (!canManageHomepageVideo) {
+      setError("You do not have permission to manage the homepage reputation video.");
+      return;
+    }
+
+    setSavingHomepageVideo(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const response = await api.put<{
+        updated_at?: string | null;
+      }>("/homepage/reputation-video", {
+        video_url: homepageVideoForm.video_url.trim() || null,
+        title: homepageVideoForm.title.trim() || null,
+        caption: homepageVideoForm.caption.trim() || null,
+        thumbnail_url: homepageVideoForm.thumbnail_url.trim() || null,
+      });
+
+      setHomepageVideoUpdatedAt(response.data?.updated_at ?? null);
+      setHomepageVideoLoaded(true);
+      setMessage(
+        homepageVideoForm.video_url.trim() || homepageVideoForm.title.trim() || homepageVideoForm.caption.trim() || homepageVideoForm.thumbnail_url.trim()
+          ? "Homepage reputation video updated."
+          : "Homepage reputation video cleared.",
+      );
+    } catch (err: unknown) {
+      setError(getApiErrorMessage(err));
+    } finally {
+      setSavingHomepageVideo(false);
+    }
+  }
+
   async function remove(id: number) {
-    if (!canDeletePosts) {
+    const targetPost = posts.find((post) => post.id === id);
+    if (!targetPost || !canDeletePost(targetPost)) {
       setError("You do not have permission to delete posts.");
       return;
     }
@@ -883,19 +1016,22 @@ export default function CmsPosts() {
 
   return (
     <section>
-      <h1 className="mb-2 font-heading text-4xl text-offwhite">CMS Posts</h1>
+      <h1 className="mb-2 font-heading text-4xl text-offwhite">{limitedMode ? "My Posts" : "CMS Posts"}</h1>
       <p className="mb-6 text-sm text-mist/85">
-        Publish articles for the website sections. Use <span className="text-gold-soft">Show on Homepage Community</span> to include an activity in the homepage carousel.
+        {limitedMode
+          ? "Review and manage only the posts you authored. Creating new posts and opening the shared image library are disabled in this mode."
+          : <>Publish articles for the website sections. Use <span className="text-gold-soft">Show on Homepage Community</span> to include an activity in the homepage carousel.</>}
       </p>
 
       {error && <p className="mb-4 rounded-md border border-red-300/30 bg-red-400/10 px-4 py-2 text-sm text-red-200">{error}</p>}
       {message && <p className="mb-4 rounded-md border border-gold/30 bg-gold/10 px-4 py-2 text-sm text-gold-soft">{message}</p>}
       <div className="mb-6 flex flex-wrap gap-2">
         {([
-          ["editor", editingId ? "Edit Post" : "Create Post"],
-          ["images", "Image Library"],
+          ...((!limitedMode || editingId !== null) ? [["editor", editingId ? "Edit Post" : "Create Post"]] as const : []),
+          ...(canManageHomepageVideo && !limitedMode ? [["homepage", "Homepage Video"]] as const : []),
+          ...(!limitedMode ? [["images", "Image Library"]] as const : []),
           ["preview", "Live Preview"],
-          ["posts", "Posts"],
+          ["posts", limitedMode ? "My Posts" : "Posts"],
         ] as const).map(([tab, label]) => (
           <button
             key={tab}
@@ -908,7 +1044,7 @@ export default function CmsPosts() {
         ))}
       </div>
 
-      {activeTab === "editor" && (
+      {activeTab === "editor" && (!limitedMode || editingId !== null) && (
         <div className="mb-6 rounded-xl border border-white/20 bg-white/10 p-5">
           <h2 className="mb-4 font-heading text-2xl text-offwhite">
             {editingId ? "Edit Post" : "Create Post"}
@@ -977,7 +1113,7 @@ export default function CmsPosts() {
           />
           <p className="md:col-span-2 -mt-2 text-right text-xs text-mist/75">
             Content: {contentWords.toLocaleString()} words · {contentChars.toLocaleString()} text characters
-            <span className="ml-2 text-gold-soft">(Rich text enabled: headings, links, lists, inline images)</span>
+            <span className="ml-2 text-gold-soft">(Rich text enabled: headings, links, lists, inline images, YouTube/Facebook video links)</span>
           </p>
 
           <div className="md:col-span-2 text-sm text-offwhite">
@@ -1142,7 +1278,7 @@ export default function CmsPosts() {
           <button
             type="button"
             onClick={submit}
-            disabled={saving || processingImage || (!editingId && !canCreatePosts) || (editingId !== null && !canUpdatePosts)}
+            disabled={submitDisabled}
             className="btn-primary"
           >
             {processingImage ? "Processing image..." : saving ? "Saving..." : editingId ? "Update Post" : "Publish Post"}
@@ -1157,7 +1293,147 @@ export default function CmsPosts() {
         </div>
       )}
 
-      {activeTab === "images" && (
+      {activeTab === "homepage" && canManageHomepageVideo && !limitedMode && (
+        <div className="mb-6 rounded-xl border border-white/20 bg-white/10 p-5">
+          <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h2 className="font-heading text-2xl text-offwhite">Homepage Reputation Video</h2>
+              <p className="mt-2 max-w-3xl text-sm text-mist/80">
+                This teaser appears beside the landing hero on desktop and opens a modal video player when clicked.
+                Only YouTube and Facebook links are allowed here to keep the homepage stable and reviewable.
+              </p>
+            </div>
+            {homepageVideoUpdatedAt && (
+              <p className="text-xs text-mist/70">
+                Last updated {new Date(homepageVideoUpdatedAt).toLocaleString()}
+              </p>
+            )}
+          </div>
+
+          {!homepageVideoLoaded ? (
+            <p className="text-sm text-mist/80">Loading homepage video settings...</p>
+          ) : (
+            <>
+              <div className="grid gap-4 md:grid-cols-2">
+                <label className="block text-sm text-offwhite">
+                  <span className="mb-2 block text-mist/80">Video URL</span>
+                  <input
+                    value={homepageVideoForm.video_url}
+                    onChange={(event) => setHomepageVideoForm((prev) => ({ ...prev, video_url: event.target.value }))}
+                    placeholder="Paste YouTube or Facebook video URL"
+                    className="w-full rounded-md border border-white/25 bg-white/10 px-4 py-2.5 text-offwhite placeholder:text-mist/65"
+                  />
+                </label>
+
+                <label className="block text-sm text-offwhite">
+                  <span className="mb-2 block text-mist/80">Thumbnail URL</span>
+                  <input
+                    value={homepageVideoForm.thumbnail_url}
+                    onChange={(event) => setHomepageVideoForm((prev) => ({ ...prev, thumbnail_url: event.target.value }))}
+                    placeholder="Optional thumbnail image URL"
+                    className="w-full rounded-md border border-white/25 bg-white/10 px-4 py-2.5 text-offwhite placeholder:text-mist/65"
+                  />
+                </label>
+
+                <label className="block text-sm text-offwhite">
+                  <span className="mb-2 block text-mist/80">Teaser Title</span>
+                  <input
+                    value={homepageVideoForm.title}
+                    onChange={(event) => setHomepageVideoForm((prev) => ({ ...prev, title: event.target.value }))}
+                    placeholder="Watch LGEC in action"
+                    className="w-full rounded-md border border-white/25 bg-white/10 px-4 py-2.5 text-offwhite placeholder:text-mist/65"
+                  />
+                </label>
+
+                <label className="block text-sm text-offwhite">
+                  <span className="mb-2 block text-mist/80">Caption</span>
+                  <input
+                    value={homepageVideoForm.caption}
+                    onChange={(event) => setHomepageVideoForm((prev) => ({ ...prev, caption: event.target.value }))}
+                    placeholder="Short supporting line under the teaser title"
+                    className="w-full rounded-md border border-white/25 bg-white/10 px-4 py-2.5 text-offwhite placeholder:text-mist/65"
+                  />
+                </label>
+              </div>
+
+              <div className="mt-5 rounded-lg border border-white/15 bg-ink/35 p-4">
+                <p className="mb-3 text-xs uppercase tracking-[0.22em] text-gold-soft">Homepage Preview</p>
+                <div className="grid gap-4 lg:grid-cols-[minmax(0,300px)_1fr]">
+                  <div className="overflow-hidden rounded-2xl border border-white/18 bg-white/8">
+                    {homepageVideoForm.thumbnail_url ? (
+                      <img
+                        src={homepageVideoForm.thumbnail_url}
+                        alt={homepageVideoForm.title || "Homepage reputation video thumbnail"}
+                        className="h-44 w-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-44 items-center justify-center bg-[radial-gradient(circle_at_top,rgba(243,219,152,0.22),transparent_52%),linear-gradient(150deg,rgba(9,24,46,0.96),rgba(20,48,88,0.85))] text-gold-soft">
+                        Thumbnail Preview
+                      </div>
+                    )}
+                    <div className="p-4">
+                      <p className="text-sm font-semibold text-offwhite">
+                        {homepageVideoForm.title.trim() || "Watch LGEC in action"}
+                      </p>
+                      <p className="mt-2 text-sm text-mist/80">
+                        {homepageVideoForm.caption.trim() || "A compact trust signal for the homepage hero."}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-white/15 bg-white/6 p-4">
+                    <p className="text-sm text-mist/80">
+                      {homepageVideoPreview
+                        ? `Approved provider: ${homepageVideoPreview.provider === "youtube" ? "YouTube" : "Facebook"}`
+                        : "Enter a valid YouTube or Facebook URL to activate the teaser."}
+                    </p>
+                    {homepageVideoPreview && (
+                      <div className="mt-4 overflow-hidden rounded-2xl border border-white/16 bg-[#061224]">
+                        <div className="relative aspect-video">
+                          <iframe
+                            src={homepageVideoPreview.embedUrl}
+                            title="Homepage reputation video preview"
+                            loading="lazy"
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                            allowFullScreen
+                            className="absolute inset-0 h-full w-full border-0"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-5 flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={() => void saveHomepageVideo()}
+                  disabled={savingHomepageVideo}
+                  className="btn-primary"
+                >
+                  {savingHomepageVideo ? "Saving..." : "Save Homepage Video"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHomepageVideoForm(initialHomepageVideoForm);
+                    setHomepageVideoUpdatedAt(null);
+                    setMessage("Homepage video form cleared. Save to remove it from the site.");
+                    setError("");
+                  }}
+                  disabled={savingHomepageVideo}
+                  className="btn-secondary"
+                >
+                  Clear Form
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {activeTab === "images" && !limitedMode && (
         <div className="mb-6 rounded-xl border border-white/20 bg-white/10 p-5">
           <h2 className="mb-4 font-heading text-2xl text-offwhite">Image Library</h2>
           <div className="mb-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_220px_auto]">
@@ -1389,7 +1665,7 @@ export default function CmsPosts() {
 
       {activeTab === "posts" && (
         <div className="rounded-xl border border-white/20 bg-white/10 p-5">
-          <h2 className="mb-4 font-heading text-2xl text-offwhite">Posts</h2>
+          <h2 className="mb-4 font-heading text-2xl text-offwhite">{limitedMode ? "My Posts" : "Posts"}</h2>
           <div className="mb-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_220px_auto]">
             <input
               aria-label="Post search"
@@ -1429,13 +1705,16 @@ export default function CmsPosts() {
                       <th className="px-4 py-3">Content</th>
                       <th className="px-4 py-3">Section</th>
                       <th className="px-4 py-3">Status</th>
+                      <th className="px-4 py-3">Author</th>
                       <th className="px-4 py-3">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {posts.length === 0 && (
                       <tr>
-                        <td colSpan={6} className="px-4 py-8 text-center text-mist/80">No posts found for the current search.</td>
+                        <td colSpan={7} className="px-4 py-8 text-center text-mist/80">
+                          {limitedMode ? "You have not authored any posts yet." : "No posts found for the current search."}
+                        </td>
                       </tr>
                     )}
 
@@ -1460,11 +1739,12 @@ export default function CmsPosts() {
                         </td>
                         <td className="px-4 py-3 capitalize">{post.section}</td>
                         <td className="px-4 py-3">{post.status}</td>
+                        <td className="px-4 py-3 text-xs text-mist/80">{post.author?.name ?? "Unknown"}</td>
                         <td className="px-4 py-3 space-x-3">
                           <button
                             type="button"
                             onClick={() => startEdit(post)}
-                            disabled={!canUpdatePosts}
+                            disabled={!canEditPost(post)}
                             className="text-gold hover:underline disabled:opacity-45"
                           >
                             Edit
@@ -1472,7 +1752,7 @@ export default function CmsPosts() {
                           <button
                             type="button"
                             onClick={() => void remove(post.id)}
-                            disabled={!canDeletePosts}
+                            disabled={!canDeletePost(post)}
                             className="text-red-300 hover:underline disabled:opacity-45"
                           >
                             Delete

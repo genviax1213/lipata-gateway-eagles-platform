@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Post;
+use App\Support\EmbeddedVideo;
 use App\Support\ImageUploadOptimizer;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
@@ -77,6 +78,9 @@ class PostController extends Controller
         $this->authorize('viewCmsIndex', Post::class);
 
         $query = Post::query()->with('author:id,name');
+        if (!$request->user()->can('manageGlobal', Post::class)) {
+            $query->where('author_id', $request->user()->id);
+        }
 
         if ($request->filled('section')) {
             $query->where('section', $request->string('section'));
@@ -101,14 +105,14 @@ class PostController extends Controller
 
     public function availableImages(Request $request)
     {
-        $this->authorize('viewCmsIndex', Post::class);
+        $this->authorize('manageGlobal', Post::class);
 
         return response()->json($this->unlinkedPostImages());
     }
 
     public function imageLibrary(Request $request)
     {
-        $this->authorize('viewCmsIndex', Post::class);
+        $this->authorize('manageGlobal', Post::class);
 
         $library = collect($this->postImageLibrary());
 
@@ -152,7 +156,7 @@ class PostController extends Controller
 
     public function deleteLibraryImage(Request $request)
     {
-        $this->authorize('viewCmsIndex', Post::class);
+        $this->authorize('manageGlobal', Post::class);
 
         if (!$request->user()->hasPermission('posts.delete')) {
             return response()->json([
@@ -188,6 +192,8 @@ class PostController extends Controller
 
     public function store(Request $request)
     {
+        $this->authorize('create', Post::class);
+
         if ($response = $this->rejectIfPayloadTooLarge($request)) {
             return $response;
         }
@@ -242,6 +248,8 @@ class PostController extends Controller
 
     public function update(Request $request, Post $post)
     {
+        $this->authorize('update', $post);
+
         if ($response = $this->rejectIfPayloadTooLarge($request)) {
             return $response;
         }
@@ -297,6 +305,8 @@ class PostController extends Controller
 
     public function destroy(Request $request, Post $post)
     {
+        $this->authorize('delete', $post);
+
         $post->delete();
 
         return response()->json(['message' => 'Post deleted']);
@@ -304,6 +314,8 @@ class PostController extends Controller
 
     public function uploadInlineImage(Request $request)
     {
+        $this->authorize('uploadInlineAsset', Post::class);
+
         if ($response = $this->rejectIfPayloadTooLarge($request)) {
             return $response;
         }
@@ -375,6 +387,11 @@ class PostController extends Controller
 
     private function transform(Post $post, bool $withAuthor = false): array
     {
+        $viewer = request()->user();
+        $isOwned = $viewer ? (int) $post->author_id === (int) $viewer->id : false;
+        $canEdit = $viewer ? $viewer->can('update', $post) : false;
+        $canDelete = $viewer ? $viewer->can('delete', $post) : false;
+
         $data = [
             'id' => $post->id,
             'title' => $post->title,
@@ -388,6 +405,9 @@ class PostController extends Controller
             'status' => $post->status,
             'published_at' => optional($post->published_at)?->toISOString(),
             'created_at' => optional($post->created_at)?->toISOString(),
+            'is_owned' => $isOwned,
+            'can_edit' => $canEdit,
+            'can_delete' => $canDelete,
         ];
 
         if ($withAuthor) {
@@ -642,13 +662,14 @@ class PostController extends Controller
     {
         $allowedTags = [
             'p', 'br', 'strong', 'em', 'u', 's', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-            'ul', 'ol', 'li', 'blockquote', 'a', 'img', 'hr', 'code', 'pre',
+            'ul', 'ol', 'li', 'blockquote', 'a', 'img', 'hr', 'code', 'pre', 'iframe',
         ];
 
         $allowedAttrs = [
             'a' => ['href', 'target', 'rel'],
             'p' => ['class'],
             'img' => ['src', 'alt', 'title', 'width', 'align'],
+            'iframe' => ['src', 'title', 'loading', 'allow', 'allowfullscreen', 'referrerpolicy', 'class'],
             '*' => [],
         ];
 
@@ -717,6 +738,26 @@ class PostController extends Controller
                         $child->removeAttribute('align');
                     }
                     $child->removeAttribute('srcset');
+                }
+
+                if ($tag === 'iframe') {
+                    $src = trim((string) $child->getAttribute('src'));
+                    $video = EmbeddedVideo::fromEmbedUrl($src);
+                    if (!$video) {
+                        $node->removeChild($child);
+                        continue;
+                    }
+
+                    $child->setAttribute('src', $video['embed_url']);
+                    $child->setAttribute('loading', 'lazy');
+                    $child->setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share');
+                    $child->setAttribute('allowfullscreen', 'allowfullscreen');
+                    $child->setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
+
+                    $title = trim((string) $child->getAttribute('title'));
+                    if ($title === '') {
+                        $child->setAttribute('title', ucfirst($video['provider']) . ' video player');
+                    }
                 }
 
                 $this->sanitizeNodeChildren($child, $dom);

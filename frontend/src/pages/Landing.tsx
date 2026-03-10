@@ -6,6 +6,9 @@ import { htmlToPlainText } from "../utils/richText";
 import { canonicalRoutes } from "../content/portalCopy";
 import HeroFeatureCard from "../components/landing/HeroFeatureCard";
 import CommunityCarousel from "../components/landing/CommunityCarousel";
+import HomepageReputationVideo, {
+  type HomepageReputationVideoData,
+} from "../components/landing/HomepageReputationVideo";
 
 const HERO_CACHE_KEY = "landing:homepage-hero";
 const HERO_CACHE_MAX_AGE_MS = 10 * 60 * 1000;
@@ -14,6 +17,54 @@ type HeroCachePayload = {
   savedAt: number;
   posts: CmsPost[];
 };
+
+type HomepageVideoApiPayload = {
+  title?: unknown;
+  caption?: unknown;
+  description?: unknown;
+  excerpt?: unknown;
+  eyebrow?: unknown;
+  provider?: unknown;
+  embed_url?: unknown;
+  embedUrl?: unknown;
+  video_url?: unknown;
+  videoUrl?: unknown;
+  source_url?: unknown;
+  sourceUrl?: unknown;
+  thumbnail_url?: unknown;
+  thumbnailUrl?: unknown;
+};
+
+function readString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function normalizeHomepageVideo(payload: unknown): HomepageReputationVideoData | null {
+  if (!payload || typeof payload !== "object") return null;
+
+  const candidate = payload as HomepageVideoApiPayload;
+  const embedUrl =
+    readString(candidate.embed_url) ??
+    readString(candidate.embedUrl) ??
+    readString(candidate.video_url) ??
+    readString(candidate.videoUrl);
+
+  if (!embedUrl) return null;
+
+  return {
+    title: readString(candidate.title) ?? "LGEC in Action",
+    caption:
+      readString(candidate.caption) ??
+      readString(candidate.description) ??
+      readString(candidate.excerpt) ??
+      "A short look at the service, brotherhood, and public presence behind LGEC.",
+    eyebrow: readString(candidate.eyebrow) ?? "Reputation Reel",
+    provider: readString(candidate.provider) ?? "featured video",
+    embedUrl,
+    sourceUrl: readString(candidate.source_url) ?? readString(candidate.sourceUrl),
+    thumbnailUrl: readString(candidate.thumbnail_url) ?? readString(candidate.thumbnailUrl),
+  };
+}
 
 function contentSnippet(value: string, max = 120): string {
   const plain = htmlToPlainText(value).replace(/\s+/g, " ").trim();
@@ -61,6 +112,7 @@ export default function Landing() {
   const [heroPost, setHeroPost] = useState<CmsPost | null>(() => selectInitialHeroPost(cachedHeroPosts));
   const [heroImageLoaded, setHeroImageLoaded] = useState(false);
   const [heroLoading, setHeroLoading] = useState(cachedHeroPosts.length === 0);
+  const [homepageVideo, setHomepageVideo] = useState<HomepageReputationVideoData | null>(null);
   const [communityPosts, setCommunityPosts] = useState<CmsPost[]>([]);
   const [loadingCommunity, setLoadingCommunity] = useState(true);
   const [communitySlide, setCommunitySlide] = useState(0);
@@ -101,6 +153,27 @@ export default function Landing() {
     };
 
     void load();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadHomepageVideo = async () => {
+      try {
+        const res = await api.get("/content/homepage-reputation-video");
+        if (!mounted) return;
+        setHomepageVideo(normalizeHomepageVideo(res.data));
+      } catch {
+        if (!mounted) return;
+        setHomepageVideo(null);
+      }
+    };
+
+    void loadHomepageVideo();
 
     return () => {
       mounted = false;
@@ -185,6 +258,10 @@ export default function Landing() {
     return () => clearInterval(timer);
   }, [communitySlideCount]);
 
+  const heroGridClassName = homepageVideo
+    ? "section-wrap grid min-h-[calc(100vh-148px)] items-center gap-8 py-16 lg:grid-cols-[minmax(0,1.04fr)_minmax(14rem,16.75rem)_minmax(0,0.92fr)] lg:gap-6"
+    : "section-wrap grid min-h-[calc(100vh-148px)] items-center gap-8 py-16 lg:grid-cols-[1.1fr_0.9fr]";
+
   return (
     <section className="hero-gradient relative overflow-hidden">
       <img
@@ -195,7 +272,7 @@ export default function Landing() {
         style={{ right: "max(1rem, calc((100vw - 72rem) / 2 + 1.5rem))" }}
       />
 
-      <div className="section-wrap grid min-h-[calc(100vh-148px)] items-center gap-8 py-16 lg:grid-cols-[1.1fr_0.9fr]">
+      <div className={heroGridClassName}>
         <div className="relative z-10 max-w-3xl">
           <img
             src="/images/lgec-logo.png"
@@ -225,6 +302,12 @@ export default function Landing() {
             .
           </p>
 
+          {homepageVideo ? (
+            <div className="mt-6 lg:hidden">
+              <HomepageReputationVideo video={homepageVideo} layout="mobile" />
+            </div>
+          ) : null}
+
           <div className="mt-6 lg:hidden">
             <HeroFeatureCard
               post={heroPost}
@@ -235,6 +318,12 @@ export default function Landing() {
             />
           </div>
         </div>
+
+        {homepageVideo ? (
+          <div className="relative z-10 hidden lg:flex lg:justify-center">
+            <HomepageReputationVideo video={homepageVideo} layout="desktop" />
+          </div>
+        ) : null}
 
         <aside className="relative z-10 hidden lg:block">
           <HeroFeatureCard

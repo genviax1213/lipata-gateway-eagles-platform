@@ -7,6 +7,7 @@ use App\Models\CalendarEvent;
 use App\Models\User;
 use App\Support\BootstrapSuperadminPrivacy;
 use App\Support\IdentityQrToken;
+use App\Support\RoleHierarchy;
 use Illuminate\Http\Request;
 
 class AttendanceController extends Controller
@@ -71,6 +72,25 @@ class AttendanceController extends Controller
             'message' => 'Attendance recorded.',
             'record' => $this->recordPayload($record->fresh()->load(['attendee:id,name,email', 'member:id,member_number,first_name,middle_name,last_name,email,batch', 'applicant:id,first_name,middle_name,last_name,email,status,batch_id', 'scannedBy:id,name']), $request->user()),
         ], 201);
+    }
+
+    public function destroyRoster(Request $request, CalendarEvent $calendarEvent)
+    {
+        $request->user()->loadMissing('role:id,name');
+        if (!RoleHierarchy::canManageUsers((string) optional($request->user()->role)->name)) {
+            return response()->json([
+                'message' => 'Only superadmin and admin can delete attendance lists.',
+            ], 403);
+        }
+
+        $deleted = AttendanceRecord::query()
+            ->where('calendar_event_id', $calendarEvent->id)
+            ->delete();
+
+        return response()->json([
+            'message' => $deleted > 0 ? 'Attendance list deleted.' : 'Attendance list was already empty.',
+            'deleted_count' => $deleted,
+        ]);
     }
 
     private function recordPayload(AttendanceRecord $record, ?User $viewer = null): array

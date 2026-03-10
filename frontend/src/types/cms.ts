@@ -15,4 +15,7 @@ export interface CmsPost {
     id: number;
     name: string;
   } | null;
+  is_owned?: boolean;
+  can_edit?: boolean;
+  can_delete?: boolean;
 }

@@ -178,6 +178,9 @@ class RoleSeeder extends Seeder
             $permissionIds['calendar.view'],
         ]);
         $secretary->permissions()->sync([
+            $permissionIds['posts.view'],
+            $permissionIds['posts.create'],
+            $permissionIds['posts.update'],
             $permissionIds['formal_photos.view_private'],
             $permissionIds['members.view'],
             $permissionIds['applications.view'],
@@ -202,6 +205,9 @@ class RoleSeeder extends Seeder
         ]);
 
         $treasurer->permissions()->sync([
+            $permissionIds['posts.view'],
+            $permissionIds['posts.create'],
+            $permissionIds['posts.update'],
             $permissionIds['finance.view'],
             $permissionIds['finance.input'],
             $permissionIds['members.view'],
@@ -214,6 +220,9 @@ class RoleSeeder extends Seeder
         ]);
 
         $auditor->permissions()->sync([
+            $permissionIds['posts.view'],
+            $permissionIds['posts.create'],
+            $permissionIds['posts.update'],
             $permissionIds['finance.view'],
             $permissionIds['members.view'],
             $permissionIds['applications.view'],
@@ -233,6 +242,9 @@ class RoleSeeder extends Seeder
         ]);
 
         $membershipChairman->permissions()->sync([
+            $permissionIds['posts.view'],
+            $permissionIds['posts.create'],
+            $permissionIds['posts.update'],
             $permissionIds['members.view'],
             $permissionIds['applications.view'],
             $permissionIds['applications.docs.view'],

@@ -1,10 +1,11 @@
-import { Component, useEffect, useRef, useState } from "react";
+import { Component, useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Image from "@tiptap/extension-image";
 import Link from "@tiptap/extension-link";
 import Placeholder from "@tiptap/extension-placeholder";
+import { parseApprovedVideoEmbed } from "../utils/richText";
 
 type RichTextEditorProps = {
   value: string;
@@ -203,15 +204,6 @@ function RichTextEditorImpl({
     side: "left" | "right";
   } | null>(null);
 
-  const getEditorDom = () => {
-    if (!editor || editor.isDestroyed) return null;
-    try {
-      return editor.view.dom;
-    } catch {
-      return null;
-    }
-  };
-
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -235,6 +227,15 @@ function RichTextEditorImpl({
       onChange(currentEditor.getHTML());
     },
   });
+
+  const getEditorDom = useCallback(() => {
+    if (!editor || editor.isDestroyed) return null;
+    try {
+      return editor.view.dom;
+    } catch {
+      return null;
+    }
+  }, [editor]);
 
   useEffect(() => {
     if (!editor) return;
@@ -320,6 +321,25 @@ function RichTextEditorImpl({
     }
 
     fileInputRef.current?.click();
+  };
+
+  const handleInsertVideo = () => {
+    if (!editor || disabled) return;
+
+    const input = window.prompt("Paste a YouTube or Facebook video URL:");
+    if (!input) return;
+
+    const embed = parseApprovedVideoEmbed(input);
+    if (!embed) {
+      window.alert("Only YouTube and Facebook video links are allowed.");
+      return;
+    }
+
+    editor
+      .chain()
+      .focus()
+      .insertContent(`<p><a href="${embed.canonicalUrl}" target="_blank" rel="noopener noreferrer">${embed.canonicalUrl}</a></p><p></p>`)
+      .run();
   };
 
   const selectedImageNode = editor && selectedImagePos !== null
@@ -448,7 +468,7 @@ function RichTextEditorImpl({
       editor.off("update", updateHandlePosition);
       window.removeEventListener("resize", updateHandlePosition);
     };
-  }, [editor]);
+  }, [editor, getEditorDom]);
 
   useEffect(() => {
     if (!editor) return;
@@ -470,7 +490,7 @@ function RichTextEditorImpl({
     return () => {
       editorDom.removeEventListener("click", onClick);
     };
-  }, [editor]);
+  }, [editor, getEditorDom]);
 
   useEffect(() => {
     if (!editor || !resizing) return;
@@ -557,6 +577,11 @@ function RichTextEditorImpl({
           label={uploadingImage ? "Uploading..." : "Image"}
           disabled={disabled || uploadingImage}
           onClick={() => void handleInsertImage()}
+        />
+        <ToolbarButton
+          label="Video"
+          disabled={disabled}
+          onClick={handleInsertVideo}
         />
         <ToolbarButton
           label="Link"

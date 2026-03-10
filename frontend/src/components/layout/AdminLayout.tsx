@@ -32,6 +32,46 @@ function getPortalTitle(user: Record<string, unknown> | null): string {
   return "Member Portal";
 }
 
+function canReachCms(user: Record<string, unknown> | null): boolean {
+  if (!user) return false;
+
+  if (hasPermission(user, "posts.create") || hasPermission(user, "posts.update") || hasPermission(user, "posts.delete")) {
+    return true;
+  }
+
+  const roleName = (user.role as { name?: unknown } | undefined)?.name;
+  const financeRole = user.finance_role;
+  const hasAuthoredPosts = Boolean((user as { has_authored_posts?: unknown }).has_authored_posts);
+
+  return roleName === "officer"
+    || roleName === "superadmin"
+    || roleName === "admin"
+    || roleName === "secretary"
+    || roleName === "membership_chairman"
+    || financeRole === "treasurer"
+    || financeRole === "auditor"
+    || hasAuthoredPosts;
+}
+
+function hasGlobalCmsAccess(user: Record<string, unknown> | null): boolean {
+  if (!user) return false;
+
+  if (hasPermission(user, "posts.create") || hasPermission(user, "posts.update") || hasPermission(user, "posts.delete")) {
+    return true;
+  }
+
+  const roleName = (user.role as { name?: unknown } | undefined)?.name;
+  const financeRole = user.finance_role;
+
+  return roleName === "superadmin"
+    || roleName === "admin"
+    || roleName === "officer"
+    || roleName === "secretary"
+    || roleName === "membership_chairman"
+    || financeRole === "treasurer"
+    || financeRole === "auditor";
+}
+
 export default function AdminLayout({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -44,7 +84,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const canViewLogs = isAdminUser(user);
   const canViewApplicantList = hasPermission(user, "applications.view") || hasPermission(user, "applications.review");
   const canOpenMembersSection = canViewMembers || canViewApplicantList;
-  const canManageCmsPosts = hasPermission(user, "posts.create");
+  const canManageCmsPosts = canReachCms(user);
+  const hasFullCmsAccess = hasGlobalCmsAccess(user);
   const canViewFinance = hasPermission(user, "finance.view");
   const canViewForum = !isApplicant;
   const portalTitle = getPortalTitle(user);
@@ -84,12 +125,12 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       { to: "/portal/members", label: "Directory", icon: "members", show: canOpenMembersSection },
       { to: "/portal/contributions", label: canViewFinance ? "Finance" : "My Contributions", icon: "finance", show: true },
       { to: "/portal/forum", label: "Forum", icon: "forum", show: canViewForum },
-      { to: "/portal/posts", label: "CMS Posts", icon: "cms", show: canManageCmsPosts },
+      { to: "/portal/posts", label: hasFullCmsAccess ? "CMS Posts" : "My Posts", icon: "cms", show: canManageCmsPosts },
       { to: "/portal/user-roles", label: "User Roles", icon: "roles", show: showRoleDelegation },
       { to: "/portal/logs", label: "Logs", icon: "logs", show: canViewLogs },
       { to: "/portal/security", label: "Security Settings", icon: "security", show: true },
     ],
-    [canManageCmsPosts, canOpenMembersSection, canViewFinance, canViewForum, canViewLogs, showRoleDelegation],
+    [canManageCmsPosts, canOpenMembersSection, canViewFinance, canViewForum, canViewLogs, hasFullCmsAccess, showRoleDelegation],
   );
 
   const renderIcon = (icon: string) => {

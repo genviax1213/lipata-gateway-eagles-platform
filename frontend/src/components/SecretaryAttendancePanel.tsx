@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import axios from "axios";
 import jsQR from "jsqr";
 import api from "../services/api";
+import { useAuth } from "../contexts/useAuth";
+import { isAdminUser } from "../utils/auth";
 
 interface EventRecord {
   id: number;
@@ -34,6 +36,7 @@ type ScanResultRecord = AttendanceRecord & {
 };
 
 export default function SecretaryAttendancePanel({ onNotice, onError }: SecretaryAttendancePanelProps) {
+  const { user } = useAuth();
   const [events, setEvents] = useState<EventRecord[]>([]);
   const [selectedEventId, setSelectedEventId] = useState<number | null>(null);
   const [roster, setRoster] = useState<AttendanceRecord[]>([]);
@@ -42,6 +45,7 @@ export default function SecretaryAttendancePanel({ onNotice, onError }: Secretar
   const [lastResolvedRecord, setLastResolvedRecord] = useState<ScanResultRecord | null>(null);
   const [recentResolvedRecords, setRecentResolvedRecords] = useState<ScanResultRecord[]>([]);
   const [shutterActive, setShutterActive] = useState(false);
+  const [deletingRoster, setDeletingRoster] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -53,6 +57,7 @@ export default function SecretaryAttendancePanel({ onNotice, onError }: Secretar
 
   const selectedEvent = events.find((item) => item.id === selectedEventId) ?? null;
   const visibleRoster = selectedEventId ? roster : [];
+  const canDeleteAttendanceLists = isAdminUser(user);
 
   const sanitizeCsvValue = (value: string | number | null | undefined) => {
     const text = String(value ?? "").replace(/"/g, '""');
@@ -127,6 +132,35 @@ export default function SecretaryAttendancePanel({ onNotice, onError }: Secretar
       ]),
     );
     onNotice("Recent scan export started.");
+  };
+
+  const deleteAttendanceList = async () => {
+    if (!selectedEventId || !selectedEvent) {
+      onError("Choose an event before deleting attendance.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Delete the entire attendance list for "${selectedEvent.title}"? This removes ${visibleRoster.length} recorded attendance entr${visibleRoster.length === 1 ? "y" : "ies"}.`,
+    );
+    if (!confirmed) return;
+
+    setDeletingRoster(true);
+    try {
+      const res = await api.delete<{ message?: string }>(`/attendance/events/${selectedEventId}/records`);
+      setRoster([]);
+      setLastResolvedRecord(null);
+      setRecentResolvedRecords([]);
+      onNotice(res.data?.message ?? "Attendance list deleted.");
+      await loadEvents();
+    } catch (err) {
+      const message = axios.isAxiosError(err)
+        ? ((err.response?.data as { message?: string } | undefined)?.message ?? "Unable to delete attendance list.")
+        : "Unable to delete attendance list.";
+      onError(message);
+    } finally {
+      setDeletingRoster(false);
+    }
   };
 
   const loadEvents = useCallback(async () => {
@@ -517,6 +551,16 @@ export default function SecretaryAttendancePanel({ onNotice, onError }: Secretar
           >
             Export Attendance Roster CSV
           </button>
+          {canDeleteAttendanceLists && (
+            <button
+              type="button"
+              className="rounded-md border border-red-300/35 px-3 py-2 text-sm text-red-100 disabled:opacity-50"
+              onClick={() => void deleteAttendanceList()}
+              disabled={!selectedEventId || visibleRoster.length === 0 || deletingRoster}
+            >
+              {deletingRoster ? "Deleting..." : "Delete Attendance List"}
+            </button>
+          )}
         </div>
         <div className="mt-4 overflow-x-auto rounded-xl border border-white/15">
           <table className="min-w-full text-sm text-offwhite">

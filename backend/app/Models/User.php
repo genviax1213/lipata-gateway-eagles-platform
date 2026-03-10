@@ -123,6 +123,10 @@ class User extends Authenticatable
             return true;
         }
 
+        if ($this->hasCmsPermission($permission)) {
+            return true;
+        }
+
         if ($this->hasFinancePermission($permission)) {
             return true;
         }
@@ -144,6 +148,31 @@ class User extends Authenticatable
         };
 
         return in_array($permission, $permissions, true);
+    }
+
+    private function hasCmsPermission(string $permission): bool
+    {
+        if (!in_array($permission, ['posts.create', 'posts.update'], true)) {
+            return false;
+        }
+
+        $primaryRole = (string) ($this->role?->name ?? '');
+        $financeRole = (string) ($this->finance_role ?? '');
+
+        if (in_array($primaryRole, [
+            RoleHierarchy::SUPERADMIN,
+            RoleHierarchy::ADMIN,
+            RoleHierarchy::OFFICER,
+            RoleHierarchy::SECRETARY,
+            RoleHierarchy::MEMBERSHIP_CHAIRMAN,
+        ], true)) {
+            return true;
+        }
+
+        return in_array($financeRole, [
+            RoleHierarchy::FINANCE_TREASURER,
+            RoleHierarchy::FINANCE_AUDITOR,
+        ], true);
     }
 
     private function hasForumPermission(string $permission): bool

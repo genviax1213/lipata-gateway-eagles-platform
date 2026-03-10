@@ -22,8 +22,11 @@ use App\Http\Controllers\IdentityQrController;
 use App\Http\Controllers\CalendarEventController;
 use App\Http\Controllers\AttendanceController;
 use App\Http\Controllers\DirectoryExportController;
+use App\Http\Controllers\HomepageVideoController;
+use App\Models\Post;
 
 Route::prefix('v1')->group(function () {
+    Route::get('/content/homepage-reputation-video', [HomepageVideoController::class, 'show']);
     Route::get('/content/homepage-community', [PostController::class, 'publicHomepageCommunity']);
     Route::get('/content/{section}', [PostController::class, 'publicBySection']);
     Route::get('/content/post/{slug}', [PostController::class, 'publicBySlug']);
@@ -58,7 +61,9 @@ Route::prefix('v1')->group(function () {
     Route::middleware(['auth:sanctum', 'active.session'])->group(function () {
 
         Route::get('/user', function (Request $request) {
-            return $request->user()->load('role.permissions:id,name');
+            $user = $request->user()->load('role.permissions:id,name');
+            $user->setAttribute('has_authored_posts', Post::query()->where('author_id', $user->id)->exists());
+            return $user;
         });
         Route::post('/logout', [AuthController::class, 'logout']);
         Route::post('/auth/change-password', [AuthController::class, 'changePassword']);
@@ -80,6 +85,9 @@ Route::prefix('v1')->group(function () {
         Route::delete('/calendar/events/{calendarEvent}', [CalendarEventController::class, 'destroy'])->middleware('portal.permission:calendar.manage');
         Route::get('/attendance/events/{calendarEvent}/records', [AttendanceController::class, 'roster'])->middleware('portal.permission:attendance.view');
         Route::post('/attendance/events/{calendarEvent}/scan', [AttendanceController::class, 'scan'])->middleware('portal.permission:attendance.scan');
+        Route::delete('/attendance/events/{calendarEvent}/records', [AttendanceController::class, 'destroyRoster']);
+        Route::get('/homepage/reputation-video', [HomepageVideoController::class, 'show']);
+        Route::put('/homepage/reputation-video', [HomepageVideoController::class, 'update']);
         Route::get('/directory/exports/members', [DirectoryExportController::class, 'exportMembers'])->middleware('portal.permission:directory.export');
         Route::get('/directory/exports/applicants', [DirectoryExportController::class, 'exportApplicants'])->middleware('portal.permission:directory.export');
         Route::get('/directory/exports/member-photos', [DirectoryExportController::class, 'exportMemberPhotosZip'])->middleware('portal.permission:photos.export');
@@ -89,15 +97,15 @@ Route::prefix('v1')->group(function () {
         Route::get('/formal-photos/directory', [FormalPhotoController::class, 'indexDirectory'])->name('formal-photos.directory');
         Route::get('/formal-photos/{formalPhoto}/image', [FormalPhotoController::class, 'showImage'])->name('formal-photos.show-image');
 
-        Route::get('/cms/posts', [PostController::class, 'index'])->middleware('portal.permission:posts.create,posts.update,posts.delete');
-        Route::get('/cms/posts/available-images', [PostController::class, 'availableImages'])->middleware('portal.permission:posts.create,posts.update,posts.delete');
-        Route::get('/cms/posts/image-library', [PostController::class, 'imageLibrary'])->middleware('portal.permission:posts.create,posts.update,posts.delete');
-        Route::delete('/cms/posts/image-library', [PostController::class, 'deleteLibraryImage'])->middleware('portal.permission:posts.delete');
-        Route::post('/cms/posts', [PostController::class, 'store'])->middleware('portal.permission:posts.create');
-        Route::post('/cms/uploads/inline-image', [PostController::class, 'uploadInlineImage'])->middleware('portal.permission:posts.create');
-        Route::post('/cms/posts/{post}', [PostController::class, 'update'])->middleware('portal.permission:posts.update');
-        Route::put('/cms/posts/{post}', [PostController::class, 'update'])->middleware('portal.permission:posts.update');
-        Route::delete('/cms/posts/{post}', [PostController::class, 'destroy'])->middleware('portal.permission:posts.delete');
+        Route::get('/cms/posts', [PostController::class, 'index']);
+        Route::get('/cms/posts/available-images', [PostController::class, 'availableImages']);
+        Route::get('/cms/posts/image-library', [PostController::class, 'imageLibrary']);
+        Route::delete('/cms/posts/image-library', [PostController::class, 'deleteLibraryImage']);
+        Route::post('/cms/posts', [PostController::class, 'store']);
+        Route::post('/cms/uploads/inline-image', [PostController::class, 'uploadInlineImage']);
+        Route::post('/cms/posts/{post}', [PostController::class, 'update']);
+        Route::put('/cms/posts/{post}', [PostController::class, 'update']);
+        Route::delete('/cms/posts/{post}', [PostController::class, 'destroy']);
 
         Route::get('/members', [MemberController::class, 'index'])->middleware('portal.permission:members.view');
         Route::get('/members/{member}', [MemberController::class, 'show'])->middleware('portal.permission:members.view');
