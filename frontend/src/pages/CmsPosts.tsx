@@ -1387,19 +1387,19 @@ export default function CmsPosts() {
                         ? `Approved provider: ${homepageVideoPreview.provider === "youtube" ? "YouTube" : "Facebook"}`
                         : "Enter a valid YouTube or Facebook URL to activate the teaser."}
                     </p>
+                    <p className="mt-3 text-sm text-mist/72">
+                      Browser security policy can block inline provider previews here even when the video is public.
+                      Save the link, then verify it from the homepage popup or open the source directly.
+                    </p>
                     {homepageVideoPreview && (
-                      <div className="mt-4 overflow-hidden rounded-2xl border border-white/16 bg-[#061224]">
-                        <div className="relative aspect-video">
-                          <iframe
-                            src={homepageVideoPreview.embedUrl}
-                            title="Homepage reputation video preview"
-                            loading="lazy"
-                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                            allowFullScreen
-                            className="absolute inset-0 h-full w-full border-0"
-                          />
-                        </div>
-                      </div>
+                      <a
+                        href={homepageVideoPreview.canonicalUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-4 inline-flex rounded-full border border-gold/35 px-4 py-2 text-sm font-semibold text-gold-soft transition hover:bg-gold/10 hover:text-gold"
+                      >
+                        Open source video
+                      </a>
                     )}
                   </div>
                 </div>

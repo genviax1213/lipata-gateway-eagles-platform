@@ -6,7 +6,7 @@ Options -Indexes
   Header always set X-Frame-Options "DENY"
   Header always set Referrer-Policy "strict-origin-when-cross-origin"
   Header always set Permissions-Policy "accelerometer=(), camera=(self), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()"
-  Header always set Content-Security-Policy "default-src 'self'; base-uri 'self'; connect-src 'self' https: wss:; font-src 'self' data:; frame-ancestors 'none'; img-src 'self' data: blob: https:; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; form-action 'self'; upgrade-insecure-requests"
+  Header always set Content-Security-Policy "default-src 'self'; base-uri 'self'; connect-src 'self' https: wss:; font-src 'self' data:; frame-ancestors 'none'; frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://www.facebook.com; img-src 'self' data: blob: https:; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; form-action 'self'; upgrade-insecure-requests"
   Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains" env=HTTPS
 </IfModule>
 
@@ -14,25 +14,19 @@ Options -Indexes
   RewriteEngine On
   RewriteBase /
 
-  # Block direct access to the internal Laravel front controller.
   RewriteCond %{THE_REQUEST} \s/+laravel-api\.php(?:[\s?]|$) [NC]
   RewriteRule ^laravel-api\.php$ - [F,L]
 
-  # Route API/auth traffic into the Laravel backend front controller.
   RewriteRule ^(?:api|sanctum)(?:/.*)?$ /laravel-api.php [L,QSA]
 
-  # Allow public uploaded assets served from the storage symlink.
   RewriteRule ^storage(?:/.*)?$ - [L,NC]
 
-  # Deny direct access to source trees and sensitive framework files.
   RewriteRule ^(?:backend|app|bootstrap|config|database|resources|routes|storage|tests|vendor)(?:/|$) - [F,L,NC]
   RewriteRule ^(?:\.env|artisan|composer\.(?:json|lock)|package\.json|phpunit\.xml|vite\.config\.js)$ - [F,L,NC]
 
-  # Keep real frontend files/directories served directly.
   RewriteCond %{REQUEST_FILENAME} -f [OR]
   RewriteCond %{REQUEST_FILENAME} -d
   RewriteRule ^ - [L]
 
-  # SPA fallback for React Router (BrowserRouter).
   RewriteRule ^ index.html [L]
 </IfModule>

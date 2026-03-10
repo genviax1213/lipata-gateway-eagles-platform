@@ -119,7 +119,7 @@ export default function HomepageReputationVideo({
         type="button"
         className={`homepage-video-teaser surface-card card-lift reveal reveal-delay-2 ${
           layout === "desktop"
-            ? "homepage-video-teaser-desktop mx-auto w-full max-w-[17rem]"
+            ? "homepage-video-teaser-desktop mx-auto w-full max-w-[16.5rem]"
             : "homepage-video-teaser-mobile w-full"
         }`}
         onClick={() => setIsOpen(true)}
@@ -148,12 +148,6 @@ export default function HomepageReputationVideo({
               <path d="M8 6.5v11l9-5.5-9-5.5Z" />
             </svg>
           </span>
-        </div>
-        <div className="homepage-video-teaser-copy">
-          <p className="homepage-video-eyebrow">{video.eyebrow}</p>
-          <h3 className="homepage-video-title">{video.title}</h3>
-          <p className="homepage-video-caption">{video.caption}</p>
-          <span className="homepage-video-link">Watch in popup</span>
         </div>
       </button>
 
