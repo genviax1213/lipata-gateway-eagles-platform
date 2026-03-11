@@ -3,9 +3,15 @@ export interface CmsPost {
   title: string;
   slug: string;
   section: string;
+  post_type: "article" | "video";
   excerpt: string | null;
   content: string;
   image_url: string | null;
+  video_provider: "youtube" | "facebook" | null;
+  video_url: string | null;
+  video_embed_url: string | null;
+  video_thumbnail_url: string | null;
+  video_thumbnail_text: string | null;
   is_featured: boolean;
   show_on_homepage_community: boolean;
   status: "draft" | "published";

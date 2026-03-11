@@ -496,10 +496,6 @@ input::-ms-clear {
     width: 100%;
   }
 
-  .homepage-video-teaser-stack {
-    max-width: 19rem;
-  }
-
   .homepage-video-title {
     font-size: 1.35rem;
   }

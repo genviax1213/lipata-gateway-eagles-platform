@@ -80,6 +80,36 @@ class CmsImageLibraryTest extends TestCase
         ]);
     }
 
+    public function test_store_video_post_persists_embedded_video_fields(): void
+    {
+        $officer = $this->officerUser();
+
+        Sanctum::actingAs($officer);
+
+        $response = $this->postJson('/api/v1/cms/posts', [
+            'title' => 'Service Video',
+            'section' => 'activities',
+            'post_type' => 'video',
+            'excerpt' => 'Video caption',
+            'status' => 'published',
+            'video_url' => 'https://www.youtube.com/watch?v=xRMB5GmM-sk',
+            'video_thumbnail_text' => 'Watch the recap',
+        ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('post_type', 'video')
+            ->assertJsonPath('video_provider', 'youtube')
+            ->assertJsonPath('video_url', 'https://www.youtube.com/watch?v=xRMB5GmM-sk')
+            ->assertJsonPath('video_embed_url', 'https://www.youtube.com/embed/xRMB5GmM-sk')
+            ->assertJsonPath('video_thumbnail_text', 'Watch the recap');
+
+        $this->assertDatabaseHas('posts', [
+            'title' => 'Service Video',
+            'post_type' => 'video',
+            'video_provider' => 'youtube',
+        ]);
+    }
+
     public function test_public_post_payload_and_image_endpoint_use_api_backed_cms_image_urls(): void
     {
         $officer = $this->officerUser();

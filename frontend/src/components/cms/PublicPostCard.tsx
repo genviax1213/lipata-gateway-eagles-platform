@@ -1,0 +1,88 @@
+import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import type { CmsPost } from "../../types/cms";
+import { htmlToPlainText } from "../../utils/richText";
+import { buildVideoThumbnailCandidates } from "../../utils/video";
+
+type PublicPostCardProps = {
+  post: CmsPost;
+  readLabel?: string;
+  emptyLabel?: string;
+};
+
+function contentSnippet(value: string, max = 180): string {
+  const plain = htmlToPlainText(value).replace(/\s+/g, " ").trim();
+  if (plain.length <= max) return plain;
+  return `${plain.slice(0, max).trim()}...`;
+}
+
+export default function PublicPostCard({
+  post,
+  readLabel = "Read Article",
+  emptyLabel = "No cover image",
+}: PublicPostCardProps) {
+  const [thumbnailIndex, setThumbnailIndex] = useState(0);
+  const thumbnailCandidates = useMemo(
+    () => buildVideoThumbnailCandidates({
+      thumbnailUrl: post.video_thumbnail_url,
+      sourceUrl: post.video_url,
+      embedUrl: post.video_embed_url,
+    }),
+    [post.video_embed_url, post.video_thumbnail_url, post.video_url],
+  );
+  const videoThumbnailUrl = thumbnailCandidates[thumbnailIndex] ?? null;
+  const description = post.post_type === "video"
+    ? (post.excerpt ?? post.video_thumbnail_text ?? "Watch the LGEC video post.")
+    : (post.excerpt ?? contentSnippet(post.content));
+
+  return (
+    <article className="surface-card card-lift group h-full overflow-hidden p-4">
+      {post.post_type === "video" ? (
+        <div className="mb-4 relative overflow-hidden rounded-md">
+          {videoThumbnailUrl ? (
+            <img
+              src={videoThumbnailUrl}
+              alt={post.title}
+              className="h-44 w-full rounded-md object-cover"
+              onError={() => {
+                setThumbnailIndex((current) => (
+                  current >= thumbnailCandidates.length - 1 ? current : current + 1
+                ));
+              }}
+            />
+          ) : (
+            <div className="flex h-44 w-full items-center justify-center rounded-md bg-[radial-gradient(circle_at_top,rgba(243,219,152,0.18),transparent_45%),linear-gradient(150deg,rgba(9,24,46,0.96),rgba(20,48,88,0.85))] text-sm text-mist/85">
+              {emptyLabel}
+            </div>
+          )}
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-ink/80 via-ink/25 to-transparent" />
+          <div className="pointer-events-none absolute bottom-3 right-3 inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/20 bg-gold/90 text-ink shadow-[0_12px_24px_rgba(2,6,23,0.35)]">
+            <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current" focusable="false">
+              <path d="M8 6.5v11l9-5.5-9-5.5Z" />
+            </svg>
+          </div>
+        </div>
+      ) : post.image_url ? (
+        <img
+          src={post.image_url}
+          alt={post.title}
+          className="mb-4 h-44 w-full rounded-md object-cover"
+        />
+      ) : (
+        <div className="mb-4 flex h-44 w-full items-center justify-center rounded-md bg-white/5 text-sm text-mist/75">
+          {emptyLabel}
+        </div>
+      )}
+
+      <h2 className="font-heading text-2xl text-offwhite group-hover:text-gold-soft">{post.title}</h2>
+      <p className="mt-2 text-sm text-mist/85">{description}</p>
+      {post.slug && (
+        <div className="mt-4">
+          <Link to={`/news/${post.slug}`} className="btn-secondary">
+            {post.post_type === "video" ? "Watch Video" : readLabel}
+          </Link>
+        </div>
+      )}
+    </article>
+  );
+}

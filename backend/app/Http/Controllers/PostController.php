@@ -9,6 +9,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class PostController extends Controller
 {
@@ -27,13 +29,18 @@ class PostController extends Controller
             ->latest('published_at')
             ->latest('id');
 
+        if ($request->filled('post_type')) {
+            $query->where('post_type', $request->string('post_type'));
+        }
+
         if ($request->filled('q')) {
             $term = trim((string) $request->string('q'));
             $query->where(function ($q) use ($term) {
                 $q->where('title', 'like', "%{$term}%")
                     ->orWhere('slug', 'like', "%{$term}%")
                     ->orWhere('excerpt', 'like', "%{$term}%")
-                    ->orWhere('content', 'like', "%{$term}%");
+                    ->orWhere('content', 'like', "%{$term}%")
+                    ->orWhere('video_thumbnail_text', 'like', "%{$term}%");
             });
         }
 
@@ -115,12 +122,17 @@ class PostController extends Controller
             $query->where('section', $request->string('section'));
         }
 
+        if ($request->filled('post_type')) {
+            $query->where('post_type', $request->string('post_type'));
+        }
+
         if ($request->filled('q')) {
             $term = trim((string) $request->string('q'));
             $query->where(function ($q) use ($term) {
                 $q->where('title', 'like', "%{$term}%")
                     ->orWhere('slug', 'like', "%{$term}%")
-                    ->orWhere('excerpt', 'like', "%{$term}%");
+                    ->orWhere('excerpt', 'like', "%{$term}%")
+                    ->orWhere('video_thumbnail_text', 'like', "%{$term}%");
             });
         }
 
@@ -230,23 +242,34 @@ class PostController extends Controller
         $validated = $request->validate([
             'title' => 'required|string|max:160',
             'section' => 'required|string|max:80',
+            'post_type' => 'sometimes|in:article,video',
             'excerpt' => 'nullable|string|max:300',
-            'content' => 'required|string|max:' . self::MAX_RICH_CONTENT_CHARS,
+            'content' => [
+                Rule::requiredIf(fn () => $request->input('post_type', 'article') !== 'video'),
+                'nullable',
+                'string',
+                'max:' . self::MAX_RICH_CONTENT_CHARS,
+            ],
             'is_featured' => 'sometimes|boolean',
             'show_on_homepage_community' => 'sometimes|boolean',
             'status' => 'required|in:draft,published',
             'published_at' => 'nullable|date',
             'image' => 'nullable|image|max:' . $this->maxCmsImageKb(),
             'selected_image_path' => 'nullable|string|max:255',
+            'video_url' => 'nullable|string|max:2048',
+            'video_thumbnail_url' => 'nullable|url|max:2048',
+            'video_thumbnail_text' => 'nullable|string|max:120',
         ], $this->cmsImageValidationMessages());
 
-        $validated['content'] = $this->sanitizeRichContent($validated['content']);
+        $validated['post_type'] = $validated['post_type'] ?? 'article';
+        $validated['content'] = $this->sanitizeRichContent((string) ($validated['content'] ?? ''));
+        $this->applyVideoPayload($validated);
 
         $slug = Str::slug($validated['title']);
         $validated['slug'] = $this->uniqueSlug($slug);
         $validated['author_id'] = $request->user()->id;
 
-        if ($request->hasFile('image')) {
+        if ($validated['post_type'] !== 'video' && $request->hasFile('image')) {
             $validated['image_path'] = ImageUploadOptimizer::storeOptimizedOrOriginal(
                 $request->file('image'),
                 'posts',
@@ -258,7 +281,7 @@ class PostController extends Controller
                 $this->targetCmsImageBytes()
             );
             $this->mirrorCmsImagePath($validated['image_path']);
-        } elseif (array_key_exists('selected_image_path', $validated)) {
+        } elseif ($validated['post_type'] !== 'video' && array_key_exists('selected_image_path', $validated)) {
             $selectedImagePath = $this->normalizeStorageImagePath($validated['selected_image_path']);
             if ($selectedImagePath && $this->isSelectableLibraryImage($selectedImagePath)) {
                 $validated['image_path'] = $selectedImagePath;
@@ -268,6 +291,10 @@ class PostController extends Controller
                     'message' => 'Selected image is not available. Please pick one from the image library list.',
                 ], 422);
             }
+        }
+
+        if ($validated['post_type'] === 'video') {
+            $validated['image_path'] = null;
         }
 
         $post = Post::create($validated);
@@ -286,23 +313,34 @@ class PostController extends Controller
         $validated = $request->validate([
             'title' => 'required|string|max:160',
             'section' => 'required|string|max:80',
+            'post_type' => 'sometimes|in:article,video',
             'excerpt' => 'nullable|string|max:300',
-            'content' => 'required|string|max:' . self::MAX_RICH_CONTENT_CHARS,
+            'content' => [
+                Rule::requiredIf(fn () => $request->input('post_type', $post->post_type ?? 'article') !== 'video'),
+                'nullable',
+                'string',
+                'max:' . self::MAX_RICH_CONTENT_CHARS,
+            ],
             'is_featured' => 'sometimes|boolean',
             'show_on_homepage_community' => 'sometimes|boolean',
             'status' => 'required|in:draft,published',
             'published_at' => 'nullable|date',
             'image' => 'nullable|image|max:' . $this->maxCmsImageKb(),
             'selected_image_path' => 'nullable|string|max:255',
+            'video_url' => 'nullable|string|max:2048',
+            'video_thumbnail_url' => 'nullable|url|max:2048',
+            'video_thumbnail_text' => 'nullable|string|max:120',
         ], $this->cmsImageValidationMessages());
 
-        $validated['content'] = $this->sanitizeRichContent($validated['content']);
+        $validated['post_type'] = $validated['post_type'] ?? ($post->post_type ?: 'article');
+        $validated['content'] = $this->sanitizeRichContent((string) ($validated['content'] ?? ''));
+        $this->applyVideoPayload($validated);
 
         if ($validated['title'] !== $post->title) {
             $post->slug = $this->uniqueSlug(Str::slug($validated['title']), $post->id);
         }
 
-        if ($request->hasFile('image')) {
+        if ($validated['post_type'] !== 'video' && $request->hasFile('image')) {
             $validated['image_path'] = ImageUploadOptimizer::storeOptimizedOrOriginal(
                 $request->file('image'),
                 'posts',
@@ -314,7 +352,7 @@ class PostController extends Controller
                 $this->targetCmsImageBytes()
             );
             $this->mirrorCmsImagePath($validated['image_path']);
-        } elseif (array_key_exists('selected_image_path', $validated)) {
+        } elseif ($validated['post_type'] !== 'video' && array_key_exists('selected_image_path', $validated)) {
             $selectedImagePath = $this->normalizeStorageImagePath($validated['selected_image_path']);
             if ($selectedImagePath && $this->isSelectableLibraryImage($selectedImagePath)) {
                 $validated['image_path'] = $selectedImagePath;
@@ -324,6 +362,10 @@ class PostController extends Controller
                     'message' => 'Selected image is not available. Please pick one from the image library list.',
                 ], 422);
             }
+        }
+
+        if ($validated['post_type'] === 'video') {
+            $validated['image_path'] = null;
         }
 
         $post->fill($validated);
@@ -426,9 +468,15 @@ class PostController extends Controller
             'title' => $post->title,
             'slug' => $post->slug,
             'section' => $post->section,
+            'post_type' => $post->post_type ?: 'article',
             'excerpt' => $post->excerpt,
             'content' => $this->rewriteCmsImageUrls((string) $post->content),
             'image_url' => $this->cmsImageUrl($post->image_path),
+            'video_provider' => $post->video_provider,
+            'video_url' => $post->video_source_url,
+            'video_embed_url' => $post->video_embed_url,
+            'video_thumbnail_url' => $post->video_thumbnail_url,
+            'video_thumbnail_text' => $post->video_thumbnail_text,
             'is_featured' => (bool) $post->is_featured,
             'show_on_homepage_community' => (bool) $post->show_on_homepage_community,
             'status' => $post->status,
@@ -447,6 +495,32 @@ class PostController extends Controller
         }
 
         return $data;
+    }
+
+    private function applyVideoPayload(array &$validated): void
+    {
+        if (($validated['post_type'] ?? 'article') !== 'video') {
+            $validated['video_provider'] = null;
+            $validated['video_source_url'] = null;
+            $validated['video_embed_url'] = null;
+            $validated['video_thumbnail_url'] = null;
+            $validated['video_thumbnail_text'] = null;
+            return;
+        }
+
+        $embed = EmbeddedVideo::fromInputUrl($validated['video_url'] ?? null);
+        if (!$embed) {
+            throw ValidationException::withMessages([
+                'video_url' => 'Video posts require a valid YouTube or Facebook URL.',
+            ]);
+        }
+
+        $validated['video_provider'] = $embed['provider'];
+        $validated['video_source_url'] = $embed['source_url'];
+        $validated['video_embed_url'] = $embed['embed_url'];
+        $validated['video_thumbnail_url'] = trim((string) ($validated['video_thumbnail_url'] ?? '')) ?: null;
+        $validated['video_thumbnail_text'] = trim((string) ($validated['video_thumbnail_text'] ?? '')) ?: null;
+        $validated['content'] = '';
     }
 
     private function cmsImageUrl(?string $imagePath): ?string

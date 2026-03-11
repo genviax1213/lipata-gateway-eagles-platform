@@ -1,14 +1,7 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import api from "../services/api";
 import type { CmsPost } from "../types/cms";
-import { htmlToPlainText } from "../utils/richText";
-
-function contentSnippet(value: string, max = 180): string {
-  const plain = htmlToPlainText(value);
-  if (plain.length <= max) return plain;
-  return `${plain.slice(0, max).trim()}...`;
-}
+import PublicPostCard from "../components/cms/PublicPostCard";
 
 export default function Activities() {
   const [posts, setPosts] = useState<CmsPost[]>([]);
@@ -129,29 +122,8 @@ export default function Activities() {
       {!loading && (
         <div className="grid gap-6 md:grid-cols-3">
           {posts.map((post) => (
-              <article key={post.id} className="surface-card card-lift group h-full p-6">
-                {post.image_url && (
-                  <img
-                    src={post.image_url}
-                    alt={post.title}
-                    className="mb-4 h-44 w-full rounded-md object-cover"
-                  />
-                )}
-                <h3 className="mb-3 font-heading text-2xl text-offwhite group-hover:text-gold-soft">
-                  {post.title}
-                </h3>
-                <p className="text-sm leading-relaxed text-mist/90">
-                  {post.excerpt ?? contentSnippet(post.content)}
-                </p>
-                {post.slug && (
-                  <div className="mt-4">
-                    <Link to={`/news/${post.slug}`} className="btn-secondary">
-                      Read Article
-                    </Link>
-                  </div>
-                )}
-              </article>
-            ))}
+            <PublicPostCard key={post.id} post={post} />
+          ))}
         </div>
       )}
 

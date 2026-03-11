@@ -8,6 +8,7 @@ import { hasPermission } from "../utils/auth";
 import FileSelectionPreview from "../components/FileSelectionPreview";
 import RichTextEditor from "../components/RichTextEditor";
 import { htmlToPlainText, parseApprovedVideoEmbed, sanitizeRichHtml } from "../utils/richText";
+import { buildVideoThumbnailCandidates } from "../utils/video";
 
 const sectionOptions = [
   "homepage_hero",
@@ -35,8 +36,12 @@ const CROP_OUTPUT_HEIGHT = 1080;
 type FormState = {
   title: string;
   section: string;
+  post_type: "article" | "video";
   excerpt: string;
   content: string;
+  video_url: string;
+  video_thumbnail_url: string;
+  video_thumbnail_text: string;
   status: "draft" | "published";
   is_featured: boolean;
   show_on_homepage_community: boolean;
@@ -103,8 +108,12 @@ type CmsTab = "editor" | "images" | "preview" | "posts" | "homepage";
 const initialForm: FormState = {
   title: "",
   section: "activities",
+  post_type: "article",
   excerpt: "",
   content: "",
+  video_url: "",
+  video_thumbnail_url: "",
+  video_thumbnail_text: "",
   status: "published",
   is_featured: false,
   show_on_homepage_community: false,
@@ -341,6 +350,8 @@ export default function CmsPosts() {
   const canDeletePosts = hasPermission(user, "posts.delete") || roleName === "superadmin" || roleName === "admin";
   const canManageHomepageVideo = roleName === "superadmin" || roleName === "admin";
   const [activeTab, setActiveTab] = useState<CmsTab>(limitedMode ? "posts" : "editor");
+  const [editorMode, setEditorMode] = useState<"article" | "video">("article");
+  const [postsMode, setPostsMode] = useState<"article" | "video">("article");
   const [posts, setPosts] = useState<CmsPost[]>([]);
   const [postsMeta, setPostsMeta] = useState<PaginatedMeta>({ current_page: 1, last_page: 1, per_page: 12, total: 0 });
   const [postsLoaded, setPostsLoaded] = useState(false);
@@ -389,6 +400,14 @@ export default function CmsPosts() {
     : { width: CROP_FRAME_WIDTH, height: CROP_FRAME_HEIGHT };
 
   const previewHtml = useMemo(() => sanitizeRichHtml(form.content), [form.content]);
+  const previewVideoThumbnailUrl = useMemo(
+    () => buildVideoThumbnailCandidates({
+      thumbnailUrl: form.video_thumbnail_url,
+      sourceUrl: form.video_url,
+      embedUrl: "",
+    })[0] ?? "",
+    [form.video_thumbnail_url, form.video_url],
+  );
   const homepageVideoPreviews = useMemo(
     () => homepageVideoSlots.map((slot) => parseApprovedVideoEmbed(slot.video_url)),
     [homepageVideoSlots],
@@ -402,12 +421,15 @@ export default function CmsPosts() {
     return (
       form.title.trim() !== "" ||
       form.excerpt.trim() !== "" ||
+      form.video_url.trim() !== "" ||
+      form.video_thumbnail_url.trim() !== "" ||
+      form.video_thumbnail_text.trim() !== "" ||
       htmlToPlainText(form.content).trim() !== "" ||
       form.image !== null ||
       form.selected_image_path !== "" ||
       sourceImage !== null
     );
-  }, [editingId, form.title, form.excerpt, form.content, form.image, form.selected_image_path, sourceImage]);
+  }, [editingId, form.title, form.excerpt, form.video_url, form.video_thumbnail_url, form.video_thumbnail_text, form.content, form.image, form.selected_image_path, sourceImage]);
   const submitDisabled = saving
     || processingImage
     || (!editingId && !canCreatePosts)
@@ -452,12 +474,13 @@ export default function CmsPosts() {
     return form.content.includes(image.url) || form.content.includes(image.path);
   }
 
-  const fetchPosts = useCallback(async (page = 1, overrides?: { q?: string; section?: string }) => {
+  const fetchPosts = useCallback(async (page = 1, overrides?: { q?: string; section?: string; post_type?: "article" | "video" }) => {
     const params = {
       page,
       per_page: 12,
       q: overrides?.q ?? (appliedPostQuery || undefined),
       section: overrides?.section ?? (appliedPostSectionFilter || undefined),
+      post_type: overrides?.post_type ?? postsMode,
     };
     const res = await api.get<PaginatedResponse<CmsPost>>("/cms/posts", { params });
     setPosts(Array.isArray(res.data?.data) ? res.data.data : []);
@@ -468,7 +491,7 @@ export default function CmsPosts() {
       total: Number(res.data?.total ?? 0),
     });
     setPostsLoaded(true);
-  }, [appliedPostQuery, appliedPostSectionFilter]);
+  }, [appliedPostQuery, appliedPostSectionFilter, postsMode]);
 
   const fetchAvailableImages = useCallback(async (page = 1, overrides?: { q?: string; linkState?: "all" | "linked" | "unlinked" }) => {
     const params = {
@@ -587,6 +610,7 @@ export default function CmsPosts() {
       await fetchPosts(page, {
         q: appliedPostQuery,
         section: appliedPostSectionFilter,
+        post_type: postsMode,
       });
     } catch {
       setError("Unable to load CMS posts.");
@@ -603,6 +627,7 @@ export default function CmsPosts() {
       await fetchPosts(1, {
         q: nextQuery,
         section: nextSection,
+        post_type: postsMode,
       });
     } catch {
       setError("Unable to load CMS posts.");
@@ -646,6 +671,11 @@ export default function CmsPosts() {
       void runPostSearch(1);
     }
   }, [activeTab, canManageCmsPosts, imagesLoaded, limitedMode, postsLoaded, runImageSearch, runPostSearch]);
+
+  useEffect(() => {
+    if (activeTab !== "posts" || !postsLoaded) return;
+    void runPostSearch(1);
+  }, [activeTab, postsLoaded, postsMode, runPostSearch]);
 
   const loadHomepageVideo = useCallback(async () => {
     if (!canManageHomepageVideo) return;
@@ -840,6 +870,7 @@ export default function CmsPosts() {
 
   function resetForm() {
     setForm(initialForm);
+    setEditorMode("article");
     setSelectedCoverImage(null);
     setProcessedImageMeta(null);
     setSourceImage(null);
@@ -866,11 +897,16 @@ export default function CmsPosts() {
 
     setEditingId(post.id);
     setActiveTab("editor");
+    setEditorMode(post.post_type);
     setForm({
       title: post.title,
       section: post.section,
+      post_type: post.post_type,
       excerpt: post.excerpt ?? "",
       content: post.content,
+      video_url: post.video_url ?? "",
+      video_thumbnail_url: post.video_thumbnail_url ?? "",
+      video_thumbnail_text: post.video_thumbnail_text ?? "",
       status: post.status,
       is_featured: post.is_featured,
       show_on_homepage_community: post.show_on_homepage_community,
@@ -911,8 +947,12 @@ export default function CmsPosts() {
       const basePayload = {
         title: form.title,
         section: form.section,
+        post_type: form.post_type,
         excerpt: form.excerpt,
         content: form.content,
+        video_url: form.post_type === "video" ? form.video_url : "",
+        video_thumbnail_url: form.post_type === "video" ? form.video_thumbnail_url : "",
+        video_thumbnail_text: form.post_type === "video" ? form.video_thumbnail_text : "",
         status: form.status,
         is_featured: form.is_featured ? 1 : 0,
         show_on_homepage_community: form.show_on_homepage_community ? 1 : 0,
@@ -922,12 +962,16 @@ export default function CmsPosts() {
           : {}),
       };
 
-      if (imageToUpload) {
+      if (imageToUpload && form.post_type !== "video") {
         const payload = new FormData();
         payload.append("title", basePayload.title);
         payload.append("section", basePayload.section);
+        payload.append("post_type", basePayload.post_type);
         payload.append("excerpt", basePayload.excerpt);
         payload.append("content", basePayload.content);
+        payload.append("video_url", basePayload.video_url);
+        payload.append("video_thumbnail_url", basePayload.video_thumbnail_url);
+        payload.append("video_thumbnail_text", basePayload.video_thumbnail_text);
         payload.append("status", basePayload.status);
         payload.append("is_featured", String(basePayload.is_featured));
         payload.append("show_on_homepage_community", String(basePayload.show_on_homepage_community));
@@ -1060,24 +1104,62 @@ export default function CmsPosts() {
       <p className="mb-6 text-sm text-mist/85">
         {limitedMode
           ? "Review and manage only the posts you authored. Creating new posts and opening the shared image library are disabled in this mode."
-          : <>Publish articles for the website sections. Use <span className="text-gold-soft">Show on Homepage Community</span> to include an activity in the homepage carousel.</>}
+          : <>Publish article and video posts for the website sections. Use <span className="text-gold-soft">Show on Homepage Community</span> to include an activity in the homepage carousel.</>}
       </p>
 
       {error && <p className="mb-4 rounded-md border border-red-300/30 bg-red-400/10 px-4 py-2 text-sm text-red-200">{error}</p>}
       {message && <p className="mb-4 rounded-md border border-gold/30 bg-gold/10 px-4 py-2 text-sm text-gold-soft">{message}</p>}
       <div className="mb-6 flex flex-wrap gap-2">
         {([
-          ...((!limitedMode || editingId !== null) ? [["editor", editingId ? "Edit Post" : "Create Post"]] as const : []),
+          ...((!limitedMode || editingId !== null) ? [["editor-article", editingId && form.post_type === "article" ? "Edit Article" : "Create Article"]] as const : []),
+          ...((!limitedMode || editingId !== null) ? [["editor-video", editingId && form.post_type === "video" ? "Edit Video" : "Create Video"]] as const : []),
           ...(canManageHomepageVideo && !limitedMode ? [["homepage", "Homepage Video"]] as const : []),
           ...(!limitedMode ? [["images", "Image Library"]] as const : []),
           ["preview", "Live Preview"],
-          ["posts", limitedMode ? "My Posts" : "Posts"],
+          ["posts-article", limitedMode ? "My Articles" : "Articles"],
+          ["posts-video", limitedMode ? "My Videos" : "Videos"],
         ] as const).map(([tab, label]) => (
           <button
             key={tab}
             type="button"
-            onClick={() => setActiveTab(tab)}
-            className={`rounded-md border px-4 py-2 text-sm ${activeTab === tab ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}
+            onClick={() => {
+              if (tab === "editor-article") {
+                setActiveTab("editor");
+                setEditorMode("article");
+                setForm((prev) => ({ ...prev, post_type: "article" }));
+                return;
+              }
+              if (tab === "editor-video") {
+                setActiveTab("editor");
+                setEditorMode("video");
+                setForm((prev) => ({ ...prev, post_type: "video", content: "", image: null, selected_image_path: "" }));
+                setSelectedCoverImage(null);
+                setProcessedImageMeta(null);
+                setSourceImage(null);
+                setCrop({ x: 0, y: 0, zoom: 1 });
+                return;
+              }
+              if (tab === "posts-article") {
+                setActiveTab("posts");
+                setPostsMode("article");
+                return;
+              }
+              if (tab === "posts-video") {
+                setActiveTab("posts");
+                setPostsMode("video");
+                return;
+              }
+              setActiveTab(tab as CmsTab);
+            }}
+            className={`rounded-md border px-4 py-2 text-sm ${
+              (tab === "editor-article" && activeTab === "editor" && editorMode === "article")
+              || (tab === "editor-video" && activeTab === "editor" && editorMode === "video")
+              || (tab === "posts-article" && activeTab === "posts" && postsMode === "article")
+              || (tab === "posts-video" && activeTab === "posts" && postsMode === "video")
+              || activeTab === tab
+                ? "border-gold bg-gold text-ink"
+                : "border-white/25 text-offwhite"
+            }`}
           >
             {label}
           </button>
@@ -1087,7 +1169,9 @@ export default function CmsPosts() {
       {activeTab === "editor" && (!limitedMode || editingId !== null) && (
         <div className="mb-6 rounded-xl border border-white/20 bg-white/10 p-5">
           <h2 className="mb-4 font-heading text-2xl text-offwhite">
-            {editingId ? "Edit Post" : "Create Post"}
+            {editingId
+              ? (form.post_type === "video" ? "Edit Video Post" : "Edit Article Post")
+              : (editorMode === "video" ? "Create Video Post" : "Create Article Post")}
           </h2>
 
           <div className="grid gap-4 md:grid-cols-2">
@@ -1135,7 +1219,7 @@ export default function CmsPosts() {
             aria-label="Post excerpt"
             value={form.excerpt}
             onChange={(e) => setForm((prev) => ({ ...prev, excerpt: e.target.value }))}
-            placeholder="Short excerpt (optional, up to 300 characters)"
+            placeholder={form.post_type === "video" ? "Short video caption (optional, up to 300 characters)" : "Short excerpt (optional, up to 300 characters)"}
             rows={3}
             maxLength={300}
             className="rounded-md border border-white/25 bg-white/10 px-4 py-2.5 text-offwhite placeholder:text-mist/70 md:col-span-2"
@@ -1144,43 +1228,75 @@ export default function CmsPosts() {
             Excerpt: {excerptChars}/300
           </p>
 
-          <RichTextEditor
-            value={form.content}
-            onChange={(html) => setForm((prev) => ({ ...prev, content: html }))}
-            onUploadImage={uploadInlineImage}
-            onPickExistingImage={pickExistingInlineImage}
-            disabled={saving || processingImage}
-          />
-          <p className="md:col-span-2 -mt-2 text-right text-xs text-mist/75">
-            Content: {contentWords.toLocaleString()} words · {contentChars.toLocaleString()} text characters
-            <span className="ml-2 text-gold-soft">(Rich text enabled: headings, links, lists, inline images, YouTube/Facebook video links)</span>
-          </p>
+          {form.post_type === "article" ? (
+            <>
+              <RichTextEditor
+                value={form.content}
+                onChange={(html) => setForm((prev) => ({ ...prev, content: html }))}
+                onUploadImage={uploadInlineImage}
+                onPickExistingImage={pickExistingInlineImage}
+                disabled={saving || processingImage}
+              />
+              <p className="md:col-span-2 -mt-2 text-right text-xs text-mist/75">
+                Content: {contentWords.toLocaleString()} words · {contentChars.toLocaleString()} text characters
+                <span className="ml-2 text-gold-soft">(Rich text enabled: headings, links, lists, inline images, YouTube/Facebook video links)</span>
+              </p>
 
-          <div className="md:col-span-2 text-sm text-offwhite">
-            <span className="mb-2 block font-medium">Upload Cover Image</span>
-            <span className="mb-3 block text-xs text-mist/75">
-              This image is used as the post card/header image. Inline article images should be inserted from the rich text editor toolbar.
-            </span>
-            <FileSelectionPreview
-              id="post-cover-image-upload"
-              label="Cover Image File"
-              accept="image/*"
-              file={sourceImage?.file ?? null}
-              buttonLabel="Choose Cover Image"
-              helperText="After selection, drag inside the crop frame below. The saved cover is cropped to 16:9 and resized to 1920x1080 before upload."
-              onChange={(file) => {
-                if (file) {
-                  setForm((prev) => ({ ...prev, selected_image_path: "" }));
-                  setSelectedCoverImage(null);
-                }
-                void handleImageChange(file);
-              }}
-              onClear={() => {
-                void handleImageChange(null);
-              }}
-            />
-          </div>
-          {selectedLibraryImage && (
+              <div className="md:col-span-2 text-sm text-offwhite">
+                <span className="mb-2 block font-medium">Upload Cover Image</span>
+                <span className="mb-3 block text-xs text-mist/75">
+                  This image is used as the post card/header image. Inline article images should be inserted from the rich text editor toolbar.
+                </span>
+                <FileSelectionPreview
+                  id="post-cover-image-upload"
+                  label="Cover Image File"
+                  accept="image/*"
+                  file={sourceImage?.file ?? null}
+                  buttonLabel="Choose Cover Image"
+                  helperText="After selection, drag inside the crop frame below. The saved cover is cropped to 16:9 and resized to 1920x1080 before upload."
+                  onChange={(file) => {
+                    if (file) {
+                      setForm((prev) => ({ ...prev, selected_image_path: "" }));
+                      setSelectedCoverImage(null);
+                    }
+                    void handleImageChange(file);
+                  }}
+                  onClear={() => {
+                    void handleImageChange(null);
+                  }}
+                />
+              </div>
+            </>
+          ) : (
+            <>
+              <input
+                aria-label="Video URL"
+                value={form.video_url}
+                onChange={(e) => setForm((prev) => ({ ...prev, video_url: e.target.value }))}
+                placeholder="Paste YouTube or Facebook video URL"
+                className="rounded-md border border-white/25 bg-white/10 px-4 py-2.5 text-offwhite placeholder:text-mist/70 md:col-span-2"
+              />
+              <input
+                aria-label="Video thumbnail override URL"
+                value={form.video_thumbnail_url}
+                onChange={(e) => setForm((prev) => ({ ...prev, video_thumbnail_url: e.target.value }))}
+                placeholder="Optional thumbnail image URL override"
+                className="rounded-md border border-white/25 bg-white/10 px-4 py-2.5 text-offwhite placeholder:text-mist/70 md:col-span-2"
+              />
+              <input
+                aria-label="Video thumbnail text"
+                value={form.video_thumbnail_text}
+                onChange={(e) => setForm((prev) => ({ ...prev, video_thumbnail_text: e.target.value }))}
+                placeholder="Optional thumbnail text overlay"
+                maxLength={120}
+                className="rounded-md border border-white/25 bg-white/10 px-4 py-2.5 text-offwhite placeholder:text-mist/70 md:col-span-2"
+              />
+              <p className="md:col-span-2 -mt-2 text-right text-xs text-mist/75">
+                Video posts reuse the same public card width as articles. Activities search will match title, caption, and thumbnail text.
+              </p>
+            </>
+          )}
+          {form.post_type === "article" && selectedLibraryImage && (
             <div className="md:col-span-2 rounded-lg border border-gold/30 bg-gold/10 p-3">
               <div className="flex flex-wrap items-center gap-3">
                 <img
@@ -1210,7 +1326,7 @@ export default function CmsPosts() {
               </div>
             </div>
           )}
-          {sourceImage && sourceImageUrl && (
+          {form.post_type === "article" && sourceImage && sourceImageUrl && (
             <div className="md:col-span-2 rounded-lg border border-white/20 bg-white/5 p-3">
               <p className="mb-2 text-xs text-mist/80">
                 Drag inside the frame to choose visible area. Only the framed cover is cropped, resized to 1920x1080, and uploaded.
@@ -1262,7 +1378,7 @@ export default function CmsPosts() {
               </div>
             </div>
           )}
-          <p className="md:col-span-2 -mt-2 text-xs text-mist/75">
+          {form.post_type === "article" && <p className="md:col-span-2 -mt-2 text-xs text-mist/75">
             {processingImage && "Optimizing image for faster upload..."}
             {!processingImage && form.image && processedImageMeta && (
               <>
@@ -1279,9 +1395,9 @@ export default function CmsPosts() {
               </>
             )}
             {!processingImage && !form.image && "Selected image will be auto-resized and compressed before upload."}
-          </p>
+          </p>}
 
-          {editingId && (
+          {form.post_type === "article" && editingId && (
             <div className="md:col-span-2">
               <p className="mb-2 text-xs text-mist/80">Current image preview</p>
               {editingPost?.image_url ? (
@@ -1321,7 +1437,7 @@ export default function CmsPosts() {
             disabled={submitDisabled}
             className="btn-primary"
           >
-            {processingImage ? "Processing image..." : saving ? "Saving..." : editingId ? "Update Post" : "Publish Post"}
+            {processingImage ? "Processing image..." : saving ? "Saving..." : editingId ? `Update ${form.post_type === "video" ? "Video" : "Post"}` : `Publish ${form.post_type === "video" ? "Video" : "Post"}`}
           </button>
 
           {hasUnsavedDraft && (
@@ -1651,12 +1767,12 @@ export default function CmsPosts() {
 
       {activeTab === "preview" && (
         <div className="mb-6 rounded-xl border border-white/20 bg-white/10 p-5">
-          <h2 className="mb-4 font-heading text-2xl text-offwhite">Live Article Preview</h2>
+          <h2 className="mb-4 font-heading text-2xl text-offwhite">Live {form.post_type === "video" ? "Video" : "Article"} Preview</h2>
           <p className="mb-4 text-sm text-mist/80">
-            Preview long-form readability before publishing.
+            {form.post_type === "video" ? "Preview the public video card and detail treatment before publishing." : "Preview long-form readability before publishing."}
           </p>
 
-          <div className="mb-4 grid gap-3 rounded-lg border border-white/20 bg-white/5 p-3 md:grid-cols-[1fr_auto_auto] md:items-center">
+          {form.post_type !== "video" && <div className="mb-4 grid gap-3 rounded-lg border border-white/20 bg-white/5 p-3 md:grid-cols-[1fr_auto_auto] md:items-center">
             <div className="text-xs text-mist/80">
               Rich preview · {previewWordCount.toLocaleString()} words
             </div>
@@ -1710,15 +1826,31 @@ export default function CmsPosts() {
                 ))}
               </select>
             </div>
-          </div>
+          </div>}
 
           <article className="rounded-lg border border-white/20 bg-ink/35 p-4 md:p-6">
-            {previewImageUrl && (
+            {form.post_type === "article" && previewImageUrl && (
               <img
                 src={previewImageUrl}
                 alt={form.title || "Preview image"}
                 className="mb-5 h-56 w-full rounded-md object-cover md:h-80"
               />
+            )}
+
+            {form.post_type === "video" && (
+              <div className="mb-5 aspect-video overflow-hidden rounded-md border border-white/20 bg-[radial-gradient(circle_at_top,rgba(243,219,152,0.18),transparent_45%),linear-gradient(150deg,rgba(9,24,46,0.96),rgba(20,48,88,0.85))]">
+                {previewVideoThumbnailUrl ? (
+                  <img
+                    src={previewVideoThumbnailUrl}
+                    alt={form.title || "Video preview"}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-full items-center justify-center text-sm text-mist/80">
+                    Video thumbnail preview
+                  </div>
+                )}
+              </div>
             )}
 
             <p className="text-xs uppercase tracking-[0.22em] text-gold-soft">
@@ -1731,27 +1863,33 @@ export default function CmsPosts() {
               <p className="mt-4 text-mist/90">{form.excerpt}</p>
             )}
 
-            <div
-              className={`rich-content mt-5 leading-relaxed text-mist/90 ${previewLayout === "columns" ? "md:columns-2 xl:columns-3 md:gap-10" : "max-w-4xl"}`}
-              style={{ fontSize: `${previewFontSize}px` }}
-              dangerouslySetInnerHTML={{
-                __html: previewHtml || "<p>Article content preview will appear here.</p>",
-              }}
-            >
-            </div>
+            {form.post_type === "article" ? (
+              <div
+                className={`rich-content mt-5 leading-relaxed text-mist/90 ${previewLayout === "columns" ? "md:columns-2 xl:columns-3 md:gap-10" : "max-w-4xl"}`}
+                style={{ fontSize: `${previewFontSize}px` }}
+                dangerouslySetInnerHTML={{
+                  __html: previewHtml || "<p>Article content preview will appear here.</p>",
+                }}
+              >
+              </div>
+            ) : (
+              <div className="mt-5 text-sm text-mist/85">
+                {form.video_thumbnail_text.trim() || form.excerpt.trim() || "Video posts open as a watch page with the embedded player and optional original-video link."}
+              </div>
+            )}
           </article>
         </div>
       )}
 
       {activeTab === "posts" && (
         <div className="rounded-xl border border-white/20 bg-white/10 p-5">
-          <h2 className="mb-4 font-heading text-2xl text-offwhite">{limitedMode ? "My Posts" : "Posts"}</h2>
+          <h2 className="mb-4 font-heading text-2xl text-offwhite">{limitedMode ? `My ${postsMode === "video" ? "Videos" : "Articles"}` : `${postsMode === "video" ? "Videos" : "Articles"}`}</h2>
           <div className="mb-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_220px_auto]">
             <input
               aria-label="Post search"
               value={postQueryDraft}
               onChange={(e) => setPostQueryDraft(e.target.value)}
-              placeholder="Search title, slug, or excerpt"
+              placeholder={postsMode === "video" ? "Search title, slug, caption, or thumbnail text" : "Search title, slug, or excerpt"}
               className="rounded-md border border-white/25 bg-white/10 px-4 py-2.5 text-offwhite placeholder:text-mist/70"
             />
             <select
@@ -1781,6 +1919,7 @@ export default function CmsPosts() {
                   <thead className="bg-navy/70 text-gold-soft">
                     <tr>
                       <th className="px-4 py-3">Title</th>
+                      <th className="px-4 py-3">Type</th>
                       <th className="px-4 py-3">Image</th>
                       <th className="px-4 py-3">Content</th>
                       <th className="px-4 py-3">Section</th>
@@ -1792,8 +1931,8 @@ export default function CmsPosts() {
                   <tbody>
                     {posts.length === 0 && (
                       <tr>
-                        <td colSpan={7} className="px-4 py-8 text-center text-mist/80">
-                          {limitedMode ? "You have not authored any posts yet." : "No posts found for the current search."}
+                        <td colSpan={8} className="px-4 py-8 text-center text-mist/80">
+                          {limitedMode ? `You have not authored any ${postsMode === "video" ? "videos" : "articles"} yet.` : `No ${postsMode === "video" ? "videos" : "articles"} found for the current search.`}
                         </td>
                       </tr>
                     )}
@@ -1801,8 +1940,19 @@ export default function CmsPosts() {
                     {posts.map((post) => (
                       <tr key={post.id} className="border-t border-white/15">
                         <td className="px-4 py-3">{post.title}</td>
+                        <td className="px-4 py-3 capitalize">{post.post_type}</td>
                         <td className="px-4 py-3">
-                          {post.image_url ? (
+                          {post.post_type === "video" ? (
+                            post.video_thumbnail_url ? (
+                              <img
+                                src={post.video_thumbnail_url}
+                                alt={post.title}
+                                className="h-14 w-24 rounded border border-white/20 object-cover"
+                              />
+                            ) : (
+                              <span className="text-xs text-gold-soft">Video</span>
+                            )
+                          ) : post.image_url ? (
                             <img
                               src={post.image_url}
                               alt={post.title}
@@ -1814,7 +1964,7 @@ export default function CmsPosts() {
                         </td>
                         <td className="px-4 py-3">
                           <p className="max-w-xs line-clamp-3 text-xs text-mist/85">
-                            {post.excerpt || htmlToPlainText(post.content)}
+                            {post.excerpt || post.video_thumbnail_text || htmlToPlainText(post.content)}
                           </p>
                         </td>
                         <td className="px-4 py-3 capitalize">{post.section}</td>

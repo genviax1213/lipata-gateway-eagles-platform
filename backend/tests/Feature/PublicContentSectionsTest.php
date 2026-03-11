@@ -60,4 +60,35 @@ class PublicContentSectionsTest extends TestCase
             ->assertJsonPath('0.section', 'activities')
             ->assertJsonPath('0.show_on_homepage_community', true);
     }
+
+    public function test_public_section_search_can_return_video_posts(): void
+    {
+        $author = User::factory()->create();
+
+        Post::query()->create([
+            'title' => 'Service Recap Video',
+            'slug' => 'service-recap-video',
+            'section' => 'activities',
+            'post_type' => 'video',
+            'excerpt' => 'Short recap',
+            'content' => '',
+            'video_provider' => 'youtube',
+            'video_source_url' => 'https://www.youtube.com/watch?v=xRMB5GmM-sk',
+            'video_embed_url' => 'https://www.youtube.com/embed/xRMB5GmM-sk',
+            'video_thumbnail_text' => 'Anniversary recap',
+            'status' => 'published',
+            'published_at' => now()->subMinute(),
+            'author_id' => $author->id,
+        ]);
+
+        $response = $this->getJson('/api/v1/content/activities?q=recap');
+
+        $response
+            ->assertOk()
+            ->assertJsonCount(1)
+            ->assertJsonPath('0.post_type', 'video')
+            ->assertJsonPath('0.video_url', 'https://www.youtube.com/watch?v=xRMB5GmM-sk')
+            ->assertJsonPath('0.video_embed_url', 'https://www.youtube.com/embed/xRMB5GmM-sk')
+            ->assertJsonPath('0.video_thumbnail_text', 'Anniversary recap');
+    }
 }

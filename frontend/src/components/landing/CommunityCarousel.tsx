@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import type { CmsPost } from "../../types/cms";
+import { buildVideoThumbnailCandidates } from "../../utils/video";
 
 type CommunityCarouselProps = {
   posts: CmsPost[];
@@ -23,7 +24,20 @@ export default function CommunityCarousel({
       <div className="grid gap-4 md:grid-cols-3">
         {posts.map((post) => (
           <article key={post.id} className="surface-card card-lift p-5">
-            {post.image_url && (
+            {post.post_type === "video" ? (
+              <div className="mb-4 relative overflow-hidden rounded-md">
+                <img
+                  src={buildVideoThumbnailCandidates({
+                    thumbnailUrl: post.video_thumbnail_url,
+                    sourceUrl: post.video_url,
+                    embedUrl: post.video_embed_url,
+                  })[0] ?? "/images/lgec-logo.png"}
+                  alt={post.title}
+                  className="h-40 w-full rounded-md object-cover"
+                />
+                <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-ink/80 via-ink/20 to-transparent" />
+              </div>
+            ) : post.image_url && (
               <img
                 src={post.image_url}
                 alt={post.title}
@@ -32,12 +46,12 @@ export default function CommunityCarousel({
             )}
             <h3 className="font-heading text-2xl text-offwhite">{post.title}</h3>
             <p className="mt-2 line-clamp-2 text-sm text-mist/85">
-              {post.excerpt ?? contentSnippet(post.content)}
+              {post.excerpt ?? post.video_thumbnail_text ?? contentSnippet(post.content)}
             </p>
             {post.slug && (
               <div className="mt-4 flex flex-wrap gap-3">
                 <Link to={`/news/${post.slug}`} className="btn-secondary">
-                  Read Article
+                  {post.post_type === "video" ? "Watch Video" : "Read Article"}
                 </Link>
                 <Link to="/activities" className="rounded-md border border-white/25 px-3 py-2 text-xs text-offwhite hover:border-gold/50 hover:text-gold-soft">
                   View Activities

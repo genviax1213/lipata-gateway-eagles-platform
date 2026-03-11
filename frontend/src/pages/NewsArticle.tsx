@@ -44,8 +44,8 @@ export default function NewsArticle() {
     };
   }, [slug]);
 
-  const backTo = post?.section === "history" ? "/history" : post?.section === "news" ? "/news" : "/";
-  const backLabel = post?.section === "history" ? "Back to History" : post?.section === "news" ? "Back to News" : "Back to Homepage";
+  const backTo = post?.section === "history" ? "/history" : post?.section === "news" ? "/news" : post?.section === "activities" ? "/activities" : "/";
+  const backLabel = post?.section === "history" ? "Back to History" : post?.section === "news" ? "Back to News" : post?.section === "activities" ? "Back to Activities" : "Back to Homepage";
   const renderedHtml = useMemo(() => sanitizeRichHtml(post?.content ?? ""), [post?.content]);
   const estimatedWords = useMemo(
     () => htmlToPlainText(post?.content ?? "").split(/\s+/).filter(Boolean).length,
@@ -75,50 +75,65 @@ export default function NewsArticle() {
             </Link>
           </div>
 
-          <div className="mb-5 overflow-x-auto rounded-lg border border-white/20 bg-white/5 p-3">
-            <div className="flex min-w-max items-center gap-4">
-              <div className="text-xs text-mist/80">
-                Reading controls · {estimatedWords.toLocaleString()} words
-              </div>
+          {post.post_type !== "video" && (
+            <div className="mb-5 overflow-x-auto rounded-lg border border-white/20 bg-white/5 p-3">
+              <div className="flex min-w-max items-center gap-4">
+                <div className="text-xs text-mist/80">
+                  Reading controls · {estimatedWords.toLocaleString()} words
+                </div>
 
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setFontSize((v) => Math.max(15, v - 1))}
-                  className="rounded-md border border-white/30 px-3 py-1 text-sm"
-                >
-                  A-
-                </button>
-                <span className="text-xs text-mist/80">{fontSize}px</span>
-                <button
-                  type="button"
-                  onClick={() => setFontSize((v) => Math.min(24, v + 1))}
-                  className="rounded-md border border-white/30 px-3 py-1 text-sm"
-                >
-                  A+
-                </button>
-              </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setFontSize((v) => Math.max(15, v - 1))}
+                    className="rounded-md border border-white/30 px-3 py-1 text-sm"
+                  >
+                    A-
+                  </button>
+                  <span className="text-xs text-mist/80">{fontSize}px</span>
+                  <button
+                    type="button"
+                    onClick={() => setFontSize((v) => Math.min(24, v + 1))}
+                    className="rounded-md border border-white/30 px-3 py-1 text-sm"
+                  >
+                    A+
+                  </button>
+                </div>
 
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setLayout("single")}
-                  className={`rounded-md border px-3 py-1 text-sm ${layout === "single" ? "border-gold bg-gold text-ink" : "border-white/30 text-mist/80"}`}
-                >
-                  Single
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setLayout("columns")}
-                  className={`rounded-md border px-3 py-1 text-sm ${layout === "columns" ? "border-gold bg-gold text-ink" : "border-white/30 text-mist/80"}`}
-                >
-                  Multi
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setLayout("single")}
+                    className={`rounded-md border px-3 py-1 text-sm ${layout === "single" ? "border-gold bg-gold text-ink" : "border-white/30 text-mist/80"}`}
+                  >
+                    Single
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLayout("columns")}
+                    className={`rounded-md border px-3 py-1 text-sm ${layout === "columns" ? "border-gold bg-gold text-ink" : "border-white/30 text-mist/80"}`}
+                  >
+                    Multi
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
-          {post.image_url && (
+          {post.post_type === "video" && post.video_embed_url ? (
+            <div className="mb-6 overflow-hidden rounded-lg border border-white/20 bg-white/5">
+              <div className="aspect-video">
+                <iframe
+                  src={post.video_embed_url}
+                  title={post.title}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  allowFullScreen
+                  referrerPolicy="strict-origin-when-cross-origin"
+                  className="h-full w-full border-0"
+                />
+              </div>
+            </div>
+          ) : post.image_url && (
             <img
               src={post.image_url}
               alt={post.title}
@@ -139,11 +154,26 @@ export default function NewsArticle() {
             <p className="mt-5 text-lg text-mist/90">{post.excerpt}</p>
           )}
 
-          <div
-            className={`rich-content mt-6 text-mist/90 ${layout === "columns" ? "md:columns-2 xl:columns-3 md:gap-10" : "max-w-4xl"}`}
-            style={{ fontSize: `${fontSize}px` }}
-            dangerouslySetInnerHTML={{ __html: renderedHtml }}
-          />
+          {post.post_type !== "video" && (
+            <div
+              className={`rich-content mt-6 text-mist/90 ${layout === "columns" ? "md:columns-2 xl:columns-3 md:gap-10" : "max-w-4xl"}`}
+              style={{ fontSize: `${fontSize}px` }}
+              dangerouslySetInnerHTML={{ __html: renderedHtml }}
+            />
+          )}
+
+          {post.post_type === "video" && post.video_url && (
+            <div className="mt-6">
+              <a
+                href={post.video_url}
+                target="_blank"
+                rel="noreferrer"
+                className="btn-secondary"
+              >
+                Open Original Video
+              </a>
+            </div>
+          )}
 
           <div className="mt-8 flex flex-wrap items-center justify-between gap-4 border-t border-white/20 pt-5">
             <Link to={backTo} className="btn-secondary">
