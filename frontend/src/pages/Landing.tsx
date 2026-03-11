@@ -34,6 +34,8 @@ type HomepageVideoApiPayload = {
   sourceUrl?: unknown;
   thumbnail_url?: unknown;
   thumbnailUrl?: unknown;
+  thumbnail_text?: unknown;
+  thumbnailText?: unknown;
 };
 
 function readString(value: unknown): string | null {
@@ -64,6 +66,7 @@ function normalizeHomepageVideoItem(payload: unknown): HomepageReputationVideoDa
     embedUrl,
     sourceUrl: readString(candidate.source_url) ?? readString(candidate.sourceUrl),
     thumbnailUrl: readString(candidate.thumbnail_url) ?? readString(candidate.thumbnailUrl),
+    thumbnailText: readString(candidate.thumbnail_text) ?? readString(candidate.thumbnailText),
   };
 }
 
@@ -319,21 +322,6 @@ export default function Landing() {
               View Activities
             </Link>
           </div>
-          {homepageVideos.length > 0 ? (
-            <div
-              className={`homepage-video-stack reveal reveal-delay-2 mt-6 ${
-                homepageVideos.length === 1 ? "homepage-video-stack-single" : "homepage-video-stack-multi"
-              }`}
-            >
-              {homepageVideos.map((video, index) => (
-                <HomepageReputationVideo
-                  key={`${video.embedUrl}-${index}`}
-                  video={video}
-                  layout="stack"
-                />
-              ))}
-            </div>
-          ) : null}
           <p className="reveal reveal-delay-2 mt-5 text-sm text-mist/80">
             Already a member?{" "}
             <Link to={canonicalRoutes.login} className="font-semibold text-gold-soft hover:text-gold">
@@ -363,6 +351,22 @@ export default function Landing() {
             isLoading={heroLoading}
           />
         </aside>
+
+        {homepageVideos.length > 0 ? (
+          <div
+            className={`homepage-video-stack reveal reveal-delay-2 mt-2 lg:col-span-2 lg:mt-4 ${
+              homepageVideos.length === 1 ? "homepage-video-stack-single" : "homepage-video-stack-multi"
+            }`}
+          >
+            {homepageVideos.map((video, index) => (
+              <HomepageReputationVideo
+                key={`${video.embedUrl}-${index}`}
+                video={video}
+                layout="stack"
+              />
+            ))}
+          </div>
+        ) : null}
       </div>
 
       <div className="section-wrap relative z-10 pb-16">

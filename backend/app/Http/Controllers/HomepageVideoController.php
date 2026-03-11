@@ -32,6 +32,7 @@ class HomepageVideoController extends Controller
             'videos.*.title' => 'nullable|string|max:120',
             'videos.*.caption' => 'nullable|string|max:220',
             'videos.*.thumbnail_url' => 'nullable|url|max:2048',
+            'videos.*.thumbnail_text' => 'nullable|string|max:80',
         ]);
 
         $videos = [];
@@ -40,8 +41,9 @@ class HomepageVideoController extends Controller
             $title = trim((string) ($item['title'] ?? ''));
             $caption = trim((string) ($item['caption'] ?? ''));
             $thumbnailUrl = trim((string) ($item['thumbnail_url'] ?? ''));
+            $thumbnailText = trim((string) ($item['thumbnail_text'] ?? ''));
 
-            if ($videoUrl === '' && $title === '' && $caption === '' && $thumbnailUrl === '') {
+            if ($videoUrl === '' && $title === '' && $caption === '' && $thumbnailUrl === '' && $thumbnailText === '') {
                 continue;
             }
 
@@ -56,6 +58,7 @@ class HomepageVideoController extends Controller
                 'title' => $title !== '' ? $title : null,
                 'caption' => $caption !== '' ? $caption : null,
                 'thumbnail_url' => $thumbnailUrl !== '' ? $thumbnailUrl : null,
+                'thumbnail_text' => $thumbnailText !== '' ? $thumbnailText : null,
                 'provider' => $video['provider'] ?? null,
                 'source_url' => $video['source_url'] ?? null,
                 'embed_url' => $video['embed_url'] ?? null,
@@ -101,6 +104,7 @@ class HomepageVideoController extends Controller
                     'title' => $item['title'] ?? null,
                     'caption' => $item['caption'] ?? null,
                     'thumbnail_url' => $item['thumbnail_url'] ?? null,
+                    'thumbnail_text' => $item['thumbnail_text'] ?? null,
                     'provider' => $item['provider'] ?? null,
                     'source_url' => $item['source_url'] ?? null,
                     'embed_url' => $item['embed_url'] ?? null,
@@ -111,6 +115,7 @@ class HomepageVideoController extends Controller
                 'title' => $value['title'] ?? null,
                 'caption' => $value['caption'] ?? null,
                 'thumbnail_url' => $value['thumbnail_url'] ?? null,
+                'thumbnail_text' => $value['thumbnail_text'] ?? null,
                 'provider' => $value['provider'] ?? null,
                 'source_url' => $value['source_url'] ?? null,
                 'embed_url' => $value['embed_url'] ?? null,

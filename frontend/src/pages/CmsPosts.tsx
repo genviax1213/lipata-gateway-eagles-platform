@@ -83,6 +83,7 @@ type HomepageVideoSlotState = {
   title: string;
   caption: string;
   thumbnail_url: string;
+  thumbnail_text: string;
 };
 
 type CropState = {
@@ -117,6 +118,7 @@ const initialHomepageVideoSlot: HomepageVideoSlotState = {
   title: "",
   caption: "",
   thumbnail_url: "",
+  thumbnail_text: "",
 };
 
 function createHomepageVideoSlots(): HomepageVideoSlotState[] {
@@ -654,6 +656,7 @@ export default function CmsPosts() {
           title?: string | null;
           caption?: string | null;
           thumbnail_url?: string | null;
+          thumbnail_text?: string | null;
           source_url?: string | null;
         }>;
         updated_at?: string | null;
@@ -666,6 +669,7 @@ export default function CmsPosts() {
           title: video?.title ?? "",
           caption: video?.caption ?? "",
           thumbnail_url: video?.thumbnail_url ?? "",
+          thumbnail_text: video?.thumbnail_text ?? "",
         };
       });
       setHomepageVideoSlots(slots);
@@ -976,13 +980,20 @@ export default function CmsPosts() {
           title: slot.title.trim() || null,
           caption: slot.caption.trim() || null,
           thumbnail_url: slot.thumbnail_url.trim() || null,
+          thumbnail_text: slot.thumbnail_text.trim() || null,
         })),
       });
 
       setHomepageVideoUpdatedAt(response.data?.updated_at ?? null);
       setHomepageVideoLoaded(true);
       setMessage(
-        homepageVideoSlots.some((slot) => slot.video_url.trim() || slot.title.trim() || slot.caption.trim() || slot.thumbnail_url.trim())
+        homepageVideoSlots.some((slot) => (
+          slot.video_url.trim()
+          || slot.title.trim()
+          || slot.caption.trim()
+          || slot.thumbnail_url.trim()
+          || slot.thumbnail_text.trim()
+        ))
           ? "Homepage reputation video updated."
           : "Homepage reputation video cleared.",
       );
@@ -1405,21 +1416,42 @@ export default function CmsPosts() {
                             className="w-full rounded-md border border-white/25 bg-white/10 px-4 py-2.5 text-offwhite placeholder:text-mist/65"
                           />
                         </label>
+
+                        <label className="block text-sm text-offwhite md:col-span-2">
+                          <span className="mb-2 block text-mist/80">Thumbnail Text</span>
+                          <input
+                            value={slot.thumbnail_text}
+                            onChange={(event) => updateHomepageVideoSlot(index, "thumbnail_text", event.target.value)}
+                            placeholder="Text shown directly on the video thumbnail"
+                            maxLength={80}
+                            className="w-full rounded-md border border-white/25 bg-white/10 px-4 py-2.5 text-offwhite placeholder:text-mist/65"
+                          />
+                        </label>
                       </div>
 
                       <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,300px)_1fr]">
                         <div className="overflow-hidden rounded-2xl border border-white/18 bg-white/8">
-                          {slot.thumbnail_url ? (
-                            <img
-                              src={slot.thumbnail_url}
-                              alt={slot.title || `Homepage reputation video ${slotNumber}`}
-                              className="h-44 w-full object-cover"
-                            />
-                          ) : (
-                            <div className="flex h-44 items-center justify-center bg-[radial-gradient(circle_at_top,rgba(243,219,152,0.22),transparent_52%),linear-gradient(150deg,rgba(9,24,46,0.96),rgba(20,48,88,0.85))] text-gold-soft">
-                              Thumbnail Preview
-                            </div>
-                          )}
+                          <div className="relative h-44 overflow-hidden">
+                            {slot.thumbnail_url ? (
+                              <img
+                                src={slot.thumbnail_url}
+                                alt={slot.title || `Homepage reputation video ${slotNumber}`}
+                                className="h-full w-full object-cover"
+                              />
+                            ) : (
+                              <div className="flex h-full items-center justify-center bg-[radial-gradient(circle_at_top,rgba(243,219,152,0.22),transparent_52%),linear-gradient(150deg,rgba(9,24,46,0.96),rgba(20,48,88,0.85))] text-gold-soft">
+                                Thumbnail Preview
+                              </div>
+                            )}
+                            <div className="absolute inset-0 bg-gradient-to-t from-ink/90 via-ink/35 to-transparent" />
+                            {slot.thumbnail_text.trim() ? (
+                              <div className="absolute inset-x-0 bottom-0 p-4">
+                                <p className="text-lg font-semibold leading-tight text-offwhite drop-shadow-[0_3px_18px_rgba(2,6,23,0.85)]">
+                                  {slot.thumbnail_text.trim()}
+                                </p>
+                              </div>
+                            ) : null}
+                          </div>
                           <div className="p-4">
                             <p className="text-sm font-semibold text-offwhite">
                               {slot.title.trim() || `LGEC Highlight ${slotNumber}`}

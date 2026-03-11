@@ -9,6 +9,7 @@ export type HomepageReputationVideoData = {
   embedUrl: string;
   sourceUrl?: string | null;
   thumbnailUrl?: string | null;
+  thumbnailText?: string | null;
 };
 
 type HomepageReputationVideoProps = {
@@ -135,6 +136,11 @@ export default function HomepageReputationVideo({
             </div>
           )}
           <div className="homepage-video-teaser-overlay" aria-hidden="true" />
+          {video.thumbnailText ? (
+            <div className="homepage-video-thumbnail-copy" aria-hidden="true">
+              <span className="homepage-video-thumbnail-copy-text">{video.thumbnailText}</span>
+            </div>
+          ) : null}
           <span className="homepage-video-play-badge" aria-hidden="true">
             <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current" focusable="false">
               <path d="M8 6.5v11l9-5.5-9-5.5Z" />

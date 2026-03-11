@@ -116,6 +116,7 @@ class CmsOwnershipAndHomepageVideoTest extends TestCase
                     'video_url' => 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
                     'title' => 'LGEC Reputation',
                     'caption' => 'Service and brotherhood in action',
+                    'thumbnail_text' => 'Guardians at Work',
                 ],
                 [
                     'video_url' => 'https://www.youtube.com/watch?v=9bZkp7q19f0',
@@ -126,11 +127,13 @@ class CmsOwnershipAndHomepageVideoTest extends TestCase
         ])->assertOk()
             ->assertJsonPath('videos.0.provider', 'youtube')
             ->assertJsonPath('videos.0.embed_url', 'https://www.youtube.com/embed/dQw4w9WgXcQ')
+            ->assertJsonPath('videos.0.thumbnail_text', 'Guardians at Work')
             ->assertJsonPath('videos.1.embed_url', 'https://www.youtube.com/embed/9bZkp7q19f0');
 
         $this->getJson('/api/v1/content/homepage-reputation-video')
             ->assertOk()
             ->assertJsonPath('videos.0.title', 'LGEC Reputation')
+            ->assertJsonPath('videos.0.thumbnail_text', 'Guardians at Work')
             ->assertJsonPath('videos.0.provider', 'youtube')
             ->assertJsonCount(2, 'videos');
     }
