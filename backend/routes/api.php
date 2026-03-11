@@ -28,6 +28,7 @@ use App\Models\Post;
 Route::prefix('v1')->group(function () {
     Route::get('/content/homepage-reputation-video', [HomepageVideoController::class, 'show']);
     Route::get('/content/homepage-community', [PostController::class, 'publicHomepageCommunity']);
+    Route::get('/content/images/{path}', [PostController::class, 'showPublicImage'])->where('path', '.*');
     Route::get('/content/{section}', [PostController::class, 'publicBySection']);
     Route::get('/content/post/{slug}', [PostController::class, 'publicBySlug']);
     Route::post('/applicant-registrations', [ApplicantController::class, 'submit'])

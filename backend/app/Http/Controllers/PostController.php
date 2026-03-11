@@ -54,6 +54,25 @@ class PostController extends Controller
         return response()->json($posts->map(fn (Post $post) => $this->transform($post)));
     }
 
+    public function showPublicImage(string $path)
+    {
+        $normalized = $this->normalizeStorageImagePath($path);
+        if (!$normalized || !Storage::disk('public')->exists($normalized)) {
+            abort(404);
+        }
+
+        $headers = [
+            'Cache-Control' => 'public, max-age=3600',
+        ];
+
+        $mime = Storage::disk('public')->mimeType($normalized);
+        if (is_string($mime) && $mime !== '') {
+            $headers['Content-Type'] = $mime;
+        }
+
+        return response()->file(Storage::disk('public')->path($normalized), $headers);
+    }
+
     public function publicHomepageCommunity()
     {
         $posts = Post::query()
@@ -347,7 +366,7 @@ class PostController extends Controller
         $this->mirrorCmsImagePath($path);
 
         return response()->json([
-            'url' => asset('storage/' . $path),
+            'url' => $this->cmsImageUrl($path),
             'path' => $path,
         ], 201);
     }
@@ -408,8 +427,8 @@ class PostController extends Controller
             'slug' => $post->slug,
             'section' => $post->section,
             'excerpt' => $post->excerpt,
-            'content' => $post->content,
-            'image_url' => $this->resolveImageUrl($post->image_path),
+            'content' => $this->rewriteCmsImageUrls((string) $post->content),
+            'image_url' => $this->cmsImageUrl($post->image_path),
             'is_featured' => (bool) $post->is_featured,
             'show_on_homepage_community' => (bool) $post->show_on_homepage_community,
             'status' => $post->status,
@@ -430,10 +449,10 @@ class PostController extends Controller
         return $data;
     }
 
-    private function resolveImageUrl(?string $imagePath): ?string
+    private function cmsImageUrl(?string $imagePath): ?string
     {
-        $path = trim((string) $imagePath);
-        if ($path === '') {
+        $path = $this->normalizeStorageImagePath($imagePath);
+        if (!$path) {
             return null;
         }
 
@@ -441,7 +460,24 @@ class PostController extends Controller
             return null;
         }
 
-        return asset('storage/' . $path);
+        $root = request()?->root() ?? rtrim((string) config('app.url'), '/');
+        return rtrim($root, '/') . '/api/v1/content/images/' . $path;
+    }
+
+    private function rewriteCmsImageUrls(string $content): string
+    {
+        if ($content === '') {
+            return $content;
+        }
+
+        return (string) preg_replace_callback(
+            '/((?:https?:\/\/[^"\'\s>]+)?\/?(?:api\/v1\/content\/images\/|api\/storage\/|storage\/)(posts\/[^"\'\s<>?#]+))/i',
+            function (array $matches): string {
+                $path = $this->normalizeStorageImagePath($matches[1] ?? null);
+                return $path ? ($this->cmsImageUrl($path) ?? $matches[0]) : $matches[0];
+            },
+            $content
+        );
     }
 
     private function unlinkedPostImages(): array
@@ -471,7 +507,7 @@ class PostController extends Controller
             $library[] = [
                 'path' => $path,
                 'name' => basename($path),
-                'url' => asset('storage/' . $path),
+                'url' => $this->cmsImageUrl($path),
                 'is_linked' => count($links) > 0,
                 'links' => $links,
             ];

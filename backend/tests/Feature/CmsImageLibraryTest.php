@@ -80,6 +80,38 @@ class CmsImageLibraryTest extends TestCase
         ]);
     }
 
+    public function test_public_post_payload_and_image_endpoint_use_api_backed_cms_image_urls(): void
+    {
+        $officer = $this->officerUser();
+
+        Storage::disk('public')->put('posts/public-cover.jpg', 'cover-image');
+        Storage::disk('public')->put('posts/public-inline.jpg', 'inline-image');
+
+        $post = Post::query()->create([
+            'title' => 'Public Image Post',
+            'slug' => 'public-image-post',
+            'section' => 'news',
+            'excerpt' => 'Excerpt',
+            'content' => '<p>Body</p><img src="/storage/posts/public-inline.jpg" alt="inline" />',
+            'image_path' => 'posts/public-cover.jpg',
+            'status' => 'published',
+            'author_id' => $officer->id,
+        ]);
+
+        $response = $this->getJson('/api/v1/content/news');
+
+        $response->assertOk()
+            ->assertJsonPath('0.image_url', 'http://localhost/api/v1/content/images/posts/public-cover.jpg')
+            ->assertJsonPath('0.content', '<p>Body</p><img src="http://localhost/api/v1/content/images/posts/public-inline.jpg" alt="inline" />');
+
+        $imageResponse = $this->get('/api/v1/content/images/posts/public-cover.jpg');
+
+        $imageResponse->assertOk();
+        $this->assertSame('cover-image', file_get_contents($imageResponse->baseResponse->getFile()->getPathname()));
+
+        $this->assertSame('public-image-post', $post->fresh()?->slug);
+    }
+
     public function test_store_post_can_reuse_selected_image_path_even_when_linked(): void
     {
         $officer = $this->officerUser();
