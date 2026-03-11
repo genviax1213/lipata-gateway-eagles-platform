@@ -45,17 +45,77 @@ function buildPlaybackUrl(video: HomepageReputationVideoData): string {
   }
 }
 
+function extractYoutubeVideoId(urlValue: string | null | undefined): string | null {
+  if (!urlValue) return null;
+
+  try {
+    const url = new URL(urlValue);
+    const host = url.hostname.toLowerCase();
+
+    if (host.includes("youtu.be")) {
+      const id = url.pathname.split("/").filter(Boolean)[0];
+      return id || null;
+    }
+
+    if (host.includes("youtube.com")) {
+      if (url.pathname === "/watch") {
+        return url.searchParams.get("v");
+      }
+
+      const pathParts = url.pathname.split("/").filter(Boolean);
+      const embedIndex = pathParts.findIndex((segment) => segment === "embed" || segment === "shorts" || segment === "live");
+      if (embedIndex >= 0) {
+        return pathParts[embedIndex + 1] ?? null;
+      }
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+function buildThumbnailCandidates(video: HomepageReputationVideoData): string[] {
+  const configuredThumbnail = video.thumbnailUrl?.trim();
+  const youtubeId =
+    extractYoutubeVideoId(configuredThumbnail) ??
+    extractYoutubeVideoId(video.sourceUrl) ??
+    extractYoutubeVideoId(video.embedUrl);
+
+  const candidates = configuredThumbnail ? [configuredThumbnail] : [];
+
+  if (!youtubeId) {
+    return candidates;
+  }
+
+  return [
+    `https://i.ytimg.com/vi_webp/${youtubeId}/maxresdefault.webp`,
+    `https://i.ytimg.com/vi/${youtubeId}/maxresdefault.jpg`,
+    `https://i.ytimg.com/vi/${youtubeId}/sddefault.jpg`,
+    `https://i.ytimg.com/vi/${youtubeId}/hqdefault.jpg`,
+    ...candidates,
+  ].filter((candidate, index, all) => all.indexOf(candidate) === index);
+}
+
 export default function HomepageReputationVideo({
   video,
   layout = "desktop",
 }: HomepageReputationVideoProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [thumbnailIndex, setThumbnailIndex] = useState(0);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const titleId = useId();
   const descriptionId = useId();
   const playbackUrl = useMemo(() => buildPlaybackUrl(video), [video]);
+  const thumbnailCandidates = useMemo(() => buildThumbnailCandidates(video), [video]);
+  const thumbnailUrl = thumbnailCandidates[thumbnailIndex] ?? null;
+
+  useEffect(() => {
+    setThumbnailIndex(0);
+  }, [thumbnailCandidates]);
+
   useEffect(() => {
     if (!isOpen || typeof document === "undefined") return;
 
@@ -121,14 +181,21 @@ export default function HomepageReputationVideo({
         aria-label={`Play ${video.title}`}
       >
         <div className="homepage-video-teaser-media">
-          {video.thumbnailUrl ? (
+          {thumbnailUrl ? (
             <img
-              src={video.thumbnailUrl}
+              src={thumbnailUrl}
               alt=""
               aria-hidden="true"
               loading="lazy"
               decoding="async"
+              sizes={layout === "stack" ? "(min-width: 1024px) 32vw, 100vw" : "(min-width: 1024px) 18rem, 100vw"}
               className="homepage-video-teaser-image"
+              onError={() => {
+                setThumbnailIndex((current) => {
+                  if (current >= thumbnailCandidates.length - 1) return current;
+                  return current + 1;
+                });
+              }}
             />
           ) : (
             <div className="homepage-video-teaser-fallback" aria-hidden="true">
