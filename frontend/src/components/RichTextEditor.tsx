@@ -1,6 +1,7 @@
 import { Component, useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
+import type { Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Image from "@tiptap/extension-image";
 import Link from "@tiptap/extension-link";
@@ -167,6 +168,9 @@ type ToolbarButtonProps = {
   label: string;
 };
 
+const TAB_CHARACTER = "\t";
+const LIST_ITEM_NODE = "listItem";
+
 function ToolbarButton({ active = false, disabled = false, onClick, label }: ToolbarButtonProps) {
   return (
     <button
@@ -194,6 +198,7 @@ function RichTextEditorImpl({
 }: RichTextEditorProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const editorContainerRef = useRef<HTMLDivElement | null>(null);
+  const editorRef = useRef<Editor | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [selectedImagePos, setSelectedImagePos] = useState<number | null>(null);
   const [handlePos, setHandlePos] = useState<{ left: number; right: number; top: number } | null>(null);
@@ -223,7 +228,33 @@ function RichTextEditorImpl({
     ],
     content: value,
     editable: !disabled,
+    editorProps: {
+      handleKeyDown: (_view, event) => {
+        const currentEditor = editorRef.current;
+        if (!currentEditor || event.key !== "Tab") {
+          return false;
+        }
+
+        event.preventDefault();
+
+        if (currentEditor.isActive("bulletList") || currentEditor.isActive("orderedList")) {
+          if (event.shiftKey) {
+            return currentEditor.chain().focus().liftListItem(LIST_ITEM_NODE).run();
+          }
+          return currentEditor.chain().focus().sinkListItem(LIST_ITEM_NODE).run();
+        }
+
+        return currentEditor.chain().focus().insertContent(TAB_CHARACTER).run();
+      },
+    },
+    onCreate: ({ editor: currentEditor }) => {
+      editorRef.current = currentEditor;
+    },
+    onDestroy: () => {
+      editorRef.current = null;
+    },
     onUpdate: ({ editor: currentEditor }) => {
+      editorRef.current = currentEditor;
       onChange(currentEditor.getHTML());
     },
   });

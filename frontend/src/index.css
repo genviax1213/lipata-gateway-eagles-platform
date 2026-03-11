@@ -658,6 +658,11 @@ input::-ms-clear {
   caret-color: #f3db98;
 }
 
+.rich-editor-container .ProseMirror {
+  tab-size: 4;
+  white-space: pre-wrap;
+}
+
 .rich-editor-container .ProseMirror p.is-editor-empty:first-child::before {
   color: rgba(223, 232, 245, 0.55);
   content: attr(data-placeholder);
@@ -693,6 +698,8 @@ input::-ms-clear {
 .rich-content p {
   line-height: 1.8;
   margin: 0.9em 0;
+  tab-size: 4;
+  white-space: pre-wrap;
 }
 
 .rich-content ul,
@@ -703,6 +710,8 @@ input::-ms-clear {
 
 .rich-content li {
   margin: 0.35em 0;
+  tab-size: 4;
+  white-space: pre-wrap;
 }
 
 .rich-content blockquote {
@@ -710,6 +719,8 @@ input::-ms-clear {
   color: #dfe8f5;
   margin: 1.2em 0;
   padding-left: 1em;
+  tab-size: 4;
+  white-space: pre-wrap;
 }
 
 .rich-content a {
