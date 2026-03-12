@@ -286,7 +286,7 @@ export default function Landing() {
     return () => clearInterval(timer);
   }, [communitySlideCount]);
 
-  const heroGridClassName = "section-wrap grid min-h-[calc(100vh-148px)] items-center gap-8 py-16 lg:grid-cols-[1.1fr_0.9fr]";
+  const heroGridClassName = "section-wrap grid min-h-[calc(100vh-148px)] items-center gap-8 py-16 lg:h-[calc(100vh-148px)] lg:grid-cols-[1.1fr_0.9fr] lg:overflow-hidden";
 
   return (
     <section className="hero-gradient relative overflow-hidden">
@@ -299,7 +299,7 @@ export default function Landing() {
       />
 
       <div className={heroGridClassName}>
-        <div className="relative z-10 max-w-3xl">
+        <div className="relative z-10 min-w-0 max-w-3xl">
           <div className="hero-brand-row reveal mb-6">
             <img
               src="/images/lgec-logo.png"
@@ -307,10 +307,10 @@ export default function Landing() {
               className="h-36 w-36 object-contain md:h-44 md:w-44"
             />
           </div>
-          <h1 className="reveal reveal-delay-1 mb-6 font-heading text-5xl leading-tight text-offwhite md:text-7xl">
+          <h1 className="reveal reveal-delay-1 mb-6 min-h-[3.6em] max-w-[14ch] font-heading text-5xl leading-tight text-offwhite line-clamp-3 md:min-h-[3.2em] md:text-7xl">
             {heroPost?.title ?? "Lipata Gateway Eagles Club"}
           </h1>
-          <p className="reveal reveal-delay-2 mb-10 max-w-2xl text-lg text-mist/90 md:text-xl">
+          <p className="reveal reveal-delay-2 mb-10 min-h-[5rem] max-w-2xl text-lg text-mist/90 line-clamp-3 md:min-h-[5.5rem] md:text-xl">
             {heroPost?.excerpt ??
               "Service Through Strong Brotherhood."}
           </p>
