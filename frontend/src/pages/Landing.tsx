@@ -352,9 +352,12 @@ export default function Landing() {
           />
         </aside>
 
-        {homepageVideos.length > 0 ? (
+      </div>
+
+      {homepageVideos.length > 0 ? (
+        <div className="section-wrap relative z-10 pb-8">
           <div
-            className={`homepage-video-stack reveal reveal-delay-2 mt-2 lg:col-span-2 lg:mt-4 ${
+            className={`homepage-video-stack reveal reveal-delay-2 ${
               homepageVideos.length === 1 ? "homepage-video-stack-single" : "homepage-video-stack-multi"
             }`}
           >
@@ -366,8 +369,8 @@ export default function Landing() {
               />
             ))}
           </div>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
 
       <div className="section-wrap relative z-10 pb-16">
         <h2 className="mb-4 font-heading text-3xl text-offwhite">Community In Action</h2>
