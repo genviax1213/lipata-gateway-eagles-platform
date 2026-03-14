@@ -12,6 +12,7 @@ export default function NewsArticle() {
   const [error, setError] = useState("");
   const [videoCoverIndex, setVideoCoverIndex] = useState(0);
   const [useVideoCoverFallback, setUseVideoCoverFallback] = useState(false);
+  const [videoPlayerActive, setVideoPlayerActive] = useState(false);
 
   const [fontSize, setFontSize] = useState(18);
   const [layout, setLayout] = useState<"single" | "columns">("single");
@@ -71,10 +72,23 @@ export default function NewsArticle() {
 
     return thumbnail;
   }, [useVideoCoverFallback, videoCoverCandidates, videoCoverIndex]);
+  const activeVideoEmbedUrl = useMemo(() => {
+    if (!post?.video_embed_url) return null;
+
+    try {
+      const url = new URL(post.video_embed_url);
+      url.searchParams.set("autoplay", "1");
+      return url.toString();
+    } catch {
+      const separator = post.video_embed_url.includes("?") ? "&" : "?";
+      return `${post.video_embed_url}${separator}autoplay=1`;
+    }
+  }, [post?.video_embed_url]);
 
   useEffect(() => {
     setVideoCoverIndex(0);
     setUseVideoCoverFallback(false);
+    setVideoPlayerActive(false);
   }, [post?.id, post?.video_embed_url, post?.video_thumbnail_url, post?.video_url]);
 
   const handleVideoCoverError = () => {
@@ -158,18 +172,34 @@ export default function NewsArticle() {
 
           {post.post_type === "video" ? (
             <>
-              <img
-                src={videoCoverImage}
-                alt={post.title}
-                className="mb-6 h-64 w-full rounded-lg object-cover md:h-[28rem]"
-                onError={handleVideoCoverError}
-              />
+              {!videoPlayerActive ? (
+                <button
+                  type="button"
+                  className="group relative mb-6 block w-full overflow-hidden rounded-lg border border-white/20 bg-white/5 text-left"
+                  onClick={() => setVideoPlayerActive(true)}
+                >
+                  <img
+                    src={videoCoverImage}
+                    alt={post.title}
+                    className="h-64 w-full object-cover md:h-[28rem]"
+                    onError={handleVideoCoverError}
+                  />
+                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-ink/80 via-ink/15 to-transparent" />
+                  <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                    <div className="flex h-20 w-20 items-center justify-center rounded-full border border-white/30 bg-gold/90 text-ink shadow-[0_18px_40px_rgba(2,6,23,0.45)] transition group-hover:scale-105">
+                      <svg viewBox="0 0 24 24" className="ml-1 h-8 w-8 fill-current" focusable="false">
+                        <path d="M8 6.5v11l9-5.5-9-5.5Z" />
+                      </svg>
+                    </div>
+                  </div>
+                </button>
+              ) : null}
 
-              {post.video_embed_url && (
+              {post.video_embed_url && videoPlayerActive && (
                 <div className="mb-6 overflow-hidden rounded-lg border border-white/20 bg-white/5">
                   <div className="aspect-video">
                     <iframe
-                      src={post.video_embed_url}
+                      src={activeVideoEmbedUrl ?? post.video_embed_url}
                       title={post.title}
                       allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                       allowFullScreen
