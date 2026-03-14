@@ -3,10 +3,20 @@ import type { ReactNode } from "react";
 import axios from "axios";
 import api, { ensureCsrfCookie, shouldUseLegacyTokenMode } from "../services/api";
 import AuthLoadingScreen from "../components/AuthLoadingScreen";
+import { isAdminUser } from "../utils/auth";
 import { AuthContext } from "./auth-context";
 
 const AUTH_USER_CACHE_KEY = "auth_user_cache";
+const AUTH_NOTICE_KEY = "portal_auth_notice";
 const SESSION_HEARTBEAT_MS = 45_000;
+const PRIVILEGED_IDLE_TIMEOUT_MS = 10 * 60 * 1000;
+const ACTIVITY_EVENTS: Array<keyof WindowEventMap> = [
+  "pointerdown",
+  "pointermove",
+  "keydown",
+  "scroll",
+  "touchstart",
+];
 
 function normalizeEmail(value: string): string {
   return value.trim().toLowerCase();
@@ -29,6 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   });
   const [loading, setLoading] = useState(() => !legacyTokenMode || localStorage.getItem("auth_token") !== null);
+  const [lastActivityAt, setLastActivityAt] = useState(() => Date.now());
 
   const clearStoredAuthState = useCallback(() => {
     localStorage.removeItem("auth_token");
@@ -79,17 +90,66 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })();
   }, [clearStoredAuthState, legacyTokenMode, syncUserSession]);
 
+  const logout = useCallback(async () => {
+    try {
+      await ensureCsrfCookie(true);
+      await api.post("/logout");
+      clearStoredAuthState();
+      setUser(null);
+    } catch (error) {
+      if (axios.isAxiosError(error) && [401, 419].includes(error.response?.status ?? 0)) {
+        clearStoredAuthState();
+        setUser(null);
+        return;
+      }
+
+      throw error;
+    }
+  }, [clearStoredAuthState]);
+
   useEffect(() => {
     if (!user) return;
 
     const timer = window.setInterval(() => {
-      void syncUserSession();
+      const idleForMs = Date.now() - lastActivityAt;
+      const requiresPrivilegedIdleTimeout = isAdminUser(user);
+
+      if (requiresPrivilegedIdleTimeout && idleForMs >= PRIVILEGED_IDLE_TIMEOUT_MS) {
+        localStorage.setItem(AUTH_NOTICE_KEY, "Your admin session ended after 10 minutes of inactivity.");
+        void logout().catch(() => {
+          clearStoredAuthState();
+          setUser(null);
+        });
+        return;
+      }
+
+      if (!requiresPrivilegedIdleTimeout || idleForMs < PRIVILEGED_IDLE_TIMEOUT_MS) {
+        void syncUserSession();
+      }
     }, SESSION_HEARTBEAT_MS);
 
     return () => {
       window.clearInterval(timer);
     };
-  }, [syncUserSession, user]);
+  }, [clearStoredAuthState, lastActivityAt, logout, syncUserSession, user]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const markActivity = () => {
+      setLastActivityAt(Date.now());
+    };
+
+    for (const eventName of ACTIVITY_EVENTS) {
+      window.addEventListener(eventName, markActivity, { passive: true });
+    }
+
+    return () => {
+      for (const eventName of ACTIVITY_EVENTS) {
+        window.removeEventListener(eventName, markActivity);
+      }
+    };
+  }, [user]);
 
   useEffect(() => {
     const onStorage = (event: StorageEvent) => {
@@ -126,23 +186,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.removeItem(AUTH_USER_CACHE_KEY);
     }
     setUser(res.data.user);
-  };
-
-  const logout = async () => {
-    try {
-      await ensureCsrfCookie(true);
-      await api.post("/logout");
-      clearStoredAuthState();
-      setUser(null);
-    } catch (error) {
-      if (axios.isAxiosError(error) && [401, 419].includes(error.response?.status ?? 0)) {
-        clearStoredAuthState();
-        setUser(null);
-        return;
-      }
-
-      throw error;
-    }
+    setLastActivityAt(Date.now());
   };
 
   if (loading) return <AuthLoadingScreen />;

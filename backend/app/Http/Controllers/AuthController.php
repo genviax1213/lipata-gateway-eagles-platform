@@ -216,11 +216,11 @@ class AuthController extends Controller
                 $user->tokens()->delete();
             }
 
-            $user->forceFill([
+            User::query()->whereKey($user->id)->update([
                 'active_session_id' => null,
                 'active_token_id' => null,
                 'last_activity_at' => null,
-            ])->saveQuietly();
+            ]);
         }
         Log::info('auth.logout', [
             'user_id' => $user?->id,

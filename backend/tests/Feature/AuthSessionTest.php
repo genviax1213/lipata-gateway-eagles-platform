@@ -164,7 +164,7 @@ class AuthSessionTest extends TestCase
             ->assertJsonPath('code', 'session_replaced');
     }
 
-    public function test_inactive_token_is_forced_logged_out_after_thirty_minutes(): void
+    public function test_admin_token_is_forced_logged_out_after_ten_minutes_of_inactivity(): void
     {
         $user = User::factory()->create([
             'role_id' => $this->roleId(RoleHierarchy::ADMIN),
@@ -173,13 +173,35 @@ class AuthSessionTest extends TestCase
 
         $user->forceFill([
             'active_token_id' => $token->accessToken->id,
-            'last_activity_at' => Carbon::now()->subMinutes(31),
+            'last_activity_at' => Carbon::now()->subMinutes(11),
         ])->save();
 
         $this->withToken($token->plainTextToken)
             ->getJson('/api/v1/user')
             ->assertStatus(401)
-            ->assertJsonPath('code', 'session_inactive');
+            ->assertJsonPath('code', 'session_inactive')
+            ->assertJsonPath('message', 'You have been logged out due to 10 minutes of inactivity.');
+
+        $this->assertFalse($user->fresh()->tokens()->whereKey($token->accessToken->id)->exists());
+    }
+
+    public function test_superadmin_token_is_forced_logged_out_after_ten_minutes_of_inactivity(): void
+    {
+        $user = User::factory()->create([
+            'role_id' => $this->roleId(RoleHierarchy::SUPERADMIN),
+        ]);
+        $token = $user->createToken('auth_token');
+
+        $user->forceFill([
+            'active_token_id' => $token->accessToken->id,
+            'last_activity_at' => Carbon::now()->subMinutes(11),
+        ])->save();
+
+        $this->withToken($token->plainTextToken)
+            ->getJson('/api/v1/user')
+            ->assertStatus(401)
+            ->assertJsonPath('code', 'session_inactive')
+            ->assertJsonPath('message', 'You have been logged out due to 10 minutes of inactivity.');
 
         $this->assertFalse($user->fresh()->tokens()->whereKey($token->accessToken->id)->exists());
     }

@@ -63,8 +63,9 @@ Route::prefix('v1')->group(function () {
 
         Route::get('/user', function (Request $request) {
             $user = $request->user()->load('role.permissions:id,name');
-            $user->setAttribute('has_authored_posts', Post::query()->where('author_id', $user->id)->exists());
-            return $user;
+            return response()->json(array_merge($user->toArray(), [
+                'has_authored_posts' => Post::query()->where('author_id', $user->id)->exists(),
+            ]));
         });
         Route::post('/logout', [AuthController::class, 'logout']);
         Route::post('/auth/change-password', [AuthController::class, 'changePassword']);

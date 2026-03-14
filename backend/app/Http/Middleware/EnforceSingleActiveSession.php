@@ -13,7 +13,8 @@ use Symfony\Component\HttpFoundation\Response;
 
 class EnforceSingleActiveSession
 {
-    private const INACTIVITY_MINUTES = 30;
+    private const DEFAULT_INACTIVITY_MINUTES = 30;
+    private const PRIVILEGED_INACTIVITY_MINUTES = 10;
 
     public function handle(Request $request, Closure $next): Response
     {
@@ -24,10 +25,11 @@ class EnforceSingleActiveSession
         }
 
         if ($this->isInactive($user)) {
+            $minutes = $this->inactivityTimeoutMinutes($user);
             $this->terminateCurrentSession($request, $user, true);
 
             return response()->json([
-                'message' => 'You have been logged out due to 30 minutes of inactivity.',
+                'message' => "You have been logged out due to {$minutes} minutes of inactivity.",
                 'code' => 'session_inactive',
             ], 401);
         }
@@ -41,9 +43,11 @@ class EnforceSingleActiveSession
             ], 401);
         }
 
-        $user->forceFill([
-            'last_activity_at' => now(),
-        ])->saveQuietly();
+        $timestamp = now();
+        User::query()->whereKey($user->id)->update([
+            'last_activity_at' => $timestamp,
+        ]);
+        $user->setAttribute('last_activity_at', $timestamp);
 
         return $next($request);
     }
@@ -62,22 +66,31 @@ class EnforceSingleActiveSession
             ? $user->last_activity_at
             : Carbon::parse((string) $user->last_activity_at);
 
-        return now()->diffInMinutes($last, true) >= self::INACTIVITY_MINUTES;
+        return now()->diffInMinutes($last, true) >= $this->inactivityTimeoutMinutes($user);
     }
 
-    private function shouldEnforceInactivityTimeout(User $user): bool
+    private function inactivityTimeoutMinutes(User $user): int
     {
         $user->loadMissing('role:id,name');
 
         $primaryRole = (string) ($user->role?->name ?? '');
         if (in_array($primaryRole, [RoleHierarchy::SUPERADMIN, RoleHierarchy::ADMIN], true)) {
-            return true;
+            return self::PRIVILEGED_INACTIVITY_MINUTES;
         }
 
-        return in_array((string) ($user->finance_role ?? ''), [
+        if (in_array((string) ($user->finance_role ?? ''), [
             RoleHierarchy::FINANCE_TREASURER,
             RoleHierarchy::FINANCE_AUDITOR,
-        ], true);
+        ], true)) {
+            return self::DEFAULT_INACTIVITY_MINUTES;
+        }
+
+        return 0;
+    }
+
+    private function shouldEnforceInactivityTimeout(User $user): bool
+    {
+        return $this->inactivityTimeoutMinutes($user) > 0;
     }
 
     private function wasReplacedByAnotherLogin(Request $request, User $user): bool

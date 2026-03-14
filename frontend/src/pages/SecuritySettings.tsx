@@ -205,7 +205,8 @@ export default function SecuritySettings() {
       <div className="glass-card max-w-2xl p-6">
         <h2 className="text-base font-semibold text-offwhite">Session Security</h2>
         <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-mist/85">
-          <li>Inactive sessions are automatically signed out after 30 minutes.</li>
+          <li>Admin and superadmin sessions are automatically signed out after 10 minutes of inactivity.</li>
+          <li>Finance treasurer and auditor sessions are automatically signed out after 30 minutes of inactivity.</li>
           <li>Only one active session is allowed per account across devices/browsers.</li>
           <li>When a new login succeeds, previous sessions are ended with a notice.</li>
         </ul>
