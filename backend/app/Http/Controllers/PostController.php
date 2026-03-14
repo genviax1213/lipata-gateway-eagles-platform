@@ -577,6 +577,9 @@ class PostController extends Controller
         $validated['video_source_url'] = $embed['source_url'];
         $validated['video_embed_url'] = $embed['embed_url'];
         $validated['video_thumbnail_url'] = trim((string) ($validated['video_thumbnail_url'] ?? '')) ?: null;
+        if ($validated['video_thumbnail_url'] === null && $embed['provider'] === 'facebook') {
+            $validated['video_thumbnail_url'] = EmbeddedVideo::facebookThumbnailUrl($embed['source_url']);
+        }
         $validated['video_thumbnail_text'] = trim((string) ($validated['video_thumbnail_text'] ?? '')) ?: null;
         $validated['content'] = '';
     }

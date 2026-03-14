@@ -2,6 +2,8 @@
 
 namespace App\Support;
 
+use Illuminate\Support\Facades\Http;
+
 class EmbeddedVideo
 {
     public static function extractYoutubeVideoId(?string $url): ?string
@@ -46,6 +48,31 @@ class EmbeddedVideo
         $videoId = self::extractYoutubeVideoId($sourceUrl) ?? self::extractYoutubeVideoId($embedUrl);
 
         return $videoId ? 'https://i.ytimg.com/vi/' . $videoId . '/hqdefault.jpg' : null;
+    }
+
+    public static function facebookThumbnailUrl(?string $sourceUrl): ?string
+    {
+        $value = trim((string) $sourceUrl);
+        if ($value === '') {
+            return null;
+        }
+
+        try {
+            $response = Http::timeout(5)
+                ->withHeaders([
+                    'User-Agent' => 'LGEC-CMS/1.0 (+https://lgec.org)',
+                    'Accept-Language' => 'en-US,en;q=0.9',
+                ])
+                ->get($value);
+        } catch (\Throwable) {
+            return null;
+        }
+
+        if (!$response->successful()) {
+            return null;
+        }
+
+        return self::extractThumbnailFromHtml((string) $response->body());
     }
 
     public static function fromInputUrl(?string $url): ?array
@@ -120,6 +147,33 @@ class EmbeddedVideo
         if (in_array($host, ['facebook.com', 'www.facebook.com'], true) && $path === 'plugins/video.php') {
             $href = isset($query['href']) ? urldecode((string) $query['href']) : '';
             return self::fromInputUrl($href);
+        }
+
+        return null;
+    }
+
+    private static function extractThumbnailFromHtml(string $html): ?string
+    {
+        if ($html === '') {
+            return null;
+        }
+
+        $patterns = [
+            '/<meta[^>]+property=["\']og:image(?::secure_url)?["\'][^>]+content=["\']([^"\']+)["\']/i',
+            '/<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:image(?::secure_url)?["\']/i',
+            '/<meta[^>]+name=["\']twitter:image(?::src)?["\'][^>]+content=["\']([^"\']+)["\']/i',
+            '/<meta[^>]+content=["\']([^"\']+)["\'][^>]+name=["\']twitter:image(?::src)?["\']/i',
+        ];
+
+        foreach ($patterns as $pattern) {
+            if (!preg_match($pattern, $html, $matches)) {
+                continue;
+            }
+
+            $candidate = html_entity_decode(trim((string) ($matches[1] ?? '')), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            if (filter_var($candidate, FILTER_VALIDATE_URL)) {
+                return $candidate;
+            }
         }
 
         return null;

@@ -9,6 +9,7 @@ use App\Models\Role;
 use App\Models\User;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -309,6 +310,36 @@ class CmsOwnershipAndHomepageVideoTest extends TestCase
             ->assertJsonPath('videos.0.thumbnail_text', 'Guardians at Work')
             ->assertJsonPath('videos.0.provider', 'youtube')
             ->assertJsonCount(2, 'videos');
+    }
+
+    public function test_facebook_video_article_can_auto_detect_cover_image(): void
+    {
+        $officerRole = Role::query()->where('name', 'officer')->firstOrFail();
+        $officer = User::factory()->create([
+            'role_id' => $officerRole->id,
+            'email' => 'officer-facebook-video@example.test',
+        ]);
+
+        Http::fake([
+            'https://www.facebook.com/*' => Http::response(
+                '<html><head><meta property="og:image" content="https://lookaside.fbsbx.com/facebook-cover.jpg"></head></html>',
+                200,
+                ['Content-Type' => 'text/html; charset=UTF-8']
+            ),
+        ]);
+
+        Sanctum::actingAs($officer);
+
+        $this->postJson('/api/v1/cms/posts', [
+            'title' => 'Facebook Service Video',
+            'section' => 'activities',
+            'post_type' => 'video',
+            'video_url' => 'https://www.facebook.com/watch/?v=123456789012345',
+            'excerpt' => 'Facebook video article',
+            'status' => 'published',
+        ])->assertCreated()
+            ->assertJsonPath('video_provider', 'facebook')
+            ->assertJsonPath('video_thumbnail_url', 'https://lookaside.fbsbx.com/facebook-cover.jpg');
     }
 
     public function test_post_sanitization_keeps_allowed_video_embeds_and_rejects_unapproved_iframes(): void

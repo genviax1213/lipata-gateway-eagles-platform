@@ -666,9 +666,57 @@ input::-ms-clear {
   caret-color: #f3db98;
 }
 
+.rich-editor-container {
+  overflow-x: auto;
+}
+
 .rich-editor-container .ProseMirror {
   tab-size: 4;
   white-space: pre-wrap;
+}
+
+.rich-editor-container .ProseMirror table,
+.rich-content table {
+  border-collapse: collapse;
+  display: block;
+  margin: 1rem 0;
+  max-width: 100%;
+  overflow-x: auto;
+  width: max-content;
+  min-width: min(100%, 42rem);
+  -webkit-overflow-scrolling: touch;
+}
+
+.rich-editor-container .ProseMirror thead,
+.rich-editor-container .ProseMirror tbody,
+.rich-editor-container .ProseMirror tr,
+.rich-content thead,
+.rich-content tbody,
+.rich-content tr {
+  display: table;
+  width: 100%;
+  table-layout: fixed;
+}
+
+.rich-editor-container .ProseMirror th,
+.rich-editor-container .ProseMirror td,
+.rich-content th,
+.rich-content td {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  padding: 0.75rem 0.9rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.rich-editor-container .ProseMirror th,
+.rich-content th {
+  background: rgba(18, 49, 90, 0.72);
+  color: #f3db98;
+}
+
+.overflow-x-auto > table,
+.overflow-auto > table {
+  min-width: max(100%, 42rem);
 }
 
 .rich-editor-container .ProseMirror p.is-editor-empty:first-child::before {
