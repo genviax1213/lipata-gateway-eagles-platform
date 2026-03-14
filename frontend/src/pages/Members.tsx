@@ -57,16 +57,41 @@ interface MemberDetailRecord {
   first_name: string;
   middle_name: string | null;
   last_name: string;
+  nickname?: string | null;
   email: string | null;
   spouse_name: string | null;
   contact_number: string | null;
+  telephone_number?: string | null;
+  emergency_contact_number?: string | null;
   address: string | null;
+  address_line?: string | null;
+  street_no?: string | null;
+  barangay?: string | null;
+  city_municipality?: string | null;
+  province?: string | null;
+  zip_code?: string | null;
   date_of_birth: string | null;
+  place_of_birth?: string | null;
+  civil_status?: string | null;
+  height_cm?: string | number | null;
+  weight_kg?: string | number | null;
+  citizenship?: string | null;
+  religion?: string | null;
+  blood_type?: string | null;
+  region?: string | null;
+  hobbies?: string | null;
+  special_skills?: string | null;
   batch: string | null;
   induction_date: string | null;
-  membership_status: string;
+  membership_status: Member["membership_status"];
   email_verified: boolean;
   password_set: boolean;
+  employments?: Member["employments"];
+  dependents?: Member["dependents"];
+  education_entries?: Member["education_entries"];
+  sponsorship?: Member["sponsorship"];
+  club_positions?: Member["club_positions"];
+  current_club_positions?: Member["current_club_positions"];
   formal_photo?: {
     image_url?: string | null;
   } | null;
@@ -333,36 +358,95 @@ export default function Members() {
     });
   };
 
-  const exportSelectedMembers = () => {
+  const exportSelectedMembers = async () => {
     if (selectedMemberList.length === 0) {
       setError("Choose at least one member before exporting a secretary submission list.");
       return;
     }
 
-    const csvContent = [
-      ["Member Number", "Name", "Email", "Batch", "Membership Status", "Contact Number"],
-      ...selectedMemberList.map((member) => [
-        member.member_number,
-        memberName(member),
-        member.email ?? "",
-        member.batch ?? "",
-        member.membership_status,
-        member.contact_number ?? "",
-      ]),
-    ]
-      .map((row) => row.map((value) => `"${String(value ?? "").replace(/"/g, '""')}"`).join(","))
-      .join("\n");
+    setError("");
+    setNotice("");
 
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `lgec-secretary-members-${new Date().toISOString().slice(0, 10)}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    window.URL.revokeObjectURL(url);
-    setNotice(`Exported ${selectedMemberList.length} selected member${selectedMemberList.length === 1 ? "" : "s"}.`);
+    try {
+      const detailResponses = await Promise.all(
+        selectedMemberList.map(async (member) => {
+          const response = await api.get<MemberDetailRecord>(`/members/${member.id}`);
+          return response.data;
+        }),
+      );
+
+      const rows = detailResponses.map((member) => {
+        const currentPositions = member.current_club_positions ?? [];
+        const currentClubPosition = currentPositions
+          .map((position) => [position.position_name, position.eagle_year].filter(Boolean).join(" / "))
+          .filter(Boolean)
+          .join("; ");
+
+        const missingFields = [
+          !member.last_name?.trim() ? "last_name" : null,
+          !member.first_name?.trim() ? "first_name" : null,
+          !member.middle_name?.trim() ? "middle_name" : null,
+          currentPositions.length === 0 ? "club_position" : null,
+          !member.region?.trim() ? "region" : null,
+          !member.spouse_name?.trim() ? "spouse_name" : null,
+          !member.emergency_contact_number?.trim() ? "emergency_contact_number" : null,
+        ].filter(Boolean);
+
+        return [
+          member.member_number,
+          member.last_name,
+          member.first_name,
+          member.middle_name ?? "",
+          member.email ?? "",
+          member.batch ?? "",
+          member.membership_status,
+          member.contact_number ?? "",
+          member.telephone_number ?? "",
+          member.spouse_name ?? "",
+          member.region ?? "",
+          member.emergency_contact_number ?? "",
+          currentClubPosition,
+          missingFields.length === 0 ? "Yes" : "No",
+          missingFields.join("; "),
+        ];
+      });
+
+      const csvContent = [
+        [
+          "Member Number",
+          "Last Name",
+          "First Name",
+          "Middle Name",
+          "Email",
+          "Batch",
+          "Membership Status",
+          "Contact Number",
+          "Telephone Number",
+          "Spouse Name",
+          "Region",
+          "Emergency Contact Number",
+          "Current Club Position",
+          "ID Card Mandatory Fields Complete",
+          "ID Card Missing Fields",
+        ],
+        ...rows,
+      ]
+        .map((row) => row.map((value) => `"${String(value ?? "").replace(/"/g, '""')}"`).join(","))
+        .join("\n");
+
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `lgec-secretary-members-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      setNotice(`Exported ${selectedMemberList.length} selected member${selectedMemberList.length === 1 ? "" : "s"} with ID card production columns.`);
+    } catch (err) {
+      setError(axios.isAxiosError(err) ? (err.response?.data as { message?: string } | undefined)?.message ?? "Failed to export selected members." : "Failed to export selected members.");
+    }
   };
 
   const groupedMemberRows = useMemo(() => {

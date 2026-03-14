@@ -14,6 +14,7 @@ class Member extends Model
     protected $fillable = [
         'member_number',
         'first_name',
+        'nickname',
         'middle_name',
         'last_name',
         'spouse_name',
@@ -23,8 +24,26 @@ class Member extends Model
         'user_id',
         'membership_status',
         'contact_number',
+        'telephone_number',
+        'emergency_contact_number',
         'address',
+        'address_line',
+        'street_no',
+        'barangay',
+        'city_municipality',
+        'province',
+        'zip_code',
         'date_of_birth',
+        'place_of_birth',
+        'civil_status',
+        'height_cm',
+        'weight_kg',
+        'citizenship',
+        'religion',
+        'blood_type',
+        'region',
+        'hobbies',
+        'special_skills',
         'batch',
         'induction_date',
         'source_submitted_at',
@@ -33,6 +52,11 @@ class Member extends Model
     protected $casts = [
         'email_verified' => 'boolean',
         'password_set' => 'boolean',
+        'date_of_birth' => 'date',
+        'induction_date' => 'date',
+        'source_submitted_at' => 'datetime',
+        'height_cm' => 'decimal:2',
+        'weight_kg' => 'decimal:2',
     ];
 
     public function user()
@@ -43,6 +67,31 @@ class Member extends Model
     public function contributions()
     {
         return $this->hasMany(Contribution::class);
+    }
+
+    public function employments()
+    {
+        return $this->hasMany(MemberEmployment::class)->orderByDesc('is_current')->orderBy('id');
+    }
+
+    public function dependents()
+    {
+        return $this->hasMany(MemberDependent::class)->orderBy('sort_order')->orderBy('id');
+    }
+
+    public function educationEntries()
+    {
+        return $this->hasMany(MemberEducation::class)->orderBy('id');
+    }
+
+    public function sponsorship()
+    {
+        return $this->hasOne(MemberSponsorship::class);
+    }
+
+    public function clubPositionAssignments()
+    {
+        return $this->hasMany(MemberClubPosition::class)->orderByDesc('is_current')->orderByDesc('started_at')->orderBy('id');
     }
 
     public function setEmailAttribute(?string $value): void

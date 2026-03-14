@@ -7,6 +7,7 @@ use App\Models\FormalPhoto;
 use App\Models\Member;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Response;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use ZipArchive;
@@ -21,38 +22,126 @@ class DirectoryExportController extends Controller
         $rows = Member::query()
             ->orderBy('last_name')
             ->orderBy('first_name')
-            ->get([
-                'member_number',
-                'first_name',
-                'middle_name',
-                'last_name',
-                'email',
-                'batch',
-                'contact_number',
-                'address',
-                'date_of_birth',
-                'induction_date',
-                'email_verified',
-                'password_set',
-            ]);
+            ->get();
+
+        if ($this->hasTable('member_club_positions') && $this->hasTable('club_positions')) {
+            $rows->load(['clubPositionAssignments.clubPosition']);
+        }
 
         return Response::streamDownload(function () use ($rows): void {
             $handle = fopen('php://output', 'wb');
-            fputcsv($handle, ['Member Number', 'First Name', 'Middle Name', 'Last Name', 'Email', 'Batch', 'Contact Number', 'Address', 'Date Of Birth', 'Induction Date', 'Email Verified', 'Password Set']);
+            fputcsv($handle, [
+                'Member Number',
+                'First Name',
+                'Middle Name',
+                'Last Name',
+                'Nickname',
+                'Email',
+                'Batch',
+                'Membership Status',
+                'Contact Number',
+                'Telephone Number',
+                'Emergency Contact Number',
+                'Spouse Name',
+                'Region',
+                'Current Club Position',
+                'Current Club Position Eagle Year',
+                'Address',
+                'Address Line',
+                'Street No.',
+                'Barangay',
+                'Municipality/City',
+                'Province',
+                'ZIP Code',
+                'Place Of Birth',
+                'Civil Status',
+                'Date Of Birth',
+                'Height (cm)',
+                'Weight (kg)',
+                'Citizenship',
+                'Religion',
+                'Blood Type',
+                'Induction Date',
+                'Email Verified',
+                'Password Set',
+                'ID Card Mandatory Fields Complete',
+                'ID Card Missing Fields',
+            ]);
             foreach ($rows as $row) {
+                $currentPositions = collect();
+                if ($row->relationLoaded('clubPositionAssignments')) {
+                    $currentPositions = $row->clubPositionAssignments
+                        ->filter(fn ($assignment) => $assignment->is_current || $assignment->ended_at === null)
+                        ->values();
+                }
+                $positionNames = $currentPositions
+                    ->map(fn ($assignment) => $assignment->clubPosition?->name)
+                    ->filter()
+                    ->implode('; ');
+                $positionYears = $currentPositions
+                    ->map(fn ($assignment) => $assignment->eagle_year)
+                    ->filter()
+                    ->implode('; ');
+
+                $missingFields = [];
+                if (blank($row->last_name)) {
+                    $missingFields[] = 'last_name';
+                }
+                if (blank($row->first_name)) {
+                    $missingFields[] = 'first_name';
+                }
+                if (blank($row->middle_name)) {
+                    $missingFields[] = 'middle_name';
+                }
+                if (blank($positionNames)) {
+                    $missingFields[] = 'club_position';
+                }
+                if (blank($row->region)) {
+                    $missingFields[] = 'region';
+                }
+                if (blank($row->spouse_name)) {
+                    $missingFields[] = 'spouse_name';
+                }
+                if (blank($row->emergency_contact_number)) {
+                    $missingFields[] = 'emergency_contact_number';
+                }
+
                 fputcsv($handle, [
                     $row->member_number,
                     $row->first_name,
                     $row->middle_name,
                     $row->last_name,
+                    $row->nickname,
                     $row->email,
                     $row->batch,
+                    $row->membership_status,
                     $row->contact_number,
+                    $row->telephone_number,
+                    $row->emergency_contact_number,
+                    $row->spouse_name,
+                    $row->region,
+                    $positionNames,
+                    $positionYears,
                     $row->address,
+                    $row->address_line,
+                    $row->street_no,
+                    $row->barangay,
+                    $row->city_municipality,
+                    $row->province,
+                    $row->zip_code,
+                    $row->place_of_birth,
+                    $row->civil_status,
                     optional($row->date_of_birth)?->toDateString(),
+                    $row->height_cm,
+                    $row->weight_kg,
+                    $row->citizenship,
+                    $row->religion,
+                    $row->blood_type,
                     optional($row->induction_date)?->toDateString(),
                     $row->email_verified ? 'Yes' : 'No',
                     $row->password_set ? 'Yes' : 'No',
+                    $missingFields === [] ? 'Yes' : 'No',
+                    implode('; ', $missingFields),
                 ]);
             }
             fclose($handle);
@@ -146,5 +235,16 @@ class DirectoryExportController extends Controller
         $target = strtolower((string) $request->query('target', 'excel'));
 
         return in_array($target, ['excel', 'google_sheets'], true) ? $target : 'excel';
+    }
+
+    private function hasTable(string $table): bool
+    {
+        static $cache = [];
+
+        if (!array_key_exists($table, $cache)) {
+            $cache[$table] = Schema::hasTable($table);
+        }
+
+        return $cache[$table];
     }
 }

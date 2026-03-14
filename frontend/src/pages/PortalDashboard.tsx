@@ -4,7 +4,7 @@ import api from "../services/api";
 import { useAuth } from "../contexts/useAuth";
 import { hasPermission, isAdminUser } from "../utils/auth";
 import { roleGlossary } from "../content/portalCopy";
-import type { ApplicantDecisionStatus, ApplicantStatus } from "../types/member";
+import type { ApplicantDecisionStatus, ApplicantStatus, MemberClubPosition } from "../types/member";
 import TaskHierarchyCard from "../components/TaskHierarchyCard";
 import FileSelectionPreview from "../components/FileSelectionPreview";
 import FormalPhotoCard from "../components/FormalPhotoCard";
@@ -38,19 +38,71 @@ interface SelfMemberProfile {
   member_number: string;
   email: string | null;
   first_name: string;
+  nickname?: string | null;
   middle_name: string | null;
   last_name: string;
   spouse_name: string | null;
   contact_number: string | null;
+  telephone_number?: string | null;
+  emergency_contact_number?: string | null;
   address: string | null;
+  address_line?: string | null;
+  street_no?: string | null;
+  barangay?: string | null;
+  city_municipality?: string | null;
+  province?: string | null;
+  zip_code?: string | null;
   date_of_birth: string | null;
+  place_of_birth?: string | null;
+  civil_status?: string | null;
+  height_cm?: string | number | null;
+  weight_kg?: string | number | null;
+  citizenship?: string | null;
+  religion?: string | null;
+  blood_type?: string | null;
+  region?: string | null;
+  hobbies?: string | null;
+  special_skills?: string | null;
   batch: string | null;
   induction_date: string | null;
   membership_status: "active" | "inactive";
   email_verified: boolean;
   password_set: boolean;
+  current_club_positions?: MemberClubPosition[];
   formal_photo?: FormalPhotoRecord | null;
 }
+
+type ProfileSection = "identity" | "contact" | "positions" | "optional";
+
+const EMPTY_SELF_PROFILE_FORM = {
+  first_name: "",
+  nickname: "",
+  middle_name: "",
+  last_name: "",
+  spouse_name: "",
+  contact_number: "",
+  telephone_number: "",
+  emergency_contact_number: "",
+  address: "",
+  address_line: "",
+  street_no: "",
+  barangay: "",
+  city_municipality: "",
+  province: "",
+  zip_code: "",
+  date_of_birth: "",
+  place_of_birth: "",
+  civil_status: "",
+  height_cm: "",
+  weight_kg: "",
+  citizenship: "",
+  religion: "",
+  blood_type: "",
+  region: "",
+  hobbies: "",
+  special_skills: "",
+  induction_date: "",
+};
 
 interface ApplicantNotice {
   id: number;
@@ -271,6 +323,59 @@ function toAbsoluteApiUrl(url: string): string {
   return new URL(url, baseUrl).toString();
 }
 
+function buildSelfProfileForm(profile: SelfMemberProfile) {
+  return {
+    first_name: profile.first_name ?? "",
+    nickname: profile.nickname ?? "",
+    middle_name: profile.middle_name ?? "",
+    last_name: profile.last_name ?? "",
+    spouse_name: profile.spouse_name ?? "",
+    contact_number: profile.contact_number ?? "",
+    telephone_number: profile.telephone_number ?? "",
+    emergency_contact_number: profile.emergency_contact_number ?? "",
+    address: profile.address ?? "",
+    address_line: profile.address_line ?? "",
+    street_no: profile.street_no ?? "",
+    barangay: profile.barangay ?? "",
+    city_municipality: profile.city_municipality ?? "",
+    province: profile.province ?? "",
+    zip_code: profile.zip_code ?? "",
+    date_of_birth: profile.date_of_birth ?? "",
+    place_of_birth: profile.place_of_birth ?? "",
+    civil_status: profile.civil_status ?? "",
+    height_cm: profile.height_cm != null ? String(profile.height_cm) : "",
+    weight_kg: profile.weight_kg != null ? String(profile.weight_kg) : "",
+    citizenship: profile.citizenship ?? "",
+    religion: profile.religion ?? "",
+    blood_type: profile.blood_type ?? "",
+    region: profile.region ?? "",
+    hobbies: profile.hobbies ?? "",
+    special_skills: profile.special_skills ?? "",
+    induction_date: profile.induction_date ?? "",
+  };
+}
+
+function buildProfileIdCardMissingFields(profile: {
+  first_name: string;
+  middle_name: string;
+  last_name: string;
+  spouse_name: string;
+  emergency_contact_number: string;
+  region: string;
+}, positions: MemberClubPosition[] = []): string[] {
+  const missing: string[] = [];
+
+  if (!profile.last_name.trim()) missing.push("Last Name");
+  if (!profile.first_name.trim()) missing.push("First Name");
+  if (!profile.middle_name.trim()) missing.push("Middle Name");
+  if (positions.length === 0) missing.push("Current Club Position");
+  if (!profile.region.trim()) missing.push("Region");
+  if (!profile.spouse_name.trim()) missing.push("Spouse Name");
+  if (!profile.emergency_contact_number.trim()) missing.push("In Case of Emergency CP Number");
+
+  return missing;
+}
+
 function DocumentThumbnail({ originalName, viewUrl }: { originalName: string; viewUrl: string }) {
   const [previewFailed, setPreviewFailed] = useState(false);
   const imageDocument = isImageDocument(originalName);
@@ -345,6 +450,38 @@ function ApplicantDocumentCard({
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function ProfileInput({
+  id,
+  label,
+  value,
+  onChange,
+  type = "text",
+  as = "input",
+  requiredTone = false,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  type?: string;
+  as?: "input" | "textarea";
+  requiredTone?: boolean;
+}) {
+  const labelClass = `mb-2 block text-xs uppercase tracking-wider ${requiredTone ? "text-red-300" : "text-gold-soft"}`;
+  const fieldClass = "w-full rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite focus:border-gold focus:outline-none";
+
+  return (
+    <div>
+      <label htmlFor={id} className={labelClass}>{label}</label>
+      {as === "textarea" ? (
+        <textarea id={id} value={value} onChange={(e) => onChange(e.target.value)} className={`${fieldClass} min-h-[96px]`} />
+      ) : (
+        <input id={id} type={type} value={value} onChange={(e) => onChange(e.target.value)} className={fieldClass} />
+      )}
     </div>
   );
 }
@@ -507,16 +644,8 @@ export default function PortalDashboard() {
   const [profile, setProfile] = useState<SelfMemberProfile | null>(null);
   const [profileLoaded, setProfileLoaded] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
-  const [profileForm, setProfileForm] = useState({
-    first_name: "",
-    middle_name: "",
-    last_name: "",
-    spouse_name: "",
-    contact_number: "",
-    address: "",
-    date_of_birth: "",
-    induction_date: "",
-  });
+  const [profileSection, setProfileSection] = useState<ProfileSection>("identity");
+  const [profileForm, setProfileForm] = useState(EMPTY_SELF_PROFILE_FORM);
   const canBatchTreasurerManagePayments = Boolean(dashboard?.can_manage_batch_applicant_contributions);
   const canSelfEditProfile = !isAdmin && dashboard?.view !== "applicant";
 
@@ -602,23 +731,16 @@ export default function PortalDashboard() {
           const profileRes = await api.get<SelfMemberProfile>("/members/me/profile");
           setProfile(profileRes.data);
           setProfileLoaded(true);
-          setProfileForm({
-            first_name: profileRes.data.first_name ?? "",
-            middle_name: profileRes.data.middle_name ?? "",
-            last_name: profileRes.data.last_name ?? "",
-            spouse_name: profileRes.data.spouse_name ?? "",
-            contact_number: profileRes.data.contact_number ?? "",
-            address: profileRes.data.address ?? "",
-            date_of_birth: profileRes.data.date_of_birth ?? "",
-            induction_date: profileRes.data.induction_date ?? "",
-          });
+          setProfileForm(buildSelfProfileForm(profileRes.data));
         } catch {
           setProfile(null);
           setProfileLoaded(false);
+          setProfileForm(EMPTY_SELF_PROFILE_FORM);
         }
       } else {
         setProfile(null);
         setProfileLoaded(false);
+        setProfileForm(EMPTY_SELF_PROFILE_FORM);
       }
 
     } catch (err) {
@@ -1233,16 +1355,7 @@ export default function PortalDashboard() {
       const response = await api.put<{ message?: string; member?: SelfMemberProfile }>("/members/me/profile", profileForm);
       if (response.data?.member) {
         setProfile(response.data.member);
-        setProfileForm({
-          first_name: response.data.member.first_name ?? "",
-          middle_name: response.data.member.middle_name ?? "",
-          last_name: response.data.member.last_name ?? "",
-          spouse_name: response.data.member.spouse_name ?? "",
-          contact_number: response.data.member.contact_number ?? "",
-          address: response.data.member.address ?? "",
-          date_of_birth: response.data.member.date_of_birth ?? "",
-          induction_date: response.data.member.induction_date ?? "",
-        });
+        setProfileForm(buildSelfProfileForm(response.data.member));
       }
       setNotice(response.data?.message ?? "Profile updated successfully.");
       await loadDashboard();
@@ -1993,40 +2106,106 @@ export default function PortalDashboard() {
                 <p className="text-sm text-mist/85">Membership Status: <span className="text-offwhite">{profile.membership_status}</span></p>
               </div>
 
-              <div className="grid gap-4 md:grid-cols-2">
-                <div>
-                  <label htmlFor="self-first-name" className="mb-2 block text-xs uppercase tracking-wider text-gold-soft">First Name</label>
-                  <input id="self-first-name" value={profileForm.first_name} onChange={(e) => setProfileForm((prev) => ({ ...prev, first_name: e.target.value }))} className="w-full rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite focus:border-gold focus:outline-none" />
-                </div>
-                <div>
-                  <label htmlFor="self-middle-name" className="mb-2 block text-xs uppercase tracking-wider text-gold-soft">Middle Name</label>
-                  <input id="self-middle-name" value={profileForm.middle_name} onChange={(e) => setProfileForm((prev) => ({ ...prev, middle_name: e.target.value }))} className="w-full rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite focus:border-gold focus:outline-none" />
-                </div>
-                <div>
-                  <label htmlFor="self-last-name" className="mb-2 block text-xs uppercase tracking-wider text-gold-soft">Last Name</label>
-                  <input id="self-last-name" value={profileForm.last_name} onChange={(e) => setProfileForm((prev) => ({ ...prev, last_name: e.target.value }))} className="w-full rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite focus:border-gold focus:outline-none" />
-                </div>
-                <div>
-                  <label htmlFor="self-spouse-name" className="mb-2 block text-xs uppercase tracking-wider text-gold-soft">Spouse Name</label>
-                  <input id="self-spouse-name" value={profileForm.spouse_name} onChange={(e) => setProfileForm((prev) => ({ ...prev, spouse_name: e.target.value }))} className="w-full rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite focus:border-gold focus:outline-none" />
-                </div>
-                <div>
-                  <label htmlFor="self-contact-number" className="mb-2 block text-xs uppercase tracking-wider text-gold-soft">Contact Number</label>
-                  <input id="self-contact-number" value={profileForm.contact_number} onChange={(e) => setProfileForm((prev) => ({ ...prev, contact_number: e.target.value }))} className="w-full rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite focus:border-gold focus:outline-none" />
-                </div>
-                <div>
-                  <label htmlFor="self-date-of-birth" className="mb-2 block text-xs uppercase tracking-wider text-gold-soft">Date of Birth</label>
-                  <input id="self-date-of-birth" type="date" value={profileForm.date_of_birth} onChange={(e) => setProfileForm((prev) => ({ ...prev, date_of_birth: e.target.value }))} className="w-full rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite focus:border-gold focus:outline-none" />
-                </div>
-                <div className="md:col-span-2">
-                  <label htmlFor="self-address" className="mb-2 block text-xs uppercase tracking-wider text-gold-soft">Address</label>
-                  <textarea id="self-address" value={profileForm.address} onChange={(e) => setProfileForm((prev) => ({ ...prev, address: e.target.value }))} className="min-h-[96px] w-full rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite focus:border-gold focus:outline-none" />
-                </div>
-                <div>
-                  <label htmlFor="self-induction-date" className="mb-2 block text-xs uppercase tracking-wider text-gold-soft">Induction Date</label>
-                  <input id="self-induction-date" type="date" value={profileForm.induction_date} onChange={(e) => setProfileForm((prev) => ({ ...prev, induction_date: e.target.value }))} className="w-full rounded-md border border-white/25 bg-white/10 px-4 py-2 text-offwhite focus:border-gold focus:outline-none" />
-                </div>
+              <div className="mb-4 rounded-lg border border-red-400/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                {(() => {
+                  const missing = buildProfileIdCardMissingFields(profileForm, profile.current_club_positions ?? []);
+                  return missing.length === 0
+                    ? "ID card production fields are complete."
+                    : `Required for ID card production: ${missing.join(", ")}.`;
+                })()}
               </div>
+
+              <div className="mb-5 flex flex-wrap gap-2">
+                {[
+                  ["identity", "Identity"],
+                  ["contact", "Contact"],
+                  ["positions", "Positions"],
+                  ["optional", "Optional"],
+                ].map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setProfileSection(value as ProfileSection)}
+                    className={`rounded-md border px-4 py-2 text-sm ${profileSection === value ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              {profileSection === "identity" && (
+                <div className="grid gap-4 md:grid-cols-2">
+                  <ProfileInput id="self-first-name" label="First Name" value={profileForm.first_name} onChange={(value) => setProfileForm((prev) => ({ ...prev, first_name: value }))} requiredTone />
+                  <ProfileInput id="self-nickname" label="Nickname" value={profileForm.nickname} onChange={(value) => setProfileForm((prev) => ({ ...prev, nickname: value }))} />
+                  <ProfileInput id="self-middle-name" label="Middle Name" value={profileForm.middle_name} onChange={(value) => setProfileForm((prev) => ({ ...prev, middle_name: value }))} requiredTone />
+                  <ProfileInput id="self-last-name" label="Last Name" value={profileForm.last_name} onChange={(value) => setProfileForm((prev) => ({ ...prev, last_name: value }))} requiredTone />
+                  <ProfileInput id="self-spouse-name" label="Spouse Name" value={profileForm.spouse_name} onChange={(value) => setProfileForm((prev) => ({ ...prev, spouse_name: value }))} requiredTone />
+                  <ProfileInput id="self-date-of-birth" label="Date of Birth" type="date" value={profileForm.date_of_birth} onChange={(value) => setProfileForm((prev) => ({ ...prev, date_of_birth: value }))} />
+                  <ProfileInput id="self-place-of-birth" label="Place of Birth" value={profileForm.place_of_birth} onChange={(value) => setProfileForm((prev) => ({ ...prev, place_of_birth: value }))} />
+                  <ProfileInput id="self-civil-status" label="Civil Status" value={profileForm.civil_status} onChange={(value) => setProfileForm((prev) => ({ ...prev, civil_status: value }))} />
+                  <ProfileInput id="self-blood-type" label="Blood Type" value={profileForm.blood_type} onChange={(value) => setProfileForm((prev) => ({ ...prev, blood_type: value }))} />
+                  <ProfileInput id="self-height" label="Height (cm)" value={profileForm.height_cm} onChange={(value) => setProfileForm((prev) => ({ ...prev, height_cm: value }))} />
+                  <ProfileInput id="self-weight" label="Weight (kg)" value={profileForm.weight_kg} onChange={(value) => setProfileForm((prev) => ({ ...prev, weight_kg: value }))} />
+                  <ProfileInput id="self-citizenship" label="Citizenship" value={profileForm.citizenship} onChange={(value) => setProfileForm((prev) => ({ ...prev, citizenship: value }))} />
+                  <ProfileInput id="self-religion" label="Religion" value={profileForm.religion} onChange={(value) => setProfileForm((prev) => ({ ...prev, religion: value }))} />
+                </div>
+              )}
+
+              {profileSection === "contact" && (
+                <div className="grid gap-4 md:grid-cols-2">
+                  <ProfileInput id="self-contact-number" label="Contact Number" value={profileForm.contact_number} onChange={(value) => setProfileForm((prev) => ({ ...prev, contact_number: value }))} />
+                  <ProfileInput id="self-telephone-number" label="Telephone Number" value={profileForm.telephone_number} onChange={(value) => setProfileForm((prev) => ({ ...prev, telephone_number: value }))} />
+                  <ProfileInput id="self-emergency-contact-number" label="In Case of Emergency CP Number" value={profileForm.emergency_contact_number} onChange={(value) => setProfileForm((prev) => ({ ...prev, emergency_contact_number: value }))} requiredTone />
+                  <ProfileInput id="self-region" label="Region" value={profileForm.region} onChange={(value) => setProfileForm((prev) => ({ ...prev, region: value }))} requiredTone />
+                  <ProfileInput id="self-street-no" label="Street No." value={profileForm.street_no} onChange={(value) => setProfileForm((prev) => ({ ...prev, street_no: value }))} />
+                  <ProfileInput id="self-address-line" label="Address Line" value={profileForm.address_line} onChange={(value) => setProfileForm((prev) => ({ ...prev, address_line: value }))} />
+                  <ProfileInput id="self-barangay" label="Barangay" value={profileForm.barangay} onChange={(value) => setProfileForm((prev) => ({ ...prev, barangay: value }))} />
+                  <ProfileInput id="self-city-municipality" label="Municipality/City" value={profileForm.city_municipality} onChange={(value) => setProfileForm((prev) => ({ ...prev, city_municipality: value }))} />
+                  <ProfileInput id="self-province" label="Province" value={profileForm.province} onChange={(value) => setProfileForm((prev) => ({ ...prev, province: value }))} />
+                  <ProfileInput id="self-zip-code" label="ZIP Code" value={profileForm.zip_code} onChange={(value) => setProfileForm((prev) => ({ ...prev, zip_code: value }))} />
+                  <div className="md:col-span-2">
+                    <ProfileInput id="self-address" label="Legacy Full Address" as="textarea" value={profileForm.address} onChange={(value) => setProfileForm((prev) => ({ ...prev, address: value }))} />
+                  </div>
+                  <ProfileInput id="self-induction-date" label="Induction Date" type="date" value={profileForm.induction_date} onChange={(value) => setProfileForm((prev) => ({ ...prev, induction_date: value }))} />
+                </div>
+              )}
+
+              {profileSection === "positions" && (
+                <div className="space-y-4">
+                  <p className="text-sm text-mist/80">
+                    Club positions are shown here for ID card verification. Position history is managed from the member administration workflow.
+                  </p>
+                  {(profile.current_club_positions ?? []).length === 0 ? (
+                    <div className="rounded-lg border border-dashed border-white/15 px-4 py-8 text-center text-sm text-mist/70">
+                      No current club position recorded.
+                    </div>
+                  ) : (
+                    <div className="grid gap-3 md:grid-cols-2">
+                      {(profile.current_club_positions ?? []).map((position, index) => (
+                        <div key={position.id ?? `${position.position_name}-${index}`} className="rounded-xl border border-white/15 bg-white/5 p-4">
+                          <p className="text-xs uppercase tracking-wider text-red-300">Current Club Position</p>
+                          <p className="mt-1 text-sm text-offwhite">{position.position_name || "—"}</p>
+                          <p className="mt-3 text-xs uppercase tracking-wider text-gold-soft">Position Code</p>
+                          <p className="mt-1 text-sm text-offwhite">{position.position_code || "—"}</p>
+                          <p className="mt-3 text-xs uppercase tracking-wider text-gold-soft">Eagle Year</p>
+                          <p className="mt-1 text-sm text-offwhite">{position.eagle_year || "—"}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {profileSection === "optional" && (
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="md:col-span-2">
+                    <ProfileInput id="self-hobbies" label="Hobbies" as="textarea" value={profileForm.hobbies} onChange={(value) => setProfileForm((prev) => ({ ...prev, hobbies: value }))} />
+                  </div>
+                  <div className="md:col-span-2">
+                    <ProfileInput id="self-special-skills" label="Special Skills" as="textarea" value={profileForm.special_skills} onChange={(value) => setProfileForm((prev) => ({ ...prev, special_skills: value }))} />
+                  </div>
+                </div>
+              )}
 
               <div className="mt-4 flex justify-end">
                 <button type="button" onClick={() => void saveOwnProfile()} disabled={savingProfile} className="btn-primary disabled:opacity-50">
