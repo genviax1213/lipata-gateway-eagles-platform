@@ -3,12 +3,14 @@ import { Link, useParams } from "react-router-dom";
 import api from "../services/api";
 import type { CmsPost } from "../types/cms";
 import { htmlToPlainText, sanitizeRichHtml } from "../utils/richText";
+import { buildVideoThumbnailCandidates } from "../utils/video";
 
 export default function NewsArticle() {
   const { slug } = useParams();
   const [post, setPost] = useState<CmsPost | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [useVideoCoverFallback, setUseVideoCoverFallback] = useState(false);
 
   const [fontSize, setFontSize] = useState(18);
   const [layout, setLayout] = useState<"single" | "columns">("single");
@@ -51,6 +53,23 @@ export default function NewsArticle() {
     () => htmlToPlainText(post?.content ?? "").split(/\s+/).filter(Boolean).length,
     [post?.content],
   );
+  const videoCoverImage = useMemo(() => {
+    const thumbnail = buildVideoThumbnailCandidates({
+      thumbnailUrl: post?.video_thumbnail_url,
+      sourceUrl: post?.video_url,
+      embedUrl: post?.video_embed_url,
+    })[0];
+
+    if (useVideoCoverFallback || !thumbnail) {
+      return "/images/lgec-logo.png";
+    }
+
+    return thumbnail;
+  }, [post?.video_embed_url, post?.video_thumbnail_url, post?.video_url, useVideoCoverFallback]);
+
+  useEffect(() => {
+    setUseVideoCoverFallback(false);
+  }, [post?.id, post?.video_embed_url, post?.video_thumbnail_url, post?.video_url]);
 
   return (
     <section className="section-wrap py-12 md:py-16">
@@ -120,19 +139,30 @@ export default function NewsArticle() {
             </div>
           )}
 
-          {post.post_type === "video" && post.video_embed_url ? (
-            <div className="mb-6 overflow-hidden rounded-lg border border-white/20 bg-white/5">
-              <div className="aspect-video">
-                <iframe
-                  src={post.video_embed_url}
-                  title={post.title}
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                  allowFullScreen
-                  referrerPolicy="strict-origin-when-cross-origin"
-                  className="h-full w-full border-0"
-                />
-              </div>
-            </div>
+          {post.post_type === "video" ? (
+            <>
+              <img
+                src={videoCoverImage}
+                alt={post.title}
+                className="mb-6 h-64 w-full rounded-lg object-cover md:h-[28rem]"
+                onError={() => setUseVideoCoverFallback(true)}
+              />
+
+              {post.video_embed_url && (
+                <div className="mb-6 overflow-hidden rounded-lg border border-white/20 bg-white/5">
+                  <div className="aspect-video">
+                    <iframe
+                      src={post.video_embed_url}
+                      title={post.title}
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                      allowFullScreen
+                      referrerPolicy="strict-origin-when-cross-origin"
+                      className="h-full w-full border-0"
+                    />
+                  </div>
+                </div>
+              )}
+            </>
           ) : post.image_url && (
             <img
               src={post.image_url}
