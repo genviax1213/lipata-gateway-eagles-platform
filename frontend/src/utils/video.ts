@@ -46,10 +46,10 @@ export function buildVideoThumbnailCandidates(video: {
   }
 
   return [
+    `https://i.ytimg.com/vi/${youtubeId}/hqdefault.jpg`,
+    `https://i.ytimg.com/vi/${youtubeId}/sddefault.jpg`,
     `https://i.ytimg.com/vi_webp/${youtubeId}/maxresdefault.webp`,
     `https://i.ytimg.com/vi/${youtubeId}/maxresdefault.jpg`,
-    `https://i.ytimg.com/vi/${youtubeId}/sddefault.jpg`,
-    `https://i.ytimg.com/vi/${youtubeId}/hqdefault.jpg`,
     ...candidates,
   ].filter((candidate, index, all) => all.indexOf(candidate) === index);
 }
