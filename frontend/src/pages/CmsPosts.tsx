@@ -1938,8 +1938,8 @@ export default function CmsPosts() {
             <p className="text-sm text-mist/80">Loading posts...</p>
           ) : (
             <>
-              <div className="overflow-hidden rounded-xl border border-white/20 bg-white/10">
-                <table className="min-w-full text-left text-sm text-offwhite">
+              <div className="overflow-x-auto rounded-xl border border-white/20 bg-white/10">
+                <table className="min-w-[900px] text-left text-sm text-offwhite">
                   <thead className="bg-navy/70 text-gold-soft">
                     <tr>
                       <th className="px-4 py-3">Title</th>

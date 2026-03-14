@@ -520,7 +520,7 @@ export default function UserRoles() {
           ) : (
             <>
               <div className="overflow-x-auto rounded-xl border border-white/20 bg-white/10 shadow-lg">
-                <table className="min-w-full text-sm text-offwhite">
+                <table className="min-w-[780px] text-sm text-offwhite">
                   <thead className="bg-navy/70 text-gold-soft">
                     <tr>
                       <th className="px-4 py-3 text-left">Select</th>
@@ -703,7 +703,7 @@ export default function UserRoles() {
           ) : (
             <>
               <div className="overflow-x-auto rounded-xl border border-white/20 bg-white/10 shadow-lg">
-                <table className="min-w-full text-sm text-offwhite">
+                <table className="min-w-[760px] text-sm text-offwhite">
                   <thead className="bg-navy/70 text-gold-soft">
                     <tr>
                       <th className="px-4 py-3 text-left">Select</th>
