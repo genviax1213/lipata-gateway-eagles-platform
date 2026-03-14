@@ -27,14 +27,6 @@ const navGroups: NavGroup[] = [
     items: [
       { label: "Activities", to: "/activities" },
       { label: "Schedules", to: "/schedules" },
-      { label: "News", to: "/news" },
-    ],
-  },
-  {
-    label: "Resources",
-    items: [
-      { label: "Hymnals", to: "/hymnals" },
-      { label: "Downloads", to: "/downloads" },
     ],
   },
 ];
@@ -169,6 +161,7 @@ export default function Navbar() {
               </div>
             </div>
           ))}
+          <NavLink to="/downloads" className={navItem}>Downloads</NavLink>
           <NavLink to="/contact" className={navItem}>Contact</NavLink>
           <NavLink
             to={isLoggedIn ? "/portal" : canonicalRoutes.login}
@@ -201,6 +194,9 @@ export default function Navbar() {
                   </div>
                 </div>
               ))}
+              <NavLink to="/downloads" onClick={() => setMobileOpen(false)} className={navItem}>
+                Downloads
+              </NavLink>
               <NavLink to="/contact" onClick={() => setMobileOpen(false)} className={navItem}>
                 Contact
               </NavLink>

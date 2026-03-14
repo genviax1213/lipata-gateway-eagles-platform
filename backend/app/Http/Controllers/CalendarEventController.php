@@ -7,6 +7,18 @@ use Illuminate\Http\Request;
 
 class CalendarEventController extends Controller
 {
+    public function publicIndex()
+    {
+        $events = CalendarEvent::query()
+            ->where('starts_at', '>=', now()->subDay())
+            ->orderBy('starts_at')
+            ->limit(30)
+            ->get()
+            ->map(fn (CalendarEvent $event) => $this->publicEventPayload($event));
+
+        return response()->json(['data' => $events]);
+    }
+
     public function index()
     {
         $events = CalendarEvent::query()
@@ -97,6 +109,19 @@ class CalendarEventController extends Controller
                 'id' => $event->createdBy->id,
                 'name' => $event->createdBy->name,
             ] : null,
+        ];
+    }
+
+    private function publicEventPayload(CalendarEvent $event): array
+    {
+        return [
+            'id' => $event->id,
+            'title' => $event->title,
+            'event_type' => $event->event_type,
+            'starts_at' => optional($event->starts_at)?->toISOString(),
+            'ends_at' => optional($event->ends_at)?->toISOString(),
+            'location' => $event->location,
+            'description' => $event->description,
         ];
     }
 }

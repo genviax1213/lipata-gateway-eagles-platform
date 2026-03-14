@@ -89,6 +89,114 @@ class CmsOwnershipAndHomepageVideoTest extends TestCase
             ->assertJsonPath('message', 'Post deleted');
     }
 
+    public function test_only_owner_and_superadmin_can_edit_existing_posts(): void
+    {
+        $officerRole = Role::query()->where('name', 'officer')->firstOrFail();
+        $superadminRole = Role::query()->where('name', 'superadmin')->firstOrFail();
+
+        $author = User::factory()->create([
+            'role_id' => $officerRole->id,
+            'email' => 'owner-author@example.test',
+        ]);
+        $otherOfficer = User::factory()->create([
+            'role_id' => $officerRole->id,
+            'email' => 'other-officer@example.test',
+        ]);
+        $superadmin = User::factory()->create([
+            'role_id' => $superadminRole->id,
+            'email' => 'superadmin-editor@example.test',
+        ]);
+
+        $post = Post::query()->create([
+            'title' => 'Owned Article',
+            'slug' => 'owned-article',
+            'section' => 'activities',
+            'excerpt' => 'Owned excerpt',
+            'content' => '<p>Owned body</p>',
+            'status' => 'published',
+            'author_id' => $author->id,
+        ]);
+
+        Sanctum::actingAs($otherOfficer);
+
+        $this->putJson("/api/v1/cms/posts/{$post->id}", [
+            'title' => 'Officer Edited Article',
+            'section' => 'activities',
+            'excerpt' => 'Officer edit',
+            'content' => '<p>Officer edit</p>',
+            'status' => 'published',
+        ])->assertForbidden();
+
+        Sanctum::actingAs($author);
+
+        $this->putJson("/api/v1/cms/posts/{$post->id}", [
+            'title' => 'Owner Edited Article',
+            'section' => 'activities',
+            'excerpt' => 'Owner edit',
+            'content' => '<p>Owner edit</p>',
+            'status' => 'published',
+        ])->assertOk()
+            ->assertJsonPath('title', 'Owner Edited Article')
+            ->assertJsonPath('can_edit', true);
+
+        Sanctum::actingAs($superadmin);
+
+        $this->putJson("/api/v1/cms/posts/{$post->id}", [
+            'title' => 'Superadmin Edited Article',
+            'section' => 'activities',
+            'excerpt' => 'Superadmin edit',
+            'content' => '<p>Superadmin edit</p>',
+            'status' => 'published',
+        ])->assertOk()
+            ->assertJsonPath('title', 'Superadmin Edited Article')
+            ->assertJsonPath('can_edit', true);
+    }
+
+    public function test_admin_can_delete_other_users_posts_but_cannot_edit_them(): void
+    {
+        $officerRole = Role::query()->where('name', 'officer')->firstOrFail();
+        $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
+
+        $author = User::factory()->create([
+            'role_id' => $officerRole->id,
+            'email' => 'delete-owner@example.test',
+        ]);
+        $admin = User::factory()->create([
+            'role_id' => $adminRole->id,
+            'email' => 'admin-delete@example.test',
+        ]);
+
+        $post = Post::query()->create([
+            'title' => 'Admin Delete Target',
+            'slug' => 'admin-delete-target',
+            'section' => 'activities',
+            'excerpt' => 'Delete target',
+            'content' => '<p>Delete target</p>',
+            'status' => 'published',
+            'author_id' => $author->id,
+        ]);
+
+        Sanctum::actingAs($admin);
+
+        $this->getJson('/api/v1/cms/posts')
+            ->assertOk()
+            ->assertJsonPath('data.0.id', $post->id)
+            ->assertJsonPath('data.0.can_edit', false)
+            ->assertJsonPath('data.0.can_delete', true);
+
+        $this->putJson("/api/v1/cms/posts/{$post->id}", [
+            'title' => 'Admin Should Not Edit',
+            'section' => 'activities',
+            'excerpt' => 'Edit denied',
+            'content' => '<p>Edit denied</p>',
+            'status' => 'published',
+        ])->assertForbidden();
+
+        $this->deleteJson("/api/v1/cms/posts/{$post->id}")
+            ->assertOk()
+            ->assertJsonPath('message', 'Post deleted');
+    }
+
     public function test_homepage_reputation_video_is_admin_managed_and_publicly_visible(): void
     {
         $adminRole = Role::query()->where('name', 'admin')->firstOrFail();

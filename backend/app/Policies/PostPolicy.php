@@ -32,14 +32,14 @@ class PostPolicy
 
     public function update(User $user, Post $post): bool
     {
-        return $this->hasOfficerCmsAccess($user)
-            || $post->author_id === $user->id;
+        return $post->author_id === $user->id
+            || $this->isSuperadmin($user);
     }
 
     public function delete(User $user, Post $post): bool
     {
-        return $user->hasPermission('posts.delete')
-            || $post->author_id === $user->id;
+        return $post->author_id === $user->id
+            || $this->isAdminOrSuperadmin($user);
     }
 
     private function hasOfficerCmsAccess(User $user): bool
@@ -59,6 +59,23 @@ class PostPolicy
         ], true) || in_array($financeRole, [
             RoleHierarchy::FINANCE_TREASURER,
             RoleHierarchy::FINANCE_AUDITOR,
+        ], true);
+    }
+
+    private function isSuperadmin(User $user): bool
+    {
+        $user->loadMissing('role:id,name');
+
+        return (string) optional($user->role)->name === RoleHierarchy::SUPERADMIN;
+    }
+
+    private function isAdminOrSuperadmin(User $user): bool
+    {
+        $user->loadMissing('role:id,name');
+
+        return in_array((string) optional($user->role)->name, [
+            RoleHierarchy::SUPERADMIN,
+            RoleHierarchy::ADMIN,
         ], true);
     }
 }

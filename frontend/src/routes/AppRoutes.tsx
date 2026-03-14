@@ -11,8 +11,6 @@ const History = lazy(() => import("../pages/History"));
 const MagnaCarta = lazy(() => import("../pages/MagnaCarta"));
 const Activities = lazy(() => import("../pages/Activities"));
 const Schedules = lazy(() => import("../pages/Schedules"));
-const News = lazy(() => import("../pages/News"));
-const Hymnals = lazy(() => import("../pages/Hymnals"));
 const Downloads = lazy(() => import("../pages/Downloads"));
 const Contact = lazy(() => import("../pages/Contact"));
 const ApplicantRegistration = lazy(() => import("../pages/ApplicantRegistration"));
@@ -50,8 +48,8 @@ export default function AppRoutes() {
           />
           <Route path="/activities" element={<Layout><Activities /></Layout>} />
           <Route path="/schedules" element={<Layout><Schedules /></Layout>} />
-          <Route path="/news" element={<Layout><News /></Layout>} />
-          <Route path="/hymnals" element={<Layout><Hymnals /></Layout>} />
+          <Route path="/news" element={<Navigate to="/activities" replace />} />
+          <Route path="/hymnals" element={<Navigate to="/downloads" replace />} />
           <Route
             path="/downloads"
             element={

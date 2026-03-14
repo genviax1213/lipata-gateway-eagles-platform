@@ -10,6 +10,7 @@ export default function NewsArticle() {
   const [post, setPost] = useState<CmsPost | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [videoCoverIndex, setVideoCoverIndex] = useState(0);
   const [useVideoCoverFallback, setUseVideoCoverFallback] = useState(false);
 
   const [fontSize, setFontSize] = useState(18);
@@ -53,23 +54,39 @@ export default function NewsArticle() {
     () => htmlToPlainText(post?.content ?? "").split(/\s+/).filter(Boolean).length,
     [post?.content],
   );
-  const videoCoverImage = useMemo(() => {
-    const thumbnail = buildVideoThumbnailCandidates({
+  const videoCoverCandidates = useMemo(
+    () => buildVideoThumbnailCandidates({
       thumbnailUrl: post?.video_thumbnail_url,
       sourceUrl: post?.video_url,
       embedUrl: post?.video_embed_url,
-    })[0];
+    }),
+    [post?.video_embed_url, post?.video_thumbnail_url, post?.video_url],
+  );
+  const videoCoverImage = useMemo(() => {
+    const thumbnail = videoCoverCandidates[videoCoverIndex] ?? null;
 
     if (useVideoCoverFallback || !thumbnail) {
       return "/images/lgec-logo.png";
     }
 
     return thumbnail;
-  }, [post?.video_embed_url, post?.video_thumbnail_url, post?.video_url, useVideoCoverFallback]);
+  }, [useVideoCoverFallback, videoCoverCandidates, videoCoverIndex]);
 
   useEffect(() => {
+    setVideoCoverIndex(0);
     setUseVideoCoverFallback(false);
   }, [post?.id, post?.video_embed_url, post?.video_thumbnail_url, post?.video_url]);
+
+  const handleVideoCoverError = () => {
+    if (useVideoCoverFallback) return;
+
+    if (videoCoverIndex < videoCoverCandidates.length - 1) {
+      setVideoCoverIndex((current) => current + 1);
+      return;
+    }
+
+    setUseVideoCoverFallback(true);
+  };
 
   return (
     <section className="section-wrap py-12 md:py-16">
@@ -145,7 +162,7 @@ export default function NewsArticle() {
                 src={videoCoverImage}
                 alt={post.title}
                 className="mb-6 h-64 w-full rounded-lg object-cover md:h-[28rem]"
-                onError={() => setUseVideoCoverFallback(true)}
+                onError={handleVideoCoverError}
               />
 
               {post.video_embed_url && (

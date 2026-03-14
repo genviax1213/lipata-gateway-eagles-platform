@@ -346,7 +346,6 @@ export default function CmsPosts() {
   const canManageCmsPosts = hasCmsRoleAccess || hasAuthoredPosts;
   const limitedMode = canManageCmsPosts && !hasCmsRoleAccess;
   const canCreatePosts = hasCmsRoleAccess;
-  const canUpdatePosts = hasCmsRoleAccess;
   const canDeletePosts = hasPermission(user, "posts.delete") || roleName === "superadmin" || roleName === "admin";
   const canManageHomepageVideo = roleName === "superadmin" || roleName === "admin";
   const [activeTab, setActiveTab] = useState<CmsTab>(limitedMode ? "posts" : "editor");
@@ -442,7 +441,6 @@ export default function CmsPosts() {
 
   function canEditPost(post: CmsPost): boolean {
     if (post.can_edit !== undefined) return Boolean(post.can_edit);
-    if (canUpdatePosts) return true;
     return isOwnPost(post);
   }
 

@@ -23,14 +23,18 @@ use App\Http\Controllers\CalendarEventController;
 use App\Http\Controllers\AttendanceController;
 use App\Http\Controllers\DirectoryExportController;
 use App\Http\Controllers\HomepageVideoController;
+use App\Http\Controllers\ContactInquiryController;
 use App\Models\Post;
 
 Route::prefix('v1')->group(function () {
     Route::get('/content/homepage-reputation-video', [HomepageVideoController::class, 'show']);
     Route::get('/content/homepage-community', [PostController::class, 'publicHomepageCommunity']);
     Route::get('/content/images/{path}', [PostController::class, 'showPublicImage'])->where('path', '.*');
+    Route::get('/content/schedules', [CalendarEventController::class, 'publicIndex']);
     Route::get('/content/{section}', [PostController::class, 'publicBySection']);
     Route::get('/content/post/{slug}', [PostController::class, 'publicBySlug']);
+    Route::post('/contact/inquiries', [ContactInquiryController::class, 'store'])
+        ->middleware('throttle:6,1');
     Route::post('/applicant-registrations', [ApplicantController::class, 'submit'])
         ->middleware('throttle:application-submit');
     Route::post('/applicant-registrations/reapply', [ApplicantController::class, 'reapply'])
