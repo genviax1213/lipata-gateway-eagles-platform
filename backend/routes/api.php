@@ -124,6 +124,8 @@ Route::prefix('v1')->group(function () {
         Route::delete('/members/{member}', [MemberController::class, 'destroy'])->middleware('throttle:members-write', 'portal.permission:users.manage');
         Route::get('/applicants', [ApplicantController::class, 'index']);
         Route::get('/applicants/me', [ApplicantController::class, 'myApplication'])->middleware('portal.permission:applications.dashboard.view');
+        Route::get('/applicants/me/profile', [ApplicantController::class, 'myProfile'])->middleware('portal.permission:applications.dashboard.view');
+        Route::put('/applicants/me/profile', [ApplicantController::class, 'updateMyProfile'])->middleware('portal.permission:applications.dashboard.view');
         Route::post('/applicants/me/withdraw', [ApplicantController::class, 'withdraw']);
         Route::get('/applicants/archive/me', [ApplicantController::class, 'myArchive']);
         Route::get('/applicants/{applicant}/formal-photo', [FormalPhotoController::class, 'showForApplicant'])->name('formal-photos.applicants.show');

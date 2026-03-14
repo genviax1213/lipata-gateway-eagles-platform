@@ -128,6 +128,165 @@ class ApplicantController extends Controller
         return Str::of($value)->lower()->trim()->value();
     }
 
+    private function titleOrNull(?string $value): ?string
+    {
+        $value = trim((string) $value);
+
+        return $value === '' ? null : (string) TextCase::title($value);
+    }
+
+    private function upperOrNull(?string $value): ?string
+    {
+        $value = trim((string) $value);
+
+        return $value === '' ? null : (string) TextCase::upper($value);
+    }
+
+    private function compactPhone(?string $value): ?string
+    {
+        $value = trim((string) $value);
+
+        return $value === '' ? null : preg_replace('/\s+/', '', $value);
+    }
+
+    private function trimOrNull(?string $value): ?string
+    {
+        $value = trim((string) $value);
+
+        return $value === '' ? null : $value;
+    }
+
+    private function buildLegacyAddress(array $payload): ?string
+    {
+        $explicit = $this->trimOrNull($payload['address'] ?? null);
+        if ($explicit !== null) {
+            return $explicit;
+        }
+
+        $parts = array_filter([
+            $this->trimOrNull($payload['address_line'] ?? null),
+            $this->trimOrNull($payload['street_no'] ?? null),
+            $this->trimOrNull($payload['barangay'] ?? null),
+            $this->trimOrNull($payload['city_municipality'] ?? null),
+            $this->trimOrNull($payload['province'] ?? null),
+            $this->trimOrNull($payload['zip_code'] ?? null),
+        ], fn (?string $value) => $value !== null);
+
+        return $parts === [] ? null : implode(', ', $parts);
+    }
+
+    private function applicantProfileRules(): array
+    {
+        return [
+            'first_name' => ['required', 'string', 'min:2', 'max:120', 'regex:/^(?=.*[A-Za-z])[A-Za-z\s\'\-]+$/'],
+            'nickname' => 'nullable|string|max:120',
+            'middle_name' => ['required', 'string', 'min:2', 'max:120', 'not_regex:/\./', 'regex:/^(?=.*[A-Za-z])[A-Za-z\s\'\-]+$/'],
+            'last_name' => ['required', 'string', 'min:2', 'max:120', 'regex:/^(?=.*[A-Za-z])[A-Za-z\s\'\-]+$/'],
+            'spouse_name' => 'nullable|string|max:180',
+            'contact_number' => 'nullable|string|max:50',
+            'telephone_number' => 'nullable|string|max:50',
+            'emergency_contact_number' => 'nullable|string|max:50',
+            'address' => 'nullable|string|max:1000',
+            'address_line' => 'nullable|string|max:255',
+            'street_no' => 'nullable|string|max:120',
+            'barangay' => 'nullable|string|max:120',
+            'city_municipality' => 'nullable|string|max:120',
+            'province' => 'nullable|string|max:120',
+            'zip_code' => 'nullable|string|max:20',
+            'date_of_birth' => 'nullable|date',
+            'place_of_birth' => 'nullable|string|max:180',
+            'civil_status' => 'nullable|string|max:50',
+            'height_cm' => 'nullable|numeric|min:0|max:400',
+            'weight_kg' => 'nullable|numeric|min:0|max:500',
+            'citizenship' => 'nullable|string|max:120',
+            'religion' => 'nullable|string|max:120',
+            'blood_type' => 'nullable|string|max:20',
+            'region' => 'nullable|string|max:120',
+            'hobbies' => 'nullable|string|max:5000',
+            'special_skills' => 'nullable|string|max:5000',
+        ];
+    }
+
+    private function normalizeApplicantProfilePayload(array $validated): array
+    {
+        return [
+            'first_name' => (string) TextCase::title($validated['first_name']),
+            'nickname' => $this->titleOrNull($validated['nickname'] ?? null),
+            'middle_name' => (string) TextCase::title($validated['middle_name']),
+            'last_name' => (string) TextCase::title($validated['last_name']),
+            'spouse_name' => $this->titleOrNull($validated['spouse_name'] ?? null),
+            'contact_number' => $this->compactPhone($validated['contact_number'] ?? null),
+            'telephone_number' => $this->compactPhone($validated['telephone_number'] ?? null),
+            'emergency_contact_number' => $this->compactPhone($validated['emergency_contact_number'] ?? null),
+            'address_line' => $this->trimOrNull($validated['address_line'] ?? null),
+            'street_no' => $this->trimOrNull($validated['street_no'] ?? null),
+            'barangay' => $this->titleOrNull($validated['barangay'] ?? null),
+            'city_municipality' => $this->titleOrNull($validated['city_municipality'] ?? null),
+            'province' => $this->titleOrNull($validated['province'] ?? null),
+            'zip_code' => $this->upperOrNull($validated['zip_code'] ?? null),
+            'address' => $this->buildLegacyAddress($validated),
+            'date_of_birth' => $validated['date_of_birth'] ?? null,
+            'place_of_birth' => $this->titleOrNull($validated['place_of_birth'] ?? null),
+            'civil_status' => $this->titleOrNull($validated['civil_status'] ?? null),
+            'height_cm' => isset($validated['height_cm']) && $validated['height_cm'] !== '' ? (float) $validated['height_cm'] : null,
+            'weight_kg' => isset($validated['weight_kg']) && $validated['weight_kg'] !== '' ? (float) $validated['weight_kg'] : null,
+            'citizenship' => $this->titleOrNull($validated['citizenship'] ?? null),
+            'religion' => $this->titleOrNull($validated['religion'] ?? null),
+            'blood_type' => $this->upperOrNull($validated['blood_type'] ?? null),
+            'region' => $this->titleOrNull($validated['region'] ?? null),
+            'hobbies' => $this->trimOrNull($validated['hobbies'] ?? null),
+            'special_skills' => $this->trimOrNull($validated['special_skills'] ?? null),
+        ];
+    }
+
+    private function applicantProfilePayload(Applicant $application): array
+    {
+        $application->loadMissing('batch:id,name', 'user.formalPhoto');
+
+        return [
+            'id' => $application->id,
+            'portal_subject' => 'applicant',
+            'member_number' => null,
+            'email' => $application->email,
+            'first_name' => $application->first_name,
+            'nickname' => $application->nickname,
+            'middle_name' => $application->middle_name,
+            'last_name' => $application->last_name,
+            'spouse_name' => $application->spouse_name,
+            'contact_number' => $application->contact_number,
+            'telephone_number' => $application->telephone_number,
+            'emergency_contact_number' => $application->emergency_contact_number,
+            'address' => $application->address,
+            'address_line' => $application->address_line,
+            'street_no' => $application->street_no,
+            'barangay' => $application->barangay,
+            'city_municipality' => $application->city_municipality,
+            'province' => $application->province,
+            'zip_code' => $application->zip_code,
+            'date_of_birth' => optional($application->date_of_birth)?->toDateString(),
+            'place_of_birth' => $application->place_of_birth,
+            'civil_status' => $application->civil_status,
+            'height_cm' => $application->height_cm,
+            'weight_kg' => $application->weight_kg,
+            'citizenship' => $application->citizenship,
+            'religion' => $application->religion,
+            'blood_type' => $application->blood_type,
+            'region' => $application->region,
+            'hobbies' => $application->hobbies,
+            'special_skills' => $application->special_skills,
+            'batch' => $application->batch?->name,
+            'induction_date' => null,
+            'membership_status' => 'applicant',
+            'applicant_status' => $application->status,
+            'current_stage' => $application->current_stage,
+            'current_stage_label' => $this->fiveIStageLabel($application->current_stage),
+            'email_verified' => $application->email_verified_at !== null,
+            'password_set' => !empty($application->user?->password),
+            'current_club_positions' => [],
+            'formal_photo' => $application->user?->formalPhoto?->toMetadataArray(true),
+        ];
+    }
+
     private function applyPersonMatch(Builder $query, string $firstName, ?string $middleName, string $lastName): Builder
     {
         $first = $this->normalizeName($firstName);
@@ -350,6 +509,32 @@ class ApplicantController extends Controller
             'member_id' => $application->member_id,
             'full_name' => trim($application->first_name . ' ' . ($application->middle_name ? $application->middle_name . ' ' : '') . $application->last_name),
             'email' => $application->email,
+            'first_name' => $application->first_name,
+            'nickname' => $application->nickname,
+            'middle_name' => $application->middle_name,
+            'last_name' => $application->last_name,
+            'spouse_name' => $application->spouse_name,
+            'contact_number' => $application->contact_number,
+            'telephone_number' => $application->telephone_number,
+            'emergency_contact_number' => $application->emergency_contact_number,
+            'address' => $application->address,
+            'address_line' => $application->address_line,
+            'street_no' => $application->street_no,
+            'barangay' => $application->barangay,
+            'city_municipality' => $application->city_municipality,
+            'province' => $application->province,
+            'zip_code' => $application->zip_code,
+            'date_of_birth' => optional($application->date_of_birth)?->toDateString(),
+            'place_of_birth' => $application->place_of_birth,
+            'civil_status' => $application->civil_status,
+            'height_cm' => $application->height_cm,
+            'weight_kg' => $application->weight_kg,
+            'citizenship' => $application->citizenship,
+            'religion' => $application->religion,
+            'blood_type' => $application->blood_type,
+            'region' => $application->region,
+            'hobbies' => $application->hobbies,
+            'special_skills' => $application->special_skills,
             'status' => $application->status,
             'decision_status' => $application->decision_status,
             'current_stage' => $application->current_stage,
@@ -817,6 +1002,45 @@ class ApplicantController extends Controller
         }
 
         return response()->json($this->applicantPayload($application));
+    }
+
+    public function myProfile(Request $request)
+    {
+        /** @var User $user */
+        $user = $request->user();
+
+        $application = $this->resolveOwnedApplication($user);
+
+        if (!$application || !in_array($application->status, Applicant::OPEN_STATUSES, true)) {
+            return response()->json(['message' => 'No application found for this account.'], 404);
+        }
+
+        return response()->json($this->applicantProfilePayload($application));
+    }
+
+    public function updateMyProfile(Request $request)
+    {
+        /** @var User $user */
+        $user = $request->user();
+
+        $application = $this->resolveOwnedApplication($user);
+
+        if (!$application || !in_array($application->status, Applicant::OPEN_STATUSES, true)) {
+            return response()->json(['message' => 'No application found for this account.'], 404);
+        }
+
+        $validated = $request->validate($this->applicantProfileRules());
+        $profileData = $this->normalizeApplicantProfilePayload($validated);
+
+        DB::transaction(function () use ($application, $profileData): void {
+            $application->fill($profileData);
+            $application->save();
+        });
+
+        return response()->json([
+            'message' => 'Profile updated successfully.',
+            'member' => $this->applicantProfilePayload($application->fresh()),
+        ]);
     }
 
     public function myArchive(Request $request)
@@ -1629,12 +1853,35 @@ class ApplicantController extends Controller
             $member = Member::query()->create([
                 'member_number' => $this->generateMemberNumber(),
                 'first_name' => $applicant->first_name,
+                'nickname' => $applicant->nickname,
                 'middle_name' => $applicant->middle_name,
                 'last_name' => $applicant->last_name,
+                'spouse_name' => $applicant->spouse_name,
                 'email' => $applicant->email,
                 'email_verified' => $applicant->email_verified_at !== null,
                 'password_set' => !empty($user->password),
                 'membership_status' => 'active',
+                'contact_number' => $applicant->contact_number,
+                'telephone_number' => $applicant->telephone_number,
+                'emergency_contact_number' => $applicant->emergency_contact_number,
+                'address' => $applicant->address,
+                'address_line' => $applicant->address_line,
+                'street_no' => $applicant->street_no,
+                'barangay' => $applicant->barangay,
+                'city_municipality' => $applicant->city_municipality,
+                'province' => $applicant->province,
+                'zip_code' => $applicant->zip_code,
+                'date_of_birth' => $applicant->date_of_birth,
+                'place_of_birth' => $applicant->place_of_birth,
+                'civil_status' => $applicant->civil_status,
+                'height_cm' => $applicant->height_cm,
+                'weight_kg' => $applicant->weight_kg,
+                'citizenship' => $applicant->citizenship,
+                'religion' => $applicant->religion,
+                'blood_type' => $applicant->blood_type,
+                'region' => $applicant->region,
+                'hobbies' => $applicant->hobbies,
+                'special_skills' => $applicant->special_skills,
                 'batch' => $applicant->batch?->name,
                 'user_id' => $user->id,
             ]);

@@ -35,6 +35,7 @@ interface DashboardPayload {
 
 interface SelfMemberProfile {
   id: number;
+  portal_subject?: "member" | "applicant";
   member_number: string;
   email: string | null;
   first_name: string;
@@ -65,7 +66,10 @@ interface SelfMemberProfile {
   special_skills?: string | null;
   batch: string | null;
   induction_date: string | null;
-  membership_status: "active" | "inactive";
+  membership_status: "active" | "inactive" | "applicant";
+  applicant_status?: ApplicantStatus;
+  current_stage?: string | null;
+  current_stage_label?: string | null;
   email_verified: boolean;
   password_set: boolean;
   current_club_positions?: MemberClubPosition[];
@@ -210,6 +214,32 @@ interface ApplicantDetails {
   member_id?: number | null;
   full_name: string;
   email: string;
+  first_name: string;
+  nickname?: string | null;
+  middle_name: string | null;
+  last_name: string;
+  spouse_name?: string | null;
+  contact_number?: string | null;
+  telephone_number?: string | null;
+  emergency_contact_number?: string | null;
+  address?: string | null;
+  address_line?: string | null;
+  street_no?: string | null;
+  barangay?: string | null;
+  city_municipality?: string | null;
+  province?: string | null;
+  zip_code?: string | null;
+  date_of_birth?: string | null;
+  place_of_birth?: string | null;
+  civil_status?: string | null;
+  height_cm?: string | number | null;
+  weight_kg?: string | number | null;
+  citizenship?: string | null;
+  religion?: string | null;
+  blood_type?: string | null;
+  region?: string | null;
+  hobbies?: string | null;
+  special_skills?: string | null;
   status: ApplicantStatus;
   decision_status: ApplicantDecisionStatus;
   current_stage: string | null;
@@ -647,7 +677,8 @@ export default function PortalDashboard() {
   const [profileSection, setProfileSection] = useState<ProfileSection>("identity");
   const [profileForm, setProfileForm] = useState(EMPTY_SELF_PROFILE_FORM);
   const canBatchTreasurerManagePayments = Boolean(dashboard?.can_manage_batch_applicant_contributions);
-  const canSelfEditProfile = !isAdmin && dashboard?.view !== "applicant";
+  const canViewOwnContributions = !isAdmin && (dashboard?.view === "member" || dashboard?.view === "applicant");
+  const canSelfEditProfile = !isAdmin && (dashboard?.view === "member" || dashboard?.view === "applicant");
 
   const parseError = useCallback((err: unknown, fallback: string): string => {
     if (!axios.isAxiosError(err)) return fallback;
@@ -726,7 +757,18 @@ export default function PortalDashboard() {
         setContributionInfo("");
       }
 
-      if (!isAdmin && dashRes.data.view !== "applicant") {
+      if (!isAdmin && dashRes.data.view === "applicant") {
+        try {
+          const profileRes = await api.get<SelfMemberProfile>("/applicants/me/profile");
+          setProfile(profileRes.data);
+          setProfileLoaded(true);
+          setProfileForm(buildSelfProfileForm(profileRes.data));
+        } catch {
+          setProfile(null);
+          setProfileLoaded(false);
+          setProfileForm(EMPTY_SELF_PROFILE_FORM);
+        }
+      } else if (!isAdmin && dashRes.data.view !== "applicant") {
         try {
           const profileRes = await api.get<SelfMemberProfile>("/members/me/profile");
           setProfile(profileRes.data);
@@ -1352,7 +1394,8 @@ export default function PortalDashboard() {
     setSavingProfile(true);
 
     try {
-      const response = await api.put<{ message?: string; member?: SelfMemberProfile }>("/members/me/profile", profileForm);
+      const endpoint = dashboard?.view === "applicant" ? "/applicants/me/profile" : "/members/me/profile";
+      const response = await api.put<{ message?: string; member?: SelfMemberProfile }>(endpoint, profileForm);
       if (response.data?.member) {
         setProfile(response.data.member);
         setProfileForm(buildSelfProfileForm(response.data.member));
@@ -1406,7 +1449,7 @@ export default function PortalDashboard() {
         {dashboard?.view === "applicant" && applicantDetails && <button type="button" onClick={() => setActiveTab("applicant-fees")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "applicant-fees" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Requirements</button>}
         {dashboard?.view === "applicant" && applicantDetails?.batch && <button type="button" onClick={() => setActiveTab("batch-docs")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "batch-docs" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Batch Materials</button>}
         {dashboard?.application_archive_available && <button type="button" onClick={() => setActiveTab("application-archive")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "application-archive" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Application Archive</button>}
-        {dashboard?.view !== "applicant" && <button type="button" onClick={() => setActiveTab("my-contributions")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "my-contributions" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>My Contributions</button>}
+        {canViewOwnContributions && <button type="button" onClick={() => setActiveTab("my-contributions")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "my-contributions" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>My Contributions</button>}
         {canSelfEditProfile && <button type="button" onClick={() => setActiveTab("my-profile")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "my-profile" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>My Profile</button>}
         {canViewIdentityQr && <button type="button" onClick={() => setActiveTab("my-qr")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "my-qr" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>My QR Code</button>}
         {canViewCalendar && <button type="button" onClick={() => setActiveTab("calendar")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "calendar" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Calendar & Notices</button>}
@@ -1839,11 +1882,11 @@ export default function PortalDashboard() {
         </div>
       )}
 
-      {activeTab === "my-contributions" && dashboard?.view !== "applicant" && (
+      {activeTab === "my-contributions" && canViewOwnContributions && (
         <div className="space-y-5">
           <div className="rounded-xl border border-white/20 bg-white/10 p-4">
             <h2 className="mb-2 font-heading text-2xl text-offwhite">My Contributions</h2>
-            {!memberData && contributionInfo && (
+            {dashboard?.view !== "applicant" && !memberData && contributionInfo && (
               <div className="mb-3 rounded-md border border-white/20 bg-white/5 px-3 py-2">
                 <p className="text-sm text-mist/85">{contributionInfo}</p>
                 {isAdmin && (
@@ -1857,6 +1900,55 @@ export default function PortalDashboard() {
                 )}
               </div>
             )}
+            {dashboard?.view === "applicant" && applicantDetails ? (
+              <>
+                <p className="mb-3 text-sm text-mist/85">
+                  Applicant journey contributions stay on your applicant record while you complete the 5I workflow. They remain reviewable in the archived applicant dossier even after activation.
+                </p>
+                <div className="mb-4 grid gap-3 md:grid-cols-3">
+                  <div className="rounded-lg border border-white/15 bg-white/5 p-4">
+                    <p className="text-xs uppercase tracking-[0.18em] text-gold-soft">Target Total</p>
+                    <p className="mt-2 text-lg text-offwhite">{money(applicantDetails.fees.required_total)}</p>
+                  </div>
+                  <div className="rounded-lg border border-white/15 bg-white/5 p-4">
+                    <p className="text-xs uppercase tracking-[0.18em] text-gold-soft">Paid Total</p>
+                    <p className="mt-2 text-lg text-offwhite">{money(applicantDetails.fees.paid_total)}</p>
+                  </div>
+                  <div className="rounded-lg border border-white/15 bg-white/5 p-4">
+                    <p className="text-xs uppercase tracking-[0.18em] text-gold-soft">Variance</p>
+                    <p className="mt-2 text-lg text-gold-soft">{money(applicantDetails.fees.variance_total ?? applicantDetails.fees.balance)}</p>
+                  </div>
+                </div>
+                <div className="overflow-x-auto rounded-lg border border-white/20">
+                  <table className="min-w-full text-sm text-offwhite">
+                    <thead className="bg-navy/70 text-gold-soft">
+                      <tr>
+                        <th className="px-3 py-2 text-left">Category</th>
+                        <th className="px-3 py-2 text-left">Target</th>
+                        <th className="px-3 py-2 text-left">Paid</th>
+                        <th className="px-3 py-2 text-left">Variance</th>
+                        <th className="px-3 py-2 text-left">Payments</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {applicantDetails.fees.requirements.map((req) => (
+                        <tr key={req.category} className="border-b border-white/15 align-top">
+                          <td className="px-3 py-2">{req.category_label}</td>
+                          <td className="px-3 py-2">{money(req.target_payment)}</td>
+                          <td className="px-3 py-2">{money(req.partial_payment_total)}</td>
+                          <td className="px-3 py-2">{money(req.variance)}</td>
+                          <td className="px-3 py-2 text-xs text-mist/80">
+                            {req.payments.length === 0 ? "No payments yet." : req.payments.map((p) => `${p.payment_date} - ${money(p.amount)} by ${p.encoded_by?.name ?? "Membership Chairman"}`).join(" | ")}
+                          </td>
+                        </tr>
+                      ))}
+                      {applicantDetails.fees.requirements.length === 0 && <tr><td colSpan={5} className="px-3 py-3 text-center text-mist/70">No requirement records found.</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            ) : (
+              <>
             <div className="mb-3 flex flex-wrap items-center gap-3">
               <button className={`rounded-md border px-3 py-1 text-sm ${selectedTab === "alalayang_agila_contribution" ? "border-gold text-gold-soft" : "border-white/30 text-offwhite"}`} onClick={() => setSelectedTab("alalayang_agila_contribution")}>Alalayang Agila</button>
               <button className={`rounded-md border px-3 py-1 text-sm ${selectedTab === "monthly_contribution" ? "border-gold text-gold-soft" : "border-white/30 text-offwhite"}`} onClick={() => setSelectedTab("monthly_contribution")}>Monthly Contribution</button>
@@ -1929,6 +2021,8 @@ export default function PortalDashboard() {
                     <button type="button" className="btn-secondary" disabled={contributionsPage >= contributionsLastPage} onClick={() => setContributionsPage((current) => Math.min(contributionsLastPage, current + 1))}>Next</button>
                   </div>
                 </div>
+              </>
+            )}
               </>
             )}
           </div>
@@ -2082,7 +2176,9 @@ export default function PortalDashboard() {
         <div className="rounded-xl border border-white/20 bg-white/10 p-4">
           <h2 className="mb-2 font-heading text-2xl text-offwhite">My Profile</h2>
           <p className="mb-4 text-sm text-mist/85">
-            Update your personal member data here. Email, batch, member number, membership status, and account verification settings are managed separately.
+            {dashboard?.view === "applicant"
+              ? "Update your applicant profile here. These fields are carried into the member record once the 5I workflow is completed and activation happens."
+              : "Update your personal member data here. Email, batch, member number, membership status, and account verification settings are managed separately."}
           </p>
 
           {!profileLoaded || !profile ? (
@@ -2100,10 +2196,10 @@ export default function PortalDashboard() {
               />
 
               <div className="mb-6 grid gap-3 md:grid-cols-2">
-                <p className="text-sm text-mist/85">Member Number: <span className="text-offwhite">{profile.member_number}</span></p>
+                <p className="text-sm text-mist/85">{dashboard?.view === "applicant" ? "Application Status" : "Member Number"}: <span className="text-offwhite">{dashboard?.view === "applicant" ? (profile.applicant_status ?? "—") : profile.member_number}</span></p>
                 <p className="text-sm text-mist/85">Email: <span className="text-offwhite">{profile.email ?? "—"}</span></p>
                 <p className="text-sm text-mist/85">Batch: <span className="text-offwhite">{profile.batch ?? "—"}</span></p>
-                <p className="text-sm text-mist/85">Membership Status: <span className="text-offwhite">{profile.membership_status}</span></p>
+                <p className="text-sm text-mist/85">{dashboard?.view === "applicant" ? "Current Stage" : "Membership Status"}: <span className="text-offwhite">{dashboard?.view === "applicant" ? (profile.current_stage_label ?? "—") : profile.membership_status}</span></p>
               </div>
 
               <div className="mb-4 rounded-lg border border-red-400/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
@@ -2172,26 +2268,34 @@ export default function PortalDashboard() {
 
               {profileSection === "positions" && (
                 <div className="space-y-4">
-                  <p className="text-sm text-mist/80">
-                    Club positions are shown here for ID card verification. Position history is managed from the member administration workflow.
-                  </p>
-                  {(profile.current_club_positions ?? []).length === 0 ? (
+                  {dashboard?.view === "applicant" ? (
                     <div className="rounded-lg border border-dashed border-white/15 px-4 py-8 text-center text-sm text-mist/70">
-                      No current club position recorded.
+                      Club positions are assigned after member activation. Your applicant profile data here will carry over to the member record.
                     </div>
                   ) : (
-                    <div className="grid gap-3 md:grid-cols-2">
-                      {(profile.current_club_positions ?? []).map((position, index) => (
-                        <div key={position.id ?? `${position.position_name}-${index}`} className="rounded-xl border border-white/15 bg-white/5 p-4">
-                          <p className="text-xs uppercase tracking-wider text-red-300">Current Club Position</p>
-                          <p className="mt-1 text-sm text-offwhite">{position.position_name || "—"}</p>
-                          <p className="mt-3 text-xs uppercase tracking-wider text-gold-soft">Position Code</p>
-                          <p className="mt-1 text-sm text-offwhite">{position.position_code || "—"}</p>
-                          <p className="mt-3 text-xs uppercase tracking-wider text-gold-soft">Eagle Year</p>
-                          <p className="mt-1 text-sm text-offwhite">{position.eagle_year || "—"}</p>
+                    <>
+                      <p className="text-sm text-mist/80">
+                        Club positions are shown here for ID card verification. Position history is managed from the member administration workflow.
+                      </p>
+                      {(profile.current_club_positions ?? []).length === 0 ? (
+                        <div className="rounded-lg border border-dashed border-white/15 px-4 py-8 text-center text-sm text-mist/70">
+                          No current club position recorded.
                         </div>
-                      ))}
-                    </div>
+                      ) : (
+                        <div className="grid gap-3 md:grid-cols-2">
+                          {(profile.current_club_positions ?? []).map((position, index) => (
+                            <div key={position.id ?? `${position.position_name}-${index}`} className="rounded-xl border border-white/15 bg-white/5 p-4">
+                              <p className="text-xs uppercase tracking-wider text-red-300">Current Club Position</p>
+                              <p className="mt-1 text-sm text-offwhite">{position.position_name || "—"}</p>
+                              <p className="mt-3 text-xs uppercase tracking-wider text-gold-soft">Position Code</p>
+                              <p className="mt-1 text-sm text-offwhite">{position.position_code || "—"}</p>
+                              <p className="mt-3 text-xs uppercase tracking-wider text-gold-soft">Eagle Year</p>
+                              <p className="mt-1 text-sm text-offwhite">{position.eagle_year || "—"}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               )}
