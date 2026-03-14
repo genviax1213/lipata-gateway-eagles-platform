@@ -20,6 +20,7 @@ const navGroups: NavGroup[] = [
       { label: "About", to: "/about" },
       { label: "History", to: "/history" },
       { label: "Magna Carta", to: "/magna-carta" },
+      { label: "Resolutions", to: "/resolutions" },
     ],
   },
   {

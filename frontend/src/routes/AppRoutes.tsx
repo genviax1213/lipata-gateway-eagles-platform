@@ -9,6 +9,7 @@ const Landing = lazy(() => import("../pages/Landing"));
 const About = lazy(() => import("../pages/About"));
 const History = lazy(() => import("../pages/History"));
 const MagnaCarta = lazy(() => import("../pages/MagnaCarta"));
+const Resolutions = lazy(() => import("../pages/Resolutions"));
 const Activities = lazy(() => import("../pages/Activities"));
 const Schedules = lazy(() => import("../pages/Schedules"));
 const Downloads = lazy(() => import("../pages/Downloads"));
@@ -43,6 +44,14 @@ export default function AppRoutes() {
             element={
               <ProtectedRoute>
                 <Layout><MagnaCarta /></Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/resolutions"
+            element={
+              <ProtectedRoute>
+                <Layout><Resolutions /></Layout>
               </ProtectedRoute>
             }
           />

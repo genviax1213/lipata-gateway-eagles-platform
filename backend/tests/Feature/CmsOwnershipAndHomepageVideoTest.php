@@ -42,6 +42,71 @@ class CmsOwnershipAndHomepageVideoTest extends TestCase
             ->assertJsonPath('title', 'Secretary Post');
     }
 
+    public function test_only_superadmin_admin_and_secretary_can_manage_resolutions_posts(): void
+    {
+        $authorRole = Role::query()->where('name', 'secretary')->firstOrFail();
+        $officerRole = Role::query()->where('name', 'officer')->firstOrFail();
+        $adminRole = Role::query()->where('name', 'admin')->firstOrFail();
+
+        $secretary = User::factory()->create([
+            'role_id' => $authorRole->id,
+            'email' => 'resolution-secretary@example.test',
+        ]);
+        $officer = User::factory()->create([
+            'role_id' => $officerRole->id,
+            'email' => 'resolution-officer@example.test',
+        ]);
+        $admin = User::factory()->create([
+            'role_id' => $adminRole->id,
+            'email' => 'resolution-admin@example.test',
+        ]);
+
+        Sanctum::actingAs($officer);
+
+        $this->postJson('/api/v1/cms/posts', [
+            'title' => 'Officer Resolution',
+            'section' => 'resolutions',
+            'excerpt' => 'Officer should be blocked.',
+            'content' => '<p>Blocked</p>',
+            'status' => 'published',
+        ])->assertStatus(422)
+            ->assertJsonValidationErrors('section');
+
+        Sanctum::actingAs($secretary);
+
+        $resolution = $this->postJson('/api/v1/cms/posts', [
+            'title' => 'Secretary Resolution',
+            'section' => 'resolutions',
+            'excerpt' => 'Authorized resolution.',
+            'content' => '<p>Authorized</p>',
+            'status' => 'published',
+        ])->assertCreated()
+            ->assertJsonPath('section', 'resolutions')
+            ->json();
+
+        Sanctum::actingAs($officer);
+
+        $this->putJson('/api/v1/cms/posts/' . $resolution['id'], [
+            'title' => 'Officer Update Attempt',
+            'section' => 'resolutions',
+            'excerpt' => 'Officer should not update this section.',
+            'content' => '<p>Blocked update</p>',
+            'status' => 'published',
+        ])->assertForbidden();
+
+        Sanctum::actingAs($admin);
+
+        $this->putJson('/api/v1/cms/posts/' . $resolution['id'], [
+            'title' => 'Admin Resolution Update',
+            'section' => 'resolutions',
+            'excerpt' => 'Admin update.',
+            'content' => '<p>Updated</p>',
+            'status' => 'published',
+        ])->assertOk()
+            ->assertJsonPath('title', 'Admin Resolution Update')
+            ->assertJsonPath('section', 'resolutions');
+    }
+
     public function test_former_author_can_only_list_and_delete_own_posts(): void
     {
         $memberRole = Role::query()->where('name', 'member')->firstOrFail();

@@ -10,6 +10,7 @@ use App\Notifications\ContactInquiryNotification;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
+use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
 class PublicContentSectionsTest extends TestCase
@@ -174,5 +175,37 @@ class PublicContentSectionsTest extends TestCase
         }
 
         Notification::assertNotSentTo($member, ContactInquiryNotification::class);
+    }
+
+    public function test_resolutions_are_hidden_from_public_endpoints_but_available_to_authenticated_members(): void
+    {
+        $author = User::factory()->create();
+        $memberRole = Role::query()->where('name', 'member')->firstOrFail();
+        $member = User::factory()->create([
+            'role_id' => $memberRole->id,
+            'email' => 'member-resolution-reader@example.test',
+        ]);
+
+        $resolution = Post::query()->create([
+            'title' => 'Board Resolution 2026-01',
+            'slug' => 'board-resolution-2026-01',
+            'section' => 'resolutions',
+            'excerpt' => 'Approved resolution.',
+            'content' => '<p>Resolved.</p>',
+            'status' => 'published',
+            'published_at' => now()->subMinute(),
+            'author_id' => $author->id,
+        ]);
+
+        $this->getJson('/api/v1/content/resolutions')->assertNotFound();
+        $this->getJson('/api/v1/content/post/board-resolution-2026-01')->assertNotFound();
+
+        Sanctum::actingAs($member);
+
+        $this->getJson('/api/v1/member-content/resolutions')
+            ->assertOk()
+            ->assertJsonPath('data.0.id', $resolution->id)
+            ->assertJsonPath('data.0.section', 'resolutions')
+            ->assertJsonPath('data.0.title', 'Board Resolution 2026-01');
     }
 }

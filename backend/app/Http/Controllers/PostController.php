@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Post;
 use App\Support\EmbeddedVideo;
 use App\Support\ImageUploadOptimizer;
+use App\Support\RoleHierarchy;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Storage;
@@ -17,9 +18,14 @@ class PostController extends Controller
     private const DEFAULT_CMS_IMAGE_MAX_KB = 12288; // 12 MB
     private const DEFAULT_CMS_IMAGE_TARGET_KB = 1536; // 1.5 MB best-effort output target
     private const MAX_RICH_CONTENT_CHARS = 120000;
+    private const MEMBER_ONLY_SECTION = 'resolutions';
 
     public function publicBySection(Request $request, string $section)
     {
+        if ($this->isMemberOnlySection($section)) {
+            abort(404);
+        }
+
         $query = Post::query()
             ->where('section', $section)
             ->where('status', 'published')
@@ -106,7 +112,39 @@ class PostController extends Controller
             })
             ->firstOrFail();
 
+        if ($this->isMemberOnlySection($post->section)) {
+            abort(404);
+        }
+
         return response()->json($this->transform($post));
+    }
+
+    public function memberResolutions(Request $request)
+    {
+        $query = Post::query()
+            ->where('section', self::MEMBER_ONLY_SECTION)
+            ->where('status', 'published')
+            ->where(function ($q) {
+                $q->whereNull('published_at')->orWhere('published_at', '<=', now());
+            })
+            ->latest('published_at')
+            ->latest('id');
+
+        if ($request->filled('q')) {
+            $term = trim((string) $request->string('q'));
+            $query->where(function ($q) use ($term) {
+                $q->where('title', 'like', "%{$term}%")
+                    ->orWhere('slug', 'like', "%{$term}%")
+                    ->orWhere('excerpt', 'like', "%{$term}%")
+                    ->orWhere('content', 'like', "%{$term}%");
+            });
+        }
+
+        $perPage = max(1, min(12, (int) $request->query('per_page', 6)));
+        $posts = $query->paginate($perPage);
+        $posts->getCollection()->transform(fn (Post $post) => $this->transform($post));
+
+        return response()->json($posts);
     }
 
     public function index(Request $request)
@@ -261,6 +299,8 @@ class PostController extends Controller
             'video_thumbnail_text' => 'nullable|string|max:120',
         ], $this->cmsImageValidationMessages());
 
+        $this->ensureSectionWriteAccess($request, (string) $validated['section']);
+
         $validated['post_type'] = $validated['post_type'] ?? 'article';
         $validated['content'] = $this->sanitizeRichContent((string) ($validated['content'] ?? ''));
         $this->applyVideoPayload($validated);
@@ -304,7 +344,9 @@ class PostController extends Controller
 
     public function update(Request $request, Post $post)
     {
-        $this->authorize('update', $post);
+        if (!$this->canUpdatePost($request, $post)) {
+            $this->authorize('update', $post);
+        }
 
         if ($response = $this->rejectIfPayloadTooLarge($request)) {
             return $response;
@@ -331,6 +373,8 @@ class PostController extends Controller
             'video_thumbnail_url' => 'nullable|url|max:2048',
             'video_thumbnail_text' => 'nullable|string|max:120',
         ], $this->cmsImageValidationMessages());
+
+        $this->ensureSectionWriteAccess($request, (string) $validated['section']);
 
         $validated['post_type'] = $validated['post_type'] ?? ($post->post_type ?: 'article');
         $validated['content'] = $this->sanitizeRichContent((string) ($validated['content'] ?? ''));
@@ -460,7 +504,7 @@ class PostController extends Controller
     {
         $viewer = request()->user();
         $isOwned = $viewer ? (int) $post->author_id === (int) $viewer->id : false;
-        $canEdit = $viewer ? $viewer->can('update', $post) : false;
+        $canEdit = $viewer ? $this->canUpdatePost(request(), $post) || $viewer->can('update', $post) : false;
         $canDelete = $viewer ? $viewer->can('delete', $post) : false;
 
         $data = [
@@ -934,5 +978,39 @@ class PostController extends Controller
     private function looksLikeHtml(string $value): bool
     {
         return preg_match('/<\s*\/?\s*[a-z][^>]*>/i', $value) === 1;
+    }
+
+    private function ensureSectionWriteAccess(Request $request, string $section): void
+    {
+        if (!$this->isMemberOnlySection($section)) {
+            return;
+        }
+
+        if (!$this->canManageMemberOnlySection($request)) {
+            throw ValidationException::withMessages([
+                'section' => ['Only superadmin, admin, and secretary can manage resolutions posts.'],
+            ]);
+        }
+    }
+
+    private function isMemberOnlySection(?string $section): bool
+    {
+        return $section === self::MEMBER_ONLY_SECTION;
+    }
+
+    private function canManageMemberOnlySection(Request $request): bool
+    {
+        $roleName = $request->user()?->role?->name;
+
+        return in_array($roleName, [
+            RoleHierarchy::SUPERADMIN,
+            RoleHierarchy::ADMIN,
+            RoleHierarchy::SECRETARY,
+        ], true);
+    }
+
+    private function canUpdatePost(Request $request, Post $post): bool
+    {
+        return $this->isMemberOnlySection($post->section) && $this->canManageMemberOnlySection($request);
     }
 }

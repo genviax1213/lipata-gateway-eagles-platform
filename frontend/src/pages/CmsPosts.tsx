@@ -15,6 +15,7 @@ const sectionOptions = [
   "activities",
   "about",
   "history",
+  "resolutions",
   "contact",
   "news",
 ];
@@ -133,6 +134,8 @@ const initialHomepageVideoSlot: HomepageVideoSlotState = {
 function createHomepageVideoSlots(): HomepageVideoSlotState[] {
   return Array.from({ length: 3 }, () => ({ ...initialHomepageVideoSlot }));
 }
+
+const resolutionsManagerRoles = new Set(["superadmin", "admin", "secretary"]);
 
 function titleCaseWords(value: string): string {
   return value
@@ -348,6 +351,11 @@ export default function CmsPosts() {
   const canCreatePosts = hasCmsRoleAccess;
   const canDeletePosts = hasPermission(user, "posts.delete") || roleName === "superadmin" || roleName === "admin";
   const canManageHomepageVideo = roleName === "superadmin" || roleName === "admin";
+  const canManageResolutions = resolutionsManagerRoles.has(roleName);
+  const visibleSectionOptions = useMemo(
+    () => sectionOptions.filter((section) => section !== "resolutions" || canManageResolutions),
+    [canManageResolutions],
+  );
   const [activeTab, setActiveTab] = useState<CmsTab>(limitedMode ? "posts" : "editor");
   const [editorMode, setEditorMode] = useState<"article" | "video">("article");
   const [postsMode, setPostsMode] = useState<"article" | "video">("article");
@@ -867,7 +875,10 @@ export default function CmsPosts() {
   }
 
   function resetForm() {
-    setForm(initialForm);
+    setForm({
+      ...initialForm,
+      section: visibleSectionOptions[0] ?? initialForm.section,
+    });
     setEditorMode("article");
     setSelectedCoverImage(null);
     setProcessedImageMeta(null);
@@ -927,6 +938,10 @@ export default function CmsPosts() {
     }
     if (editingId && editingPost && !canEditPost(editingPost)) {
       setError("You do not have permission to edit posts.");
+      return;
+    }
+    if (form.section === "resolutions" && !canManageResolutions) {
+      setError("Only superadmin, admin, and secretary can manage resolutions posts.");
       return;
     }
 
@@ -1002,6 +1017,17 @@ export default function CmsPosts() {
       setSaving(false);
     }
   }
+
+  useEffect(() => {
+    if (visibleSectionOptions.includes(form.section)) {
+      return;
+    }
+
+    setForm((prev) => ({
+      ...prev,
+      section: visibleSectionOptions[0] ?? initialForm.section,
+    }));
+  }, [form.section, visibleSectionOptions]);
 
   async function saveHomepageVideo() {
     if (!canManageHomepageVideo) {
@@ -1188,7 +1214,7 @@ export default function CmsPosts() {
             onChange={(e) => setForm((prev) => ({ ...prev, section: e.target.value }))}
             className="rounded-md border border-white/25 bg-white/10 px-4 py-2.5 text-offwhite"
           >
-            {sectionOptions.map((section) => (
+            {visibleSectionOptions.map((section) => (
               <option key={section} value={section} style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>
                 {titleCaseWords(section)}
               </option>
@@ -1897,7 +1923,7 @@ export default function CmsPosts() {
               className="rounded-md border border-white/25 bg-white/10 px-4 py-2.5 text-offwhite"
             >
               <option value="" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>All sections</option>
-              {sectionOptions.map((section) => (
+              {visibleSectionOptions.map((section) => (
                 <option key={section} value={section} style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>
                   {titleCaseWords(section)}
                 </option>
