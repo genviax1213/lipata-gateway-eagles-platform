@@ -342,6 +342,134 @@ class ApplicantFlowTest extends TestCase
         $this->assertSame('withdrawn', $application->status);
         $this->assertSame('withdrawn', $application->decision_status);
         $this->assertTrue($application->is_login_blocked);
+        $this->assertNotNull($application->withdrawn_at);
+        $this->assertNotNull($application->document_reuse_until);
+        $this->assertTrue($application->document_reuse_until->greaterThan($application->withdrawn_at));
+    }
+
+    public function test_membership_chairman_can_rejoin_withdrawn_applicant_with_document_grace_but_without_payment_credit(): void
+    {
+        Storage::fake('local');
+
+        $chairmanRole = Role::query()->where('name', 'membership_chairman')->firstOrFail();
+        $applicantRole = Role::query()->where('name', 'applicant')->firstOrFail();
+        $chairman = User::factory()->create(['role_id' => $chairmanRole->id]);
+        $applicantUser = User::factory()->create([
+            'role_id' => $applicantRole->id,
+            'email' => 'returning@applicant.test',
+        ]);
+
+        $withdrawn = Applicant::query()->create([
+            'user_id' => $applicantUser->id,
+            'first_name' => 'Returning',
+            'middle_name' => 'Grace',
+            'last_name' => 'Applicant',
+            'email' => 'returning@applicant.test',
+            'membership_status' => 'applicant',
+            'status' => Applicant::STATUS_WITHDRAWN,
+            'decision_status' => 'withdrawn',
+            'current_stage' => 'incubation',
+            'is_login_blocked' => true,
+            'verification_token' => hash('sha256', 'returning-old-token'),
+            'email_verified_at' => now(),
+            'reviewed_at' => now()->subWeek(),
+            'withdrawn_at' => now()->subWeek(),
+            'document_reuse_until' => now()->addMonth(),
+        ]);
+
+        Storage::disk('local')->put('application-docs/returning-doc.pdf', 'pdf-bytes');
+
+        $document = ApplicantDocument::query()->create([
+            'applicant_id' => $withdrawn->id,
+            'file_path' => 'application-docs/returning-doc.pdf',
+            'original_name' => 'returning-doc.pdf',
+            'document_label' => 'Barangay Clearance',
+            'description' => 'Previously approved clearance.',
+            'status' => 'approved',
+            'review_note' => 'Approved before withdrawal.',
+            'reviewed_by_user_id' => $chairman->id,
+            'reviewed_at' => now()->subDays(10),
+        ]);
+
+        $requirement = ApplicantFeeRequirement::query()->create([
+            'applicant_id' => $withdrawn->id,
+            'category' => ApplicantFeeRequirement::CATEGORY_PROJECT,
+            'required_amount' => 500,
+            'set_by_user_id' => $chairman->id,
+        ]);
+
+        $requirement->payments()->create([
+            'amount' => 500,
+            'payment_date' => now()->toDateString(),
+            'encoded_by_user_id' => $chairman->id,
+            'note' => 'Old batch payment',
+        ]);
+
+        Sanctum::actingAs($chairman);
+
+        $response = $this->postJson("/api/v1/applicants/{$withdrawn->id}/rejoin");
+
+        $response->assertCreated()
+            ->assertJsonPath('application.rejoined_from_application_id', $withdrawn->id)
+            ->assertJsonPath('application.status', Applicant::STATUS_OFFICIAL_APPLICANT)
+            ->assertJsonPath('application.current_stage', 'incubation')
+            ->assertJsonPath('application.documents.0.reused_from_document_id', $document->id)
+            ->assertJsonPath('application.documents.0.reused_under_grace_period', true)
+            ->assertJsonPath('application.fees.paid_total', 0);
+
+        $newApplication = Applicant::query()
+            ->where('rejoined_from_application_id', $withdrawn->id)
+            ->latest('id')
+            ->firstOrFail();
+
+        $this->assertSame(Applicant::STATUS_OFFICIAL_APPLICANT, $newApplication->status);
+        $this->assertSame('approved', $newApplication->decision_status);
+        $this->assertFalse($newApplication->is_login_blocked);
+        $this->assertNull($newApplication->batch_id);
+        $this->assertCount(0, $newApplication->feeRequirements()->get());
+        $this->assertSame(1, $newApplication->documents()->count());
+
+        $reusedDocument = $newApplication->documents()->firstOrFail();
+        $this->assertTrue($reusedDocument->reused_under_grace_period);
+        $this->assertSame($document->id, $reusedDocument->reused_from_document_id);
+        $this->assertNotSame($document->file_path, $reusedDocument->file_path);
+        Storage::disk('local')->assertExists($reusedDocument->file_path);
+    }
+
+    public function test_withdrawn_applicant_document_upload_is_blocked(): void
+    {
+        Storage::fake('local');
+
+        $applicantRole = Role::query()->where('name', 'applicant')->firstOrFail();
+        $applicant = User::factory()->create([
+            'role_id' => $applicantRole->id,
+            'email' => 'withdrawn-docs@applicant.test',
+        ]);
+
+        $application = Applicant::query()->create([
+            'user_id' => $applicant->id,
+            'first_name' => 'Withdrawn',
+            'middle_name' => 'Docs',
+            'last_name' => 'Applicant',
+            'email' => 'withdrawn-docs@applicant.test',
+            'membership_status' => 'applicant',
+            'status' => Applicant::STATUS_WITHDRAWN,
+            'decision_status' => 'withdrawn',
+            'current_stage' => 'interview',
+            'is_login_blocked' => true,
+            'verification_token' => hash('sha256', 'withdrawn-docs-token'),
+            'email_verified_at' => now(),
+            'withdrawn_at' => now(),
+            'document_reuse_until' => now()->addMonth(),
+        ]);
+
+        Sanctum::actingAs($applicant);
+
+        $this->postJson("/api/v1/applicants/{$application->id}/documents", [
+            'document' => UploadedFile::fake()->create('withdrawn-proof.pdf', 100, 'application/pdf'),
+            'document_label' => 'New Upload',
+            'description' => 'Should be blocked.',
+        ])->assertForbidden();
     }
 
     public function test_applicant_cannot_withdraw_activated_application(): void

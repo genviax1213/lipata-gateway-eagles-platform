@@ -15,6 +15,10 @@ class ApplicantPolicy
             return false;
         }
 
+        if (!in_array($applicant->status, Applicant::OPEN_STATUSES, true)) {
+            return false;
+        }
+
         if ($applicant->user_id === $user->id) {
             return true;
         }
@@ -64,5 +68,11 @@ class ApplicantPolicy
     public function delete(User $user, Applicant $applicant): bool
     {
         return (string) optional($user->role)->name === RoleHierarchy::SUPERADMIN;
+    }
+
+    public function rejoin(User $user, Applicant $applicant): bool
+    {
+        return (string) optional($user->role)->name === RoleHierarchy::MEMBERSHIP_CHAIRMAN
+            && $user->hasPermission(Permissions::APPLICATIONS_REVIEW);
     }
 }

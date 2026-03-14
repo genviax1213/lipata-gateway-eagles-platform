@@ -30,6 +30,8 @@ use Illuminate\Validation\ValidationException;
 
 class ApplicantController extends Controller
 {
+    private const DOCUMENT_REUSE_GRACE_MONTHS = 3;
+
     private function createApplicantAccountAndApplication(
         string $email,
         string $firstName,
@@ -353,6 +355,14 @@ class ApplicantController extends Controller
             'current_stage' => $application->current_stage,
             'current_stage_label' => $this->fiveIStageLabel($application->current_stage),
             'is_login_blocked' => $application->is_login_blocked,
+            'withdrawn_at' => optional($application->withdrawn_at)?->toISOString(),
+            'document_reuse_until' => optional($application->document_reuse_until)?->toISOString(),
+            'rejoined_from_application_id' => $application->rejoined_from_application_id,
+            'document_reuse_policy' => [
+                'grace_months' => self::DOCUMENT_REUSE_GRACE_MONTHS,
+                'eligible' => $this->canReuseWithdrawnDocuments($application),
+                'rule_summary' => 'Membership chairman may reopen a withdrawn applicant within 3 months and reuse the prior documents. Prior contribution payments remain on the old withdrawn record and are not credited to the new batch.',
+            ],
             'activation_eligible' => $this->determineActivationEligibility($application)['eligible'],
             'activation_readiness' => $this->determineActivationEligibility($application),
             'reviewer' => $application->reviewer ? ['id' => $application->reviewer->id, 'name' => $application->reviewer->name] : null,
@@ -399,6 +409,9 @@ class ApplicantController extends Controller
                     'document_label' => $doc->document_label,
                     'description' => $doc->description,
                     'view_url' => "/api/v1/applicants/documents/{$doc->id}/view",
+                    'reused_from_document_id' => $doc->reused_from_document_id,
+                    'reused_under_grace_period' => (bool) $doc->reused_under_grace_period,
+                    'reused_at' => optional($doc->reused_at)?->toISOString(),
                     'status' => $doc->status,
                     'review_note' => $doc->review_note,
                     'created_at' => optional($doc->created_at)?->toISOString(),
@@ -515,6 +528,45 @@ class ApplicantController extends Controller
         return $query->whereHas('batch', function (Builder $batchQuery) use ($user): void {
             $batchQuery->where('batch_treasurer_user_id', $user->id);
         });
+    }
+
+    private function canReuseWithdrawnDocuments(Applicant $application): bool
+    {
+        return $application->status === Applicant::STATUS_WITHDRAWN
+            && $application->document_reuse_until !== null
+            && $application->document_reuse_until->isFuture();
+    }
+
+    private function copyWithdrawnDocumentsForRejoin(Applicant $source, Applicant $target): void
+    {
+        $source->loadMissing('documents');
+
+        foreach ($source->documents as $document) {
+            $disk = $this->resolveDocumentDisk($document);
+            $sourcePath = $document->file_path;
+            $targetPath = $sourcePath;
+
+            if (Storage::disk($disk)->exists($sourcePath)) {
+                $extension = pathinfo($sourcePath, PATHINFO_EXTENSION);
+                $targetPath = 'application-docs/' . Str::uuid() . ($extension !== '' ? '.' . strtolower($extension) : '');
+                Storage::disk($disk)->copy($sourcePath, $targetPath);
+            }
+
+            ApplicantDocument::query()->create([
+                'applicant_id' => $target->id,
+                'reused_from_document_id' => $document->id,
+                'file_path' => $targetPath,
+                'original_name' => $document->original_name,
+                'document_label' => $document->document_label,
+                'description' => $document->description,
+                'reused_under_grace_period' => true,
+                'reused_at' => now(),
+                'status' => $document->status,
+                'review_note' => $document->review_note,
+                'reviewed_by_user_id' => $document->reviewed_by_user_id,
+                'reviewed_at' => $document->reviewed_at,
+            ]);
+        }
     }
 
     public function submit(Request $request)
@@ -1109,6 +1161,8 @@ class ApplicantController extends Controller
         $applicant->decision_status = 'withdrawn';
         $applicant->is_login_blocked = true;
         $applicant->reviewed_at = now();
+        $applicant->withdrawn_at = now();
+        $applicant->document_reuse_until = now()->addMonthsNoOverflow(self::DOCUMENT_REUSE_GRACE_MONTHS);
         $applicant->save();
 
         Log::info('application.withdrawn', [
@@ -1118,9 +1172,89 @@ class ApplicantController extends Controller
         ]);
 
         return response()->json([
-            'message' => 'Application withdrawn. The record is preserved as archive history.',
+            'message' => 'Application withdrawn. The record is preserved as archive history, and the membership chairman may reuse your documents for 3 months if you rejoin. Prior contribution payments remain on the withdrawn record and do not transfer to a new batch.',
             'application' => $applicant->fresh(),
         ]);
+    }
+
+    public function rejoin(Request $request, Applicant $applicant)
+    {
+        $this->authorize('rejoin', $applicant);
+
+        if ($applicant->status !== Applicant::STATUS_WITHDRAWN) {
+            return response()->json([
+                'message' => 'Only withdrawn applicants can be rejoined through the chairman workflow.',
+            ], 422);
+        }
+
+        if (!$this->canReuseWithdrawnDocuments($applicant)) {
+            return response()->json([
+                'message' => 'The 3-month document reuse grace period has ended. The applicant must restart with fresh document submission.',
+            ], 422);
+        }
+
+        $openApplicationExists = Applicant::query()
+            ->where('id', '!=', $applicant->id)
+            ->where(function (Builder $query) use ($applicant): void {
+                $query->where('user_id', $applicant->user_id)
+                    ->orWhereRaw('LOWER(TRIM(email)) = ?', [$this->normalizeEmail((string) $applicant->email)]);
+            })
+            ->whereIn('status', Applicant::OPEN_STATUSES)
+            ->exists();
+
+        if ($openApplicationExists) {
+            return response()->json([
+                'message' => 'An open application already exists for this applicant. Close or use that active record instead.',
+            ], 422);
+        }
+
+        $newApplication = DB::transaction(function () use ($applicant, $request): Applicant {
+            $newApplication = Applicant::query()->create([
+                'user_id' => $applicant->user_id,
+                'batch_id' => null,
+                'rejoined_from_application_id' => $applicant->id,
+                'first_name' => $applicant->first_name,
+                'middle_name' => $applicant->middle_name,
+                'last_name' => $applicant->last_name,
+                'email' => $applicant->email,
+                'membership_status' => $applicant->membership_status,
+                'status' => Applicant::STATUS_OFFICIAL_APPLICANT,
+                'decision_status' => 'approved',
+                'current_stage' => $applicant->current_stage ?: 'interview',
+                'is_login_blocked' => false,
+                'verification_token' => hash('sha256', VerificationToken::generate()),
+                'email_verified_at' => $applicant->email_verified_at ?? now(),
+                'reviewed_by_user_id' => $request->user()->id,
+                'reviewed_at' => now(),
+                'withdrawn_at' => null,
+                'document_reuse_until' => null,
+                'rejection_reason' => null,
+            ]);
+
+            $this->copyWithdrawnDocumentsForRejoin($applicant, $newApplication);
+
+            ApplicantNotice::query()->create([
+                'applicant_id' => $newApplication->id,
+                'notice_text' => 'Chairman-only rejoin workflow: documents were reused from withdrawn application #' . $applicant->id . ' within the 3-month grace period. Prior contribution payments remain on the withdrawn record and are not credited to this rejoined application or to any new batch.',
+                'visibility' => 'internal',
+                'created_by_user_id' => $request->user()->id,
+            ]);
+
+            return $newApplication;
+        });
+
+        Log::info('application.rejoined_by_chairman', [
+            'actor_user_id' => $request->user()->id,
+            'previous_application_id' => $applicant->id,
+            'new_application_id' => $newApplication->id,
+            'reused_documents' => $newApplication->documents()->count(),
+            'ip' => $request->ip(),
+        ]);
+
+        return response()->json([
+            'message' => 'Withdrawn applicant rejoined. Prior documents were reused under the 3-month grace period. Previous contribution payments remain on the withdrawn record and are not credited to the new batch.',
+            'application' => $this->applicantPayload($newApplication->fresh(), true),
+        ], 201);
     }
 
     public function setProbation(Request $request, Applicant $applicant)

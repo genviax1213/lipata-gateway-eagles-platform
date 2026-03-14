@@ -37,6 +37,7 @@ class Applicant extends Model
         'user_id',
         'member_id',
         'batch_id',
+        'rejoined_from_application_id',
         'first_name',
         'middle_name',
         'last_name',
@@ -50,6 +51,8 @@ class Applicant extends Model
         'email_verified_at',
         'reviewed_by_user_id',
         'reviewed_at',
+        'withdrawn_at',
+        'document_reuse_until',
         'activated_at',
         'activated_by_user_id',
         'rejection_reason',
@@ -58,6 +61,8 @@ class Applicant extends Model
     protected $casts = [
         'email_verified_at' => 'datetime',
         'reviewed_at' => 'datetime',
+        'withdrawn_at' => 'datetime',
+        'document_reuse_until' => 'datetime',
         'activated_at' => 'datetime',
         'is_login_blocked' => 'boolean',
     ];
@@ -85,6 +90,11 @@ class Applicant extends Model
     public function activatedBy()
     {
         return $this->belongsTo(User::class, 'activated_by_user_id');
+    }
+
+    public function rejoinedFromApplication()
+    {
+        return $this->belongsTo(self::class, 'rejoined_from_application_id');
     }
 
     public function notices()

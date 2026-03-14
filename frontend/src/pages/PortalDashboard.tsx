@@ -72,6 +72,9 @@ interface ApplicantDocument {
   document_label?: string | null;
   description?: string | null;
   view_url: string;
+  reused_from_document_id?: number | null;
+  reused_under_grace_period?: boolean;
+  reused_at?: string | null;
   status: "pending" | "approved" | "rejected";
   review_note: string | null;
   created_at?: string | null;
@@ -159,6 +162,14 @@ interface ApplicantDetails {
   decision_status: ApplicantDecisionStatus;
   current_stage: string | null;
   current_stage_label: string;
+  withdrawn_at?: string | null;
+  document_reuse_until?: string | null;
+  rejoined_from_application_id?: number | null;
+  document_reuse_policy?: {
+    grace_months: number;
+    eligible: boolean;
+    rule_summary: string;
+  };
   activation_eligible?: boolean;
   activation_readiness?: ActivationReadiness;
   activated_by?: { id: number; name: string } | null;
@@ -316,6 +327,11 @@ function ApplicantDocumentCard({
             </span>
           </div>
           {document.description && <p className="mt-2 text-xs text-mist/85">{document.description}</p>}
+          {document.reused_under_grace_period && (
+            <p className="mt-2 text-xs text-gold-soft">
+              Reused under chairman grace period{document.reused_at ? ` on ${new Date(document.reused_at).toLocaleString()}` : ""}.
+            </p>
+          )}
           {document.review_note && <p className="mt-2 text-xs text-gold-soft">Review note: {document.review_note}</p>}
           <div className="mt-3 flex flex-wrap gap-2">
             <button
@@ -999,6 +1015,30 @@ export default function PortalDashboard() {
       setError(parseError(err, "Failed to remove the pending verification applicant."));
     }
   }, [loadCommitteeApplications, parseError, selectedApplication]);
+
+  const rejoinWithdrawnApplicant = useCallback(async () => {
+    if (!selectedApplication || selectedApplication.status !== "withdrawn") return;
+    if (!window.confirm(`Create a new rejoined applicant record for ${appName(selectedApplication)} using the chairman-only 3-month document reuse rule? Prior contributions will stay on the withdrawn record and will not transfer to any new batch.`)) {
+      return;
+    }
+
+    setError("");
+    setNotice("");
+
+    try {
+      const res = await api.post<{ message?: string; application?: { id?: number } }>(`/applicants/${selectedApplication.id}/rejoin`);
+      setNotice(res.data?.message ?? "Withdrawn applicant rejoined.");
+      const nextApplicationId = Number(res.data?.application?.id ?? 0);
+      await loadCommitteeApplications();
+      if (nextApplicationId > 0) {
+        setSelectedApplicationId(nextApplicationId);
+        await refreshSelectedCommitteeApplication(nextApplicationId);
+      }
+      notifyPortalDataRefresh("applicants");
+    } catch (err) {
+      setError(parseError(err, "Failed to rejoin withdrawn applicant."));
+    }
+  }, [loadCommitteeApplications, parseError, refreshSelectedCommitteeApplication, selectedApplication]);
 
   const setNoticeForApplicant = async () => {
     if (!selectedApplication || !noticeText.trim()) return;
@@ -2105,6 +2145,37 @@ export default function PortalDashboard() {
                 </div>
               )}
 
+              {canChairmanReview && selectedApplication.status === "withdrawn" && selectedApplicationDetails && (
+                <div className="rounded-lg border border-gold/25 bg-gold/10 px-4 py-4 text-sm text-mist/85">
+                  <p className="font-semibold text-offwhite">Chairman-Only Rejoin Rule</p>
+                  <p className="mt-2">
+                    Withdrawn applicants may return only through this chairman workflow. Documents may be reused for <span className="text-gold-soft">{selectedApplicationDetails.document_reuse_policy?.grace_months ?? 3} months</span> from withdrawal, even when the applicant later joins another batch.
+                  </p>
+                  <p className="mt-2">
+                    Reused documents stay tied to the new applicant record as grace-period copies. Previous contribution payments remain on the withdrawn record, are non-refundable, and are <span className="text-gold-soft">not credited</span> to the new batch.
+                  </p>
+                  <p className="mt-2 text-xs text-mist/75">
+                    Withdrawn at: <span className="text-offwhite">{selectedApplicationDetails.withdrawn_at ? new Date(selectedApplicationDetails.withdrawn_at).toLocaleString() : "Not recorded"}</span>
+                    {" "} | Document reuse until: <span className="text-offwhite">{selectedApplicationDetails.document_reuse_until ? new Date(selectedApplicationDetails.document_reuse_until).toLocaleString() : "Expired"}</span>
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      disabled={!selectedApplicationDetails.document_reuse_policy?.eligible}
+                      onClick={() => void rejoinWithdrawnApplicant()}
+                    >
+                      {selectedApplicationDetails.document_reuse_policy?.eligible
+                        ? "Rejoin With Document Grace"
+                        : "Document Grace Expired"}
+                    </button>
+                    <span className="self-center text-xs text-mist/75">
+                      Batch assignment stays in Members &gt; Batch Workflow after the rejoined record is created.
+                    </span>
+                  </div>
+                </div>
+              )}
+
               {canChairmanReview && selectedApplication.status === "pending_verification" && (
                 <div className="rounded-lg border border-amber-300/30 bg-amber-400/10 px-3 py-3 text-sm text-amber-100">
                   <p className="font-semibold text-offwhite">Wrong Email Deletion</p>
@@ -2370,6 +2441,11 @@ export default function PortalDashboard() {
                       )}
                     />
                   ))}
+                  {selectedApplicationDetails.documents.some((doc) => doc.reused_under_grace_period) && (
+                    <div className="mt-3 rounded-md border border-gold/25 bg-gold/10 px-3 py-2 text-xs text-mist/80">
+                      Documents marked as reused were copied forward under the chairman-only 3-month grace rule from a withdrawn application. They remain separate from prior contribution records.
+                    </div>
+                  )}
                   {selectedApplicationDetails.documents.length === 0 && <p className="text-xs text-mist/70">No uploaded documents yet.</p>}
                   <div className="mt-4 flex items-center justify-between text-xs text-mist/80">
                     <span>Page {committeeDocumentsPage} of {committeeDocumentsLastPage} | Total {selectedApplicationDetails.documents.length}</span>
