@@ -101,6 +101,7 @@ class CmsImageLibraryTest extends TestCase
             ->assertJsonPath('video_provider', 'youtube')
             ->assertJsonPath('video_url', 'https://www.youtube.com/watch?v=xRMB5GmM-sk')
             ->assertJsonPath('video_embed_url', 'https://www.youtube.com/embed/xRMB5GmM-sk')
+            ->assertJsonPath('video_thumbnail_url', 'https://i.ytimg.com/vi/xRMB5GmM-sk/hqdefault.jpg')
             ->assertJsonPath('video_thumbnail_text', 'Watch the recap');
 
         $this->assertDatabaseHas('posts', [

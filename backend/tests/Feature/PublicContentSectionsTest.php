@@ -89,6 +89,7 @@ class PublicContentSectionsTest extends TestCase
             ->assertJsonPath('0.post_type', 'video')
             ->assertJsonPath('0.video_url', 'https://www.youtube.com/watch?v=xRMB5GmM-sk')
             ->assertJsonPath('0.video_embed_url', 'https://www.youtube.com/embed/xRMB5GmM-sk')
+            ->assertJsonPath('0.video_thumbnail_url', 'https://i.ytimg.com/vi/xRMB5GmM-sk/hqdefault.jpg')
             ->assertJsonPath('0.video_thumbnail_text', 'Anniversary recap');
     }
 }

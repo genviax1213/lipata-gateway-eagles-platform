@@ -4,6 +4,50 @@ namespace App\Support;
 
 class EmbeddedVideo
 {
+    public static function extractYoutubeVideoId(?string $url): ?string
+    {
+        $value = trim((string) $url);
+        if ($value === '') {
+            return null;
+        }
+
+        $parts = parse_url($value);
+        if (!$parts || !isset($parts['host'])) {
+            return null;
+        }
+
+        $host = strtolower((string) $parts['host']);
+        $path = trim((string) ($parts['path'] ?? ''), '/');
+        parse_str((string) ($parts['query'] ?? ''), $query);
+
+        if (!in_array($host, ['youtube.com', 'www.youtube.com', 'm.youtube.com', 'youtu.be', 'www.youtube-nocookie.com', 'youtube-nocookie.com'], true)) {
+            return null;
+        }
+
+        $videoId = null;
+
+        if ($host === 'youtu.be' && $path !== '') {
+            $videoId = explode('/', $path)[0];
+        } elseif ($path === 'watch' && isset($query['v'])) {
+            $videoId = (string) $query['v'];
+        } elseif (str_starts_with($path, 'embed/')) {
+            $videoId = explode('/', substr($path, strlen('embed/')))[0] ?: null;
+        } elseif (str_starts_with($path, 'shorts/')) {
+            $videoId = explode('/', substr($path, strlen('shorts/')))[0] ?: null;
+        } elseif (str_starts_with($path, 'live/')) {
+            $videoId = explode('/', substr($path, strlen('live/')))[0] ?: null;
+        }
+
+        return $videoId && preg_match('/^[A-Za-z0-9_-]{6,20}$/', $videoId) ? $videoId : null;
+    }
+
+    public static function youtubeThumbnailUrl(?string $sourceUrl, ?string $embedUrl = null): ?string
+    {
+        $videoId = self::extractYoutubeVideoId($sourceUrl) ?? self::extractYoutubeVideoId($embedUrl);
+
+        return $videoId ? 'https://i.ytimg.com/vi/' . $videoId . '/hqdefault.jpg' : null;
+    }
+
     public static function fromInputUrl(?string $url): ?array
     {
         $value = trim((string) $url);
@@ -21,19 +65,9 @@ class EmbeddedVideo
         parse_str((string) ($parts['query'] ?? ''), $query);
 
         if (in_array($host, ['youtube.com', 'www.youtube.com', 'm.youtube.com', 'youtu.be'], true)) {
-            $videoId = null;
+            $videoId = self::extractYoutubeVideoId($value);
 
-            if ($host === 'youtu.be' && $path !== '') {
-                $videoId = explode('/', $path)[0];
-            } elseif ($path === 'watch' && isset($query['v'])) {
-                $videoId = (string) $query['v'];
-            } elseif (str_starts_with($path, 'embed/')) {
-                $videoId = explode('/', substr($path, strlen('embed/')))[0] ?: null;
-            } elseif (str_starts_with($path, 'shorts/')) {
-                $videoId = explode('/', substr($path, strlen('shorts/')))[0] ?: null;
-            }
-
-            if ($videoId && preg_match('/^[A-Za-z0-9_-]{6,20}$/', $videoId)) {
+            if ($videoId) {
                 return [
                     'provider' => 'youtube',
                     'source_url' => $value,
@@ -73,8 +107,8 @@ class EmbeddedVideo
 
         if (in_array($host, ['youtube.com', 'www.youtube.com', 'www.youtube-nocookie.com', 'youtube-nocookie.com'], true)
             && str_starts_with($path, 'embed/')) {
-            $videoId = explode('/', substr($path, strlen('embed/')))[0] ?: null;
-            if ($videoId && preg_match('/^[A-Za-z0-9_-]{6,20}$/', $videoId)) {
+            $videoId = self::extractYoutubeVideoId($value);
+            if ($videoId) {
                 return [
                     'provider' => 'youtube',
                     'source_url' => 'https://www.youtube.com/watch?v=' . $videoId,

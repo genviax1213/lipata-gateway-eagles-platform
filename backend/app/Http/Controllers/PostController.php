@@ -475,7 +475,7 @@ class PostController extends Controller
             'video_provider' => $post->video_provider,
             'video_url' => $post->video_source_url,
             'video_embed_url' => $post->video_embed_url,
-            'video_thumbnail_url' => $post->video_thumbnail_url,
+            'video_thumbnail_url' => $this->publicVideoThumbnailUrl($post),
             'video_thumbnail_text' => $post->video_thumbnail_text,
             'is_featured' => (bool) $post->is_featured,
             'show_on_homepage_community' => (bool) $post->show_on_homepage_community,
@@ -495,6 +495,20 @@ class PostController extends Controller
         }
 
         return $data;
+    }
+
+    private function publicVideoThumbnailUrl(Post $post): ?string
+    {
+        $configured = trim((string) ($post->video_thumbnail_url ?? ''));
+        $sourceUrl = trim((string) ($post->video_source_url ?? ''));
+        $embedUrl = trim((string) ($post->video_embed_url ?? ''));
+
+        if (($post->video_provider ?? null) === 'youtube') {
+            return EmbeddedVideo::youtubeThumbnailUrl($sourceUrl, $embedUrl)
+                ?? ($configured !== '' ? $configured : null);
+        }
+
+        return $configured !== '' ? $configured : null;
     }
 
     private function applyVideoPayload(array &$validated): void
