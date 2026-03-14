@@ -118,144 +118,148 @@ export default function NewsArticle() {
       )}
 
       {!loading && !error && post && (
-        <article className="surface-card overflow-hidden p-4 md:p-6">
-          <div className="mb-4">
-            <Link to="/" className="btn-secondary">
-              Back to Homepage
-            </Link>
-          </div>
-
-          {post.post_type !== "video" && (
-            <div className="mb-5 overflow-x-auto rounded-lg border border-white/20 bg-white/5 p-3">
-              <div className="flex min-w-max items-center gap-4">
-                <div className="text-xs text-mist/80">
-                  Reading controls · {estimatedWords.toLocaleString()} words
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setFontSize((v) => Math.max(15, v - 1))}
-                    className="rounded-md border border-white/30 px-3 py-1 text-sm"
-                  >
-                    A-
-                  </button>
-                  <span className="text-xs text-mist/80">{fontSize}px</span>
-                  <button
-                    type="button"
-                    onClick={() => setFontSize((v) => Math.min(24, v + 1))}
-                    className="rounded-md border border-white/30 px-3 py-1 text-sm"
-                  >
-                    A+
-                  </button>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setLayout("single")}
-                    className={`rounded-md border px-3 py-1 text-sm ${layout === "single" ? "border-gold bg-gold text-ink" : "border-white/30 text-mist/80"}`}
-                  >
-                    Single
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setLayout("columns")}
-                    className={`rounded-md border px-3 py-1 text-sm ${layout === "columns" ? "border-gold bg-gold text-ink" : "border-white/30 text-mist/80"}`}
-                  >
-                    Multi
-                  </button>
-                </div>
-              </div>
+        <article className="article-shell overflow-hidden">
+          <div className="article-shell__inner p-4 md:p-6 lg:p-8">
+            <div className="mb-4">
+              <Link to="/" className="btn-secondary">
+                Back to Homepage
+              </Link>
             </div>
-          )}
 
-          {post.post_type === "video" ? (
-            <>
-              {!videoPlayerActive ? (
-                <button
-                  type="button"
-                  className="group relative mb-6 block w-full overflow-hidden rounded-lg border border-white/20 bg-white/5 text-left"
-                  onClick={() => setVideoPlayerActive(true)}
-                >
-                  <img
-                    src={videoCoverImage}
-                    alt={post.title}
-                    className="h-64 w-full object-cover md:h-[28rem]"
-                    onError={handleVideoCoverError}
-                  />
-                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-ink/80 via-ink/15 to-transparent" />
-                  <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                    <div className="flex h-20 w-20 items-center justify-center rounded-full border border-white/30 bg-gold/90 text-ink shadow-[0_18px_40px_rgba(2,6,23,0.45)] transition group-hover:scale-105">
-                      <svg viewBox="0 0 24 24" className="ml-1 h-8 w-8 fill-current" focusable="false">
-                        <path d="M8 6.5v11l9-5.5-9-5.5Z" />
-                      </svg>
+            {post.post_type === "video" ? (
+              <>
+                {!videoPlayerActive ? (
+                  <button
+                    type="button"
+                    className="group relative mb-6 block w-full overflow-hidden rounded-lg border border-white/20 bg-white/5 text-left"
+                    onClick={() => setVideoPlayerActive(true)}
+                  >
+                    <img
+                      src={videoCoverImage}
+                      alt={post.title}
+                      className="h-64 w-full object-cover md:h-[28rem]"
+                      onError={handleVideoCoverError}
+                    />
+                    <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-ink/80 via-ink/15 to-transparent" />
+                    <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                      <div className="flex h-20 w-20 items-center justify-center rounded-full border border-white/30 bg-gold/90 text-ink shadow-[0_18px_40px_rgba(2,6,23,0.45)] transition group-hover:scale-105">
+                        <svg viewBox="0 0 24 24" className="ml-1 h-8 w-8 fill-current" focusable="false">
+                          <path d="M8 6.5v11l9-5.5-9-5.5Z" />
+                        </svg>
+                      </div>
+                    </div>
+                  </button>
+                ) : null}
+
+                {post.video_embed_url && videoPlayerActive && (
+                  <div className="mb-6 overflow-hidden rounded-lg border border-white/20 bg-white/5">
+                    <div className="aspect-video">
+                      <iframe
+                        src={activeVideoEmbedUrl ?? post.video_embed_url}
+                        title={post.title}
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                        allowFullScreen
+                        referrerPolicy="strict-origin-when-cross-origin"
+                        className="h-full w-full border-0"
+                      />
                     </div>
                   </div>
-                </button>
-              ) : null}
+                )}
+              </>
+            ) : post.image_url && (
+              <img
+                src={post.image_url}
+                alt={post.title}
+                className="mb-6 h-64 w-full rounded-lg object-cover md:h-[28rem]"
+              />
+            )}
 
-              {post.video_embed_url && videoPlayerActive && (
-                <div className="mb-6 overflow-hidden rounded-lg border border-white/20 bg-white/5">
-                  <div className="aspect-video">
-                    <iframe
-                      src={activeVideoEmbedUrl ?? post.video_embed_url}
-                      title={post.title}
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                      allowFullScreen
-                      referrerPolicy="strict-origin-when-cross-origin"
-                      className="h-full w-full border-0"
-                    />
+            <header className="article-hero">
+              {!["about", "homepage_hero"].includes(post.section) && (
+                <p className="text-xs uppercase tracking-[0.22em] text-gold-soft">
+                  {post.section.replaceAll("_", " ")}
+                </p>
+              )}
+              <h1 className="mt-2 max-w-4xl font-heading text-4xl leading-tight text-offwhite md:text-6xl">
+                {post.title}
+              </h1>
+
+              {post.excerpt && (
+                <p className="mt-5 max-w-3xl text-lg leading-8 text-mist/90">{post.excerpt}</p>
+              )}
+            </header>
+
+            {post.post_type !== "video" && (
+              <div className="article-reading-frame mt-6">
+                <div className="article-toolbar mb-5 overflow-x-auto rounded-lg p-3">
+                  <div className="flex min-w-max items-center gap-4">
+                    <div className="text-xs text-mist/80">
+                      Reading controls · {estimatedWords.toLocaleString()} words
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setFontSize((v) => Math.max(15, v - 1))}
+                        className="rounded-md border border-white/30 px-3 py-1 text-sm"
+                      >
+                        A-
+                      </button>
+                      <span className="text-xs text-mist/80">{fontSize}px</span>
+                      <button
+                        type="button"
+                        onClick={() => setFontSize((v) => Math.min(24, v + 1))}
+                        className="rounded-md border border-white/30 px-3 py-1 text-sm"
+                      >
+                        A+
+                      </button>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setLayout("single")}
+                        className={`rounded-md border px-3 py-1 text-sm ${layout === "single" ? "border-gold bg-gold text-ink" : "border-white/30 text-mist/80"}`}
+                      >
+                        Single
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLayout("columns")}
+                        className={`rounded-md border px-3 py-1 text-sm ${layout === "columns" ? "border-gold bg-gold text-ink" : "border-white/30 text-mist/80"}`}
+                      >
+                        Multi
+                      </button>
+                    </div>
                   </div>
                 </div>
-              )}
-            </>
-          ) : post.image_url && (
-            <img
-              src={post.image_url}
-              alt={post.title}
-              className="mb-6 h-64 w-full rounded-lg object-cover md:h-[28rem]"
-            />
-          )}
 
-          {!["about", "homepage_hero"].includes(post.section) && (
-            <p className="text-xs uppercase tracking-[0.22em] text-gold-soft">
-              {post.section.replaceAll("_", " ")}
-            </p>
-          )}
-          <h1 className="mt-2 font-heading text-4xl leading-tight text-offwhite md:text-6xl">
-            {post.title}
-          </h1>
+                <div
+                  className={`rich-content text-mist/90 ${layout === "columns" ? "md:columns-2 xl:columns-3 md:gap-10" : "max-w-4xl"}`}
+                  style={{ fontSize: `${fontSize}px` }}
+                  dangerouslySetInnerHTML={{ __html: renderedHtml }}
+                />
+              </div>
+            )}
 
-          {post.excerpt && (
-            <p className="mt-5 text-lg text-mist/90">{post.excerpt}</p>
-          )}
+            {post.post_type === "video" && post.video_url && (
+              <div className="mt-6">
+                <a
+                  href={post.video_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn-secondary"
+                >
+                  Open Original Video
+                </a>
+              </div>
+            )}
 
-          {post.post_type !== "video" && (
-            <div
-              className={`rich-content mt-6 text-mist/90 ${layout === "columns" ? "md:columns-2 xl:columns-3 md:gap-10" : "max-w-4xl"}`}
-              style={{ fontSize: `${fontSize}px` }}
-              dangerouslySetInnerHTML={{ __html: renderedHtml }}
-            />
-          )}
-
-          {post.post_type === "video" && post.video_url && (
-            <div className="mt-6">
-              <a
-                href={post.video_url}
-                target="_blank"
-                rel="noreferrer"
-                className="btn-secondary"
-              >
-                Open Original Video
-              </a>
+            <div className="mt-8 flex flex-wrap items-center justify-between gap-4 border-t border-white/20 pt-5">
+              <Link to={backTo} className="btn-secondary">
+                {backLabel}
+              </Link>
             </div>
-          )}
-
-          <div className="mt-8 flex flex-wrap items-center justify-between gap-4 border-t border-white/20 pt-5">
-            <Link to={backTo} className="btn-secondary">
-              {backLabel}
-            </Link>
           </div>
         </article>
       )}

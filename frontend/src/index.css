@@ -149,6 +149,89 @@ input::-ms-clear {
   backdrop-filter: blur(12px);
 }
 
+.article-shell {
+  position: relative;
+  isolation: isolate;
+  border-radius: 1.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background:
+    radial-gradient(circle at top right, rgba(224, 180, 74, 0.16), transparent 28%),
+    radial-gradient(circle at left 18%, rgba(115, 163, 228, 0.16), transparent 32%),
+    linear-gradient(160deg, rgba(8, 20, 41, 0.96), rgba(20, 47, 83, 0.88));
+  box-shadow: 0 28px 60px rgba(2, 6, 23, 0.34);
+}
+
+.article-shell::before,
+.article-shell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.article-shell::before {
+  background:
+    linear-gradient(130deg, rgba(255, 255, 255, 0.08), transparent 38%),
+    radial-gradient(circle at 78% 16%, rgba(255, 255, 255, 0.05), transparent 24%);
+  opacity: 0.9;
+}
+
+.article-shell::after {
+  inset: 1px;
+  border-radius: calc(1.5rem - 1px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.article-shell__inner {
+  position: relative;
+  z-index: 1;
+}
+
+.article-hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: 1.25rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  padding: clamp(1.5rem, 2vw, 2.5rem);
+  background:
+    radial-gradient(circle at 85% 25%, rgba(224, 180, 74, 0.15), transparent 28%),
+    linear-gradient(145deg, rgba(30, 64, 108, 0.5), rgba(10, 23, 48, 0.16)),
+    rgba(255, 255, 255, 0.05);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 16px 32px rgba(2, 6, 23, 0.18);
+  backdrop-filter: blur(12px);
+}
+
+.article-hero::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(243, 219, 152, 0), rgba(243, 219, 152, 0.42), rgba(243, 219, 152, 0));
+}
+
+.article-reading-frame {
+  position: relative;
+  border-radius: 1.25rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  padding: clamp(1rem, 1.5vw, 1.6rem);
+  background:
+    linear-gradient(180deg, rgba(5, 16, 34, 0.78), rgba(17, 41, 74, 0.72)),
+    rgba(255, 255, 255, 0.04);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 22px 40px rgba(2, 6, 23, 0.22);
+  backdrop-filter: blur(10px);
+}
+
+.article-toolbar {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background:
+    linear-gradient(140deg, rgba(255, 255, 255, 0.07), rgba(189, 214, 246, 0.03)),
+    rgba(6, 18, 38, 0.2);
+}
+
 .section-wrap {
   margin: 0 auto;
   width: 100%;
