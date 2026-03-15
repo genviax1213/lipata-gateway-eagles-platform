@@ -14,12 +14,17 @@ class ApplicantFeePayment extends Model
         'amount',
         'payment_date',
         'note',
+        'verification_status',
+        'verification_comment',
         'encoded_by_user_id',
+        'verified_by_user_id',
+        'verified_at',
     ];
 
     protected $casts = [
         'amount' => 'decimal:2',
         'payment_date' => 'date',
+        'verified_at' => 'datetime',
     ];
 
     public function requirement()
@@ -30,5 +35,10 @@ class ApplicantFeePayment extends Model
     public function encodedBy()
     {
         return $this->belongsTo(User::class, 'encoded_by_user_id');
+    }
+
+    public function verifiedBy()
+    {
+        return $this->belongsTo(User::class, 'verified_by_user_id');
     }
 }

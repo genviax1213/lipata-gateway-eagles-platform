@@ -139,6 +139,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/applicants/{applicant}/fee-requirements', [ApplicantController::class, 'setFeeRequirement'])->middleware('portal.permission:applications.fee.set');
         Route::post('/applicants/{applicant}/fee-payments', [ApplicantController::class, 'addCategoryFeePayment']);
         Route::post('/applicants/fee-requirements/{applicantFeeRequirement}/payments', [ApplicantController::class, 'addFeePayment']);
+        Route::post('/applicants/fee-payments/{applicantFeePayment}/verify', [ApplicantController::class, 'verifyFeePayment'])->middleware('portal.permission:applications.review');
         Route::post('/applicants/{applicant}/approve', [ApplicantController::class, 'approve'])->middleware('portal.permission:applications.review');
         Route::post('/applicants/{applicant}/activate', [ApplicantController::class, 'activate'])->middleware('portal.permission:applications.review');
         Route::post('/applicants/{applicant}/probation', [ApplicantController::class, 'setProbation'])->middleware('portal.permission:applications.review');
@@ -150,6 +151,8 @@ Route::prefix('v1')->group(function () {
         Route::get('/applicant-batch-treasurer-candidates', [ApplicantController::class, 'batchTreasurerCandidates'])->middleware('portal.permission:applications.review');
         Route::post('/applicant-batches', [ApplicantController::class, 'createBatch'])->middleware('portal.permission:applications.review');
         Route::put('/applicant-batches/{applicantBatch}', [ApplicantController::class, 'updateBatch'])->middleware('portal.permission:applications.review');
+        Route::post('/applicant-batches/{applicantBatch}/expenses', [ApplicantController::class, 'addBatchExpense']);
+        Route::post('/applicant-batch-expenses/{applicantBatchExpense}/verify', [ApplicantController::class, 'verifyBatchExpense'])->middleware('portal.permission:applications.review');
         Route::post('/applicant-batches/{applicantBatch}/documents', [ApplicantController::class, 'uploadBatchDocument'])->middleware('portal.permission:applications.review');
         Route::get('/applicant-batches/documents/{document}/view', [ApplicantController::class, 'viewBatchDocument']);
 

@@ -33,6 +33,11 @@ class ApplicantBatch extends Model
         return $this->hasMany(ApplicantBatchDocument::class, 'applicant_batch_id');
     }
 
+    public function expenses()
+    {
+        return $this->hasMany(ApplicantBatchExpense::class, 'applicant_batch_id');
+    }
+
     public function batchTreasurer()
     {
         return $this->belongsTo(User::class, 'batch_treasurer_user_id');

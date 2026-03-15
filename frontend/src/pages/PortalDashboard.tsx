@@ -151,6 +151,15 @@ interface ApplicantBatchSummary {
   target_completion_date: string | null;
   batch_treasurer?: { id: number; name: string; email: string } | null;
   documents: ApplicantBatchDocument[];
+  contribution_payments: BatchContributionPayment[];
+  expenses: ApplicantBatchExpense[];
+  finance_summary?: {
+    contribution_total: number;
+    expense_total: number;
+    net_balance: number;
+    pending_contribution_reviews: number;
+    pending_expense_reviews: number;
+  } | null;
 }
 
 interface ApplicantBatchListRow {
@@ -160,6 +169,8 @@ interface ApplicantBatchListRow {
   start_date: string | null;
   target_completion_date: string | null;
   applications_count: number;
+  members_count: number;
+  created_at?: string | null;
   batch_treasurer?: { id: number; name: string; email: string } | null;
 }
 
@@ -169,6 +180,43 @@ interface BatchTreasurerCandidate {
   full_name: string;
   email: string;
   status: ApplicantStatus;
+  current_stage: string | null;
+  current_stage_label: string;
+  batch_id?: number | null;
+  batch_name?: string | null;
+  selection_label?: string;
+}
+
+type FinanceVerificationStatus = "pending" | "verified" | "needs_revision";
+
+interface BatchContributionPayment {
+  id: number;
+  applicant_id: number;
+  applicant_name: string;
+  category: "project" | "community_service" | "fellowship" | "five_i_activities";
+  category_label: string;
+  amount: number | string;
+  payment_date: string | null;
+  note?: string | null;
+  encoded_by?: { id: number; name: string } | null;
+  verification_status: FinanceVerificationStatus;
+  verification_comment?: string | null;
+  verified_at?: string | null;
+  verified_by?: { id: number; name: string } | null;
+}
+
+interface ApplicantBatchExpense {
+  id: number;
+  expense_date: string | null;
+  category: string;
+  description: string;
+  amount: number | string;
+  note?: string | null;
+  encoded_by?: { id: number; name: string } | null;
+  verification_status: FinanceVerificationStatus;
+  verification_comment?: string | null;
+  verified_at?: string | null;
+  verified_by?: { id: number; name: string } | null;
 }
 
 interface ActivationReadiness {
@@ -197,7 +245,12 @@ interface ApplicantFeeRequirement {
     amount: number | string;
     partial_amount?: number;
     payment_date: string;
+    note?: string | null;
     encoded_by?: { id: number; name: string } | null;
+    verification_status: FinanceVerificationStatus;
+    verification_comment?: string | null;
+    verified_at?: string | null;
+    verified_by?: { id: number; name: string } | null;
   }>;
 }
 
@@ -321,6 +374,38 @@ function reviewStatusClasses(status: "pending" | "approved" | "rejected" | Requi
 
 function formatTimestamp(value?: string | null): string {
   return value ? new Date(value).toLocaleString() : "Upload date unavailable";
+}
+
+function formatDateValue(value?: string | null): string {
+  return value ? new Date(value).toLocaleDateString() : "Not set";
+}
+
+function statusLabel(value?: string | null): string {
+  if (!value) return "Not Set";
+  return value
+    .split("_")
+    .map((chunk) => chunk.charAt(0).toUpperCase() + chunk.slice(1))
+    .join(" ");
+}
+
+function statusBadgeClasses(value?: string | null): string {
+  if (value === "approved" || value === "eligible_for_activation" || value === "verified") {
+    return "border-green-400/40 bg-green-400/10 text-green-100";
+  }
+  if (value === "withdrawn" || value === "rejected" || value === "needs_revision") {
+    return "border-red-400/40 bg-red-400/10 text-red-100";
+  }
+  if (value === "probation" || value === "official_applicant") {
+    return "border-amber-300/40 bg-amber-300/10 text-amber-100";
+  }
+  return "border-white/20 bg-white/10 text-mist";
+}
+
+function dateRangeLabel(start?: string | null, end?: string | null): string {
+  if (!start && !end) return "Schedule not yet set";
+  if (start && end) return `${formatDateValue(start)} to ${formatDateValue(end)}`;
+  if (start) return `Starts ${formatDateValue(start)}`;
+  return `Target ${formatDateValue(end)}`;
 }
 
 function inferRequirementReviewStatus(req: ApplicantFeeRequirement): RequirementReviewStatus {
@@ -594,6 +679,8 @@ type PortalTab =
   | "formal-photo-viewer"
   | "committee";
 
+type CommitteeSection = "queue" | "review" | "batches" | "finance" | "documents" | "notes";
+
 const PAGE_SIZE = 10;
 const READABLE_SELECT_CLASS = "rounded-md border border-gold/30 bg-offwhite px-2 py-1 text-ink focus:border-gold focus:outline-none";
 
@@ -622,6 +709,7 @@ export default function PortalDashboard() {
   const canManageChairmanNotices = isMembershipChairman && canChairmanSetNotice;
 
   const [activeTab, setActiveTab] = useState<PortalTab>("overview");
+  const [committeeSection, setCommitteeSection] = useState<CommitteeSection>("queue");
   const [dashboard, setDashboard] = useState<DashboardPayload | null>(null);
   const [applicantDetails, setApplicantDetails] = useState<ApplicantDetails | null>(null);
   const [archiveDetails, setArchiveDetails] = useState<ApplicantDetails | null>(null);
@@ -646,9 +734,18 @@ export default function PortalDashboard() {
   const [batchStartDate, setBatchStartDate] = useState("");
   const [batchTargetDate, setBatchTargetDate] = useState("");
   const [batchTreasurerUserId, setBatchTreasurerUserId] = useState("");
+  const [batchTreasurerSearch, setBatchTreasurerSearch] = useState("");
+  const [editingBatchId, setEditingBatchId] = useState<number | null>(null);
   const [batchIdToAssign, setBatchIdToAssign] = useState("");
   const [batches, setBatches] = useState<ApplicantBatchListRow[]>([]);
   const [batchCandidates, setBatchCandidates] = useState<BatchTreasurerCandidate[]>([]);
+  const [batchExpenseDate, setBatchExpenseDate] = useState("");
+  const [batchExpenseCategory, setBatchExpenseCategory] = useState("");
+  const [batchExpenseDescription, setBatchExpenseDescription] = useState("");
+  const [batchExpenseAmount, setBatchExpenseAmount] = useState("");
+  const [batchExpenseNote, setBatchExpenseNote] = useState("");
+  const [paymentVerificationDrafts, setPaymentVerificationDrafts] = useState<Record<number, string>>({});
+  const [expenseVerificationDrafts, setExpenseVerificationDrafts] = useState<Record<number, string>>({});
   const [selectedTab, setSelectedTab] = useState<"alalayang_agila_contribution" | "monthly_contribution" | "extra_contribution">("monthly_contribution");
   const [yearFilter, setYearFilter] = useState("");
   const [monthFilter, setMonthFilter] = useState("");
@@ -848,6 +945,36 @@ export default function PortalDashboard() {
     () => applications.find((row) => row.id === selectedApplicationId) ?? null,
     [applications, selectedApplicationId],
   );
+  const selectedBatch = useMemo(
+    () => batches.find((batch) => batch.id === Number(batchIdToAssign || editingBatchId || 0)) ?? null,
+    [batchIdToAssign, batches, editingBatchId],
+  );
+  const selectedBatchTreasurerCandidate = useMemo(
+    () => batchCandidates.find((candidate) => candidate.user_id === Number(batchTreasurerUserId || 0)) ?? null,
+    [batchCandidates, batchTreasurerUserId],
+  );
+  const filteredBatchCandidates = useMemo(() => {
+    const needle = batchTreasurerSearch.trim().toLowerCase();
+    if (!needle) return batchCandidates;
+    return batchCandidates.filter((candidate) => {
+      const haystack = [
+        candidate.full_name,
+        candidate.email,
+        candidate.current_stage_label,
+        candidate.batch_name ?? "",
+      ].join(" ").toLowerCase();
+      return haystack.includes(needle);
+    });
+  }, [batchCandidates, batchTreasurerSearch]);
+  const isCurrentApplicantBatchTreasurer = useMemo(
+    () => dashboard?.view === "applicant" && applicantDetails?.batch?.batch_treasurer?.id === user?.id,
+    [applicantDetails?.batch?.batch_treasurer?.id, dashboard?.view, user?.id],
+  );
+  const canManageSelectedBatchFinance = useMemo(() => {
+    if (!selectedApplicationDetails?.batch) return false;
+    if (canChairmanReview || canChairmanLogContributionPayment) return true;
+    return selectedApplicationDetails.batch.batch_treasurer?.id === user?.id;
+  }, [canChairmanLogContributionPayment, canChairmanReview, selectedApplicationDetails?.batch, user?.id]);
 
   const filteredRows = useMemo(() => {
     if (!memberData) return [];
@@ -1276,31 +1403,51 @@ export default function PortalDashboard() {
     }
   };
 
-  const createApplicantBatch = async () => {
+  const resetBatchForm = useCallback(() => {
+    setEditingBatchId(null);
+    setBatchName("");
+    setBatchDescription("");
+    setBatchStartDate("");
+    setBatchTargetDate("");
+    setBatchTreasurerUserId("");
+    setBatchTreasurerSearch("");
+  }, []);
+
+  const startBatchEdit = useCallback((batch: ApplicantBatchListRow) => {
+    setEditingBatchId(batch.id);
+    setBatchName(batch.name);
+    setBatchDescription(batch.description ?? "");
+    setBatchStartDate(batch.start_date ?? "");
+    setBatchTargetDate(batch.target_completion_date ?? "");
+    setBatchTreasurerUserId(batch.batch_treasurer ? String(batch.batch_treasurer.id) : "");
+    setBatchTreasurerSearch(batch.batch_treasurer?.name ?? "");
+    setCommitteeSection("batches");
+  }, []);
+
+  const saveApplicantBatch = async () => {
     if (!batchName.trim()) return;
     setError("");
     setNotice("");
     try {
-      const response = await api.post<{ batch?: { id: number; name: string } }>("/applicant-batches", {
+      const payload = {
         name: batchName.trim(),
         description: batchDescription.trim() || null,
         start_date: batchStartDate || null,
         target_completion_date: batchTargetDate || null,
         batch_treasurer_user_id: batchTreasurerUserId ? Number(batchTreasurerUserId) : null,
-      });
+      };
+      const response = editingBatchId
+        ? await api.put<{ batch?: ApplicantBatchListRow }>(`/applicant-batches/${editingBatchId}`, payload)
+        : await api.post<{ batch?: ApplicantBatchListRow }>("/applicant-batches", payload);
       if (response.data?.batch?.id) {
         setBatchIdToAssign(String(response.data.batch.id));
       }
-      setNotice(`Applicant batch created${response.data?.batch?.id ? ` (#${response.data.batch.id})` : ""}.`);
-      setBatchName("");
-      setBatchDescription("");
-      setBatchStartDate("");
-      setBatchTargetDate("");
-      setBatchTreasurerUserId("");
+      setNotice(editingBatchId ? "Applicant batch updated." : `Applicant batch created${response.data?.batch?.id ? ` (#${response.data.batch.id})` : ""}.`);
+      resetBatchForm();
       await loadCommitteeApplications();
       await loadBatchSupportData();
     } catch (err) {
-      setError(parseError(err, "Failed to create applicant batch."));
+      setError(parseError(err, editingBatchId ? "Failed to update applicant batch." : "Failed to create applicant batch."));
     }
   };
 
@@ -1340,6 +1487,69 @@ export default function PortalDashboard() {
       await loadDashboard();
     } catch (err) {
       setError(parseError(err, "Failed to upload batch document."));
+    }
+  };
+
+  const addBatchExpenseRecord = async () => {
+    if (!selectedApplicationDetails?.batch?.id || !batchExpenseDate || !batchExpenseCategory.trim() || !batchExpenseDescription.trim() || !batchExpenseAmount) {
+      return;
+    }
+
+    setError("");
+    setNotice("");
+    try {
+      await api.post(`/applicant-batches/${selectedApplicationDetails.batch.id}/expenses`, {
+        expense_date: batchExpenseDate,
+        category: batchExpenseCategory.trim(),
+        description: batchExpenseDescription.trim(),
+        amount: Number(batchExpenseAmount),
+        note: batchExpenseNote.trim() || null,
+      });
+      setNotice("Applicant batch expense recorded.");
+      setBatchExpenseDate("");
+      setBatchExpenseCategory("");
+      setBatchExpenseDescription("");
+      setBatchExpenseAmount("");
+      setBatchExpenseNote("");
+      if (selectedApplicationId) {
+        await refreshSelectedCommitteeApplication(selectedApplicationId);
+      }
+    } catch (err) {
+      setError(parseError(err, "Failed to record batch expense."));
+    }
+  };
+
+  const verifyContributionPayment = async (paymentId: number, verificationStatus: FinanceVerificationStatus) => {
+    setError("");
+    setNotice("");
+    try {
+      await api.post(`/applicants/fee-payments/${paymentId}/verify`, {
+        verification_status: verificationStatus,
+        verification_comment: paymentVerificationDrafts[paymentId]?.trim() || null,
+      });
+      setNotice("Applicant contribution verification updated.");
+      if (selectedApplicationId) {
+        await refreshSelectedCommitteeApplication(selectedApplicationId);
+      }
+    } catch (err) {
+      setError(parseError(err, "Failed to update contribution verification."));
+    }
+  };
+
+  const verifyExpenseRecord = async (expenseId: number, verificationStatus: FinanceVerificationStatus) => {
+    setError("");
+    setNotice("");
+    try {
+      await api.post(`/applicant-batch-expenses/${expenseId}/verify`, {
+        verification_status: verificationStatus,
+        verification_comment: expenseVerificationDrafts[expenseId]?.trim() || null,
+      });
+      setNotice("Applicant batch expense verification updated.");
+      if (selectedApplicationId) {
+        await refreshSelectedCommitteeApplication(selectedApplicationId);
+      }
+    } catch (err) {
+      setError(parseError(err, "Failed to update batch expense verification."));
     }
   };
 
@@ -1479,6 +1689,17 @@ export default function PortalDashboard() {
             <h2 className="mb-2 font-heading text-xl text-offwhite">Task Snapshot</h2>
             <TaskHierarchyCard status={statusSummary} actions={availableActionsSummary} nextStep={nextStepSummary} />
           </div>
+
+          {isCurrentApplicantBatchTreasurer && applicantDetails?.batch && (
+            <div className="mt-4 rounded-xl border border-gold/30 bg-gold/10 p-4">
+              <p className="text-xs uppercase tracking-[0.18em] text-gold-soft">Batch Treasurer Assignment</p>
+              <h2 className="mt-2 font-heading text-xl text-offwhite">You are the selected treasurer for {applicantDetails.batch.name}.</h2>
+              <p className="mt-2 text-sm text-mist/85">
+                Use <span className="text-offwhite">My Contributions</span> for batch totals and <span className="text-offwhite">Application Review</span> for contribution and expense encoding plus chairman verification.
+              </p>
+              <p className="mt-2 text-xs text-mist/75">{dateRangeLabel(applicantDetails.batch.start_date, applicantDetails.batch.target_completion_date)}</p>
+            </div>
+          )}
         </>
       )}
 
@@ -1591,11 +1812,22 @@ export default function PortalDashboard() {
       {activeTab === "applicant-status" && dashboard?.view === "applicant" && applicantDetails && (
         <div className="rounded-xl border border-white/20 bg-white/10 p-4">
           <h2 className="mb-2 font-heading text-2xl text-offwhite">Application Status</h2>
-          <p className="text-sm text-mist/85">Decision: <span className="text-gold-soft">{applicantDetails.decision_status}</span></p>
-          <p className="text-sm text-mist/85">Workflow: <span className="text-offwhite">{applicantDetails.current_stage_label}</span></p>
-          <p className="text-sm text-mist/85">Applicant Status: <span className="text-offwhite">{applicantDetails.status}</span></p>
+          <div className="mb-4 flex flex-wrap gap-2">
+            <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${statusBadgeClasses(applicantDetails.decision_status)}`}>Decision: {statusLabel(applicantDetails.decision_status)}</span>
+            <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${statusBadgeClasses(applicantDetails.status)}`}>Status: {statusLabel(applicantDetails.status)}</span>
+            <span className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold text-mist">Workflow: {applicantDetails.current_stage_label}</span>
+          </div>
           {applicantDetails.batch && (
-            <p className="text-sm text-mist/85">Batch: <span className="text-offwhite">{applicantDetails.batch.name}</span></p>
+            <div className="rounded-lg border border-white/15 bg-white/5 px-4 py-3 text-sm text-mist/85">
+              <p>Batch: <span className="text-offwhite">{applicantDetails.batch.name}</span></p>
+              <p className="mt-1 text-xs text-mist/75">{dateRangeLabel(applicantDetails.batch.start_date, applicantDetails.batch.target_completion_date)}</p>
+              {applicantDetails.batch.batch_treasurer && (
+                <p className="mt-1">
+                  Batch Treasurer: <span className="text-offwhite">{applicantDetails.batch.batch_treasurer.name}</span>
+                  {isCurrentApplicantBatchTreasurer && <span className="ml-2 rounded-full border border-gold/40 bg-gold/10 px-2 py-0.5 text-[11px] text-gold-soft">You are assigned</span>}
+                </p>
+              )}
+            </div>
           )}
           {(applicantDetails.status === "pending_verification" || applicantDetails.status === "under_review" || applicantDetails.status === "official_applicant" || applicantDetails.status === "eligible_for_activation") && (
             <div className="mt-4 rounded-xl border border-amber-300/25 bg-amber-400/10 p-4">
@@ -1611,7 +1843,7 @@ export default function PortalDashboard() {
                   <li>Requirements Paid: {applicantDetails.activation_readiness.checks.requirements_fully_paid ? "Ready" : "Pending"}</li>
                 </ul>
               )}
-              {(applicantDetails.status === "pending_verification" || applicantDetails.status === "under_review") && (
+              {(applicantDetails.status === "pending_verification" || applicantDetails.status === "under_review" || applicantDetails.status === "official_applicant" || applicantDetails.status === "eligible_for_activation") && (
                 <button type="button" className="mt-3 rounded-md border border-amber-300/40 px-4 py-2 text-sm text-amber-100 transition hover:bg-amber-400/10" onClick={() => void withdrawApplication()}>
                   Withdraw Application
                 </button>
@@ -1738,9 +1970,17 @@ export default function PortalDashboard() {
               <p className="text-sm text-offwhite">{req.category_label}</p>
               <p className="text-xs text-mist/70">Target: {money(req.target_payment)} | Paid: {money(req.partial_payment_total)} | Variance: {money(req.variance)}</p>
               <p className="text-xs text-mist/70">{req.note ?? "-"}</p>
-              {req.payments.map((p) => (
-                <p key={p.id} className="text-xs text-mist/80">{p.payment_date} - {money(p.amount)} by {p.encoded_by?.name ?? "Membership Chairman"}</p>
-              ))}
+              <div className="mt-2 space-y-2">
+                {req.payments.map((p) => (
+                  <div key={p.id} className="rounded-md border border-white/15 bg-navy/35 px-3 py-2 text-xs text-mist/80">
+                    <p>{p.payment_date} - {money(p.amount)} by {p.encoded_by?.name ?? "Membership Chairman"}</p>
+                    <p className="mt-1">
+                      <span className={`rounded-full border px-2 py-0.5 text-[11px] ${statusBadgeClasses(p.verification_status)}`}>{statusLabel(p.verification_status)}</span>
+                    </p>
+                    {p.verification_comment && <p className="mt-1 text-mist/70">Chairman note: {p.verification_comment}</p>}
+                  </div>
+                ))}
+              </div>
             </div>
           ))}
           <div className="mt-4 flex items-center justify-between text-xs text-mist/80">
@@ -1758,8 +1998,9 @@ export default function PortalDashboard() {
           <h2 className="mb-2 font-heading text-2xl text-offwhite">Batch Materials</h2>
           <p className="text-sm text-mist/85">Batch: <span className="text-offwhite">{applicantDetails.batch.name}</span></p>
           {applicantDetails.batch.batch_treasurer && (
-            <p className="text-sm text-mist/85">Batch Treasurer: <span className="text-offwhite">{applicantDetails.batch.batch_treasurer.name}</span></p>
+            <p className="text-sm text-mist/85">Batch Treasurer: <span className="text-offwhite">{applicantDetails.batch.batch_treasurer.name}</span>{isCurrentApplicantBatchTreasurer && <span className="ml-2 rounded-full border border-gold/40 bg-gold/10 px-2 py-0.5 text-[11px] text-gold-soft">You are assigned</span>}</p>
           )}
+          <p className="text-sm text-mist/75">{dateRangeLabel(applicantDetails.batch.start_date, applicantDetails.batch.target_completion_date)}</p>
           <p className="mt-2 text-sm text-mist/85">{applicantDetails.batch.description ?? "Shared schedule, references, and documents for your applicant batch."}</p>
           <div className="mt-4 space-y-2">
             {applicantDetails.batch.documents.map((doc) => (
@@ -1905,6 +2146,36 @@ export default function PortalDashboard() {
                 <p className="mb-3 text-sm text-mist/85">
                   Applicant journey contributions stay on your applicant record while you complete the 5I workflow. They remain reviewable in the archived applicant dossier even after activation.
                 </p>
+                {isCurrentApplicantBatchTreasurer && applicantDetails.batch && (
+                  <div className="mb-4 rounded-xl border border-gold/30 bg-gold/10 p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.18em] text-gold-soft">Batch Treasurer Workspace</p>
+                        <p className="mt-2 text-sm text-offwhite">{applicantDetails.batch.name}</p>
+                        <p className="mt-1 text-xs text-mist/75">{dateRangeLabel(applicantDetails.batch.start_date, applicantDetails.batch.target_completion_date)}</p>
+                      </div>
+                      <button type="button" className="btn-secondary" onClick={() => { setActiveTab("committee"); setCommitteeSection("finance"); }}>
+                        Open Finance Encoding
+                      </button>
+                    </div>
+                    {applicantDetails.batch.finance_summary && (
+                      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                        <div className="rounded-lg border border-white/15 bg-white/5 p-3">
+                          <p className="text-xs uppercase tracking-[0.18em] text-gold-soft">Batch Contributions</p>
+                          <p className="mt-2 text-base text-offwhite">{money(applicantDetails.batch.finance_summary.contribution_total)}</p>
+                        </div>
+                        <div className="rounded-lg border border-white/15 bg-white/5 p-3">
+                          <p className="text-xs uppercase tracking-[0.18em] text-gold-soft">Batch Expenses</p>
+                          <p className="mt-2 text-base text-offwhite">{money(applicantDetails.batch.finance_summary.expense_total)}</p>
+                        </div>
+                        <div className="rounded-lg border border-white/15 bg-white/5 p-3">
+                          <p className="text-xs uppercase tracking-[0.18em] text-gold-soft">Net Balance</p>
+                          <p className="mt-2 text-base text-offwhite">{money(applicantDetails.batch.finance_summary.net_balance)}</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
                 <div className="mb-4 grid gap-3 md:grid-cols-3">
                   <div className="rounded-lg border border-white/15 bg-white/5 p-4">
                     <p className="text-xs uppercase tracking-[0.18em] text-gold-soft">Target Total</p>
@@ -2330,32 +2601,53 @@ export default function PortalDashboard() {
 
       {activeTab === "committee" && (canChairmanReview || canChairmanSetContributionTarget || canChairmanLogContributionPayment || canChairmanSetStage || canChairmanReviewDocs || canBatchTreasurerManagePayments) && (
         <div className="mt-6 rounded-xl border border-white/20 bg-white/10 p-4">
-          <h2 className="mb-3 font-heading text-2xl text-offwhite">Application Review Panel</h2>
-          <div className="mb-3">
-            <button type="button" className="btn-secondary" onClick={() => void loadCommitteeApplications()}>Search</button>
+          <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="font-heading text-2xl text-offwhite">Application Review Panel</h2>
+              <p className="mt-1 max-w-3xl text-sm text-mist/80">
+                Queue selection, applicant review, batch setup, finance, documents, and notes are split below so the same workflow remains usable on smaller displays.
+              </p>
+            </div>
+            <button type="button" className="btn-secondary" onClick={() => void loadCommitteeApplications()}>Refresh Queue</button>
           </div>
+
+          <div className="mb-4 flex flex-wrap gap-2">
+            {([
+              ["queue", "Queue"],
+              ["review", "Review"],
+              ["batches", "Batches"],
+              ["finance", "Finance"],
+              ["documents", "Documents"],
+              ["notes", "Notes"],
+            ] as Array<[CommitteeSection, string]>).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setCommitteeSection(value)}
+                className={`rounded-md border px-4 py-2 text-sm ${committeeSection === value ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
           {!applicationsLoaded ? (
             <div className="rounded-md border border-white/20 bg-white/5 px-4 py-8 text-center text-sm text-mist/80">
               Loading applications under review...
             </div>
           ) : (
             <>
-              <div className="mb-3 overflow-x-auto rounded-lg border border-white/20">
-                <table className="min-w-[860px] text-sm text-offwhite">
-                  <thead className="bg-navy/70 text-gold-soft">
-                    <tr>
-                      <th className="px-3 py-2 text-left">Select</th>
-                      <th className="px-3 py-2 text-left">Applicant</th>
-                      <th className="px-3 py-2 text-left">Email</th>
-                      <th className="px-3 py-2 text-left">Batch</th>
-                      <th className="px-3 py-2 text-left">Status</th>
-                      <th className="px-3 py-2 text-left">Decision</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+              {committeeSection === "queue" && (
+                <div className="space-y-4">
+                  <div className="grid gap-3 md:hidden">
                     {pagedApplications.map((app) => (
-                      <tr key={app.id} className={`border-b border-white/15 ${selectedApplicationId === app.id ? "bg-gold/10" : ""}`}>
-                        <td className="px-3 py-2">
+                      <div key={app.id} className={`rounded-xl border p-4 ${selectedApplicationId === app.id ? "border-gold/60 bg-gold/10" : "border-white/15 bg-white/5"}`}>
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div>
+                            <p className="text-sm font-semibold text-offwhite">{appName(app)}</p>
+                            <p className="mt-1 text-xs text-mist/75">{app.email}</p>
+                            <p className="mt-1 text-xs text-mist/75">{app.batch?.name ?? "Unassigned batch"}</p>
+                          </div>
                           <button
                             type="button"
                             className={`rounded border px-2 py-1 text-xs ${selectedApplicationId === app.id ? "border-gold bg-gold text-ink" : "border-white/30 text-offwhite"}`}
@@ -2363,383 +2655,540 @@ export default function PortalDashboard() {
                           >
                             {selectedApplicationId === app.id ? "Selected" : "Select"}
                           </button>
-                        </td>
-                        <td className="px-3 py-2">{appName(app)}</td>
-                        <td className="px-3 py-2 text-mist/85">{app.email}</td>
-                        <td className="px-3 py-2 text-mist/85">{app.batch?.name ?? "Unassigned"}</td>
-                        <td className="px-3 py-2">{app.status}</td>
-                        <td className="px-3 py-2">{app.decision_status}</td>
-                      </tr>
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <span className={`rounded-full border px-2 py-1 text-[11px] ${statusBadgeClasses(app.status)}`}>{statusLabel(app.status)}</span>
+                          <span className={`rounded-full border px-2 py-1 text-[11px] ${statusBadgeClasses(app.decision_status)}`}>{statusLabel(app.decision_status)}</span>
+                        </div>
+                      </div>
                     ))}
-                  </tbody>
-                </table>
-              </div>
-              <div className="mb-2 text-[11px] text-mist/65 sm:text-xs">
-                Scroll sideways on narrow screens to see all review columns.
-              </div>
-              <div className="mb-4 flex items-center justify-between text-xs text-mist/80">
-                <span>Page {applicationsPage} of {applicationsLastPage} | Total {applications.length}</span>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    className="btn-secondary disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0"
-                    disabled={applications.length === 0 || applicationsPage <= 1}
-                    onClick={() => setApplicationsPage((current) => Math.max(1, current - 1))}
-                  >
-                    Prev
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-secondary disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0"
-                    disabled={applications.length === 0 || applicationsPage >= applicationsLastPage}
-                    onClick={() => setApplicationsPage((current) => Math.min(applicationsLastPage, current + 1))}
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
-            </>
-          )}
-
-          {selectedApplication && (
-            <div className="space-y-3">
-              <p className="text-sm text-mist/85">
-                Selected: <span className="text-offwhite">{appName(selectedApplication)}</span>
-                <span className="ml-2 text-xs text-mist/70">Use the Selected button again to clear this applicant.</span>
-              </p>
-              {selectedApplicationDetails?.batch && (
-                <p className="text-sm text-mist/85">Assigned Batch: <span className="text-offwhite">{selectedApplicationDetails.batch.name}</span></p>
-              )}
-
-              {canChairmanReview && (
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    className="btn-secondary"
-                    onClick={() => void chairmanAction("approve")}
-                    disabled={selectedApplication.status !== "under_review"}
-                  >
-                    Approve
-                  </button>
-                  {selectedApplicationDetails?.activation_eligible && (
-                    <button className="btn-secondary" onClick={() => void activateApplicantAsMember()}>Activate as Member</button>
-                  )}
-                  <button className="btn-secondary" onClick={() => void chairmanAction("probation")}>Set Probation</button>
-                  <button className="btn-secondary" onClick={() => void chairmanAction("reject", { reason: "Rejected by chairman review." })}>Reject</button>
-                </div>
-              )}
-
-              {canChairmanReview && selectedApplication.status === "withdrawn" && selectedApplicationDetails && (
-                <div className="rounded-lg border border-gold/25 bg-gold/10 px-4 py-4 text-sm text-mist/85">
-                  <p className="font-semibold text-offwhite">Chairman-Only Rejoin Rule</p>
-                  <p className="mt-2">
-                    Withdrawn applicants may return only through this chairman workflow. Documents may be reused for <span className="text-gold-soft">{selectedApplicationDetails.document_reuse_policy?.grace_months ?? 3} months</span> from withdrawal, even when the applicant later joins another batch.
-                  </p>
-                  <p className="mt-2">
-                    Reused documents stay tied to the new applicant record as grace-period copies. Previous contribution payments remain on the withdrawn record, are non-refundable, and are <span className="text-gold-soft">not credited</span> to the new batch.
-                  </p>
-                  <p className="mt-2 text-xs text-mist/75">
-                    Withdrawn at: <span className="text-offwhite">{selectedApplicationDetails.withdrawn_at ? new Date(selectedApplicationDetails.withdrawn_at).toLocaleString() : "Not recorded"}</span>
-                    {" "} | Document reuse until: <span className="text-offwhite">{selectedApplicationDetails.document_reuse_until ? new Date(selectedApplicationDetails.document_reuse_until).toLocaleString() : "Expired"}</span>
-                  </p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      className="btn-secondary"
-                      disabled={!selectedApplicationDetails.document_reuse_policy?.eligible}
-                      onClick={() => void rejoinWithdrawnApplicant()}
-                    >
-                      {selectedApplicationDetails.document_reuse_policy?.eligible
-                        ? "Rejoin With Document Grace"
-                        : "Document Grace Expired"}
-                    </button>
-                    <span className="self-center text-xs text-mist/75">
-                      Batch assignment stays in Members &gt; Batch Workflow after the rejoined record is created.
-                    </span>
                   </div>
-                </div>
-              )}
 
-              {canChairmanReview && selectedApplication.status === "pending_verification" && (
-                <div className="rounded-lg border border-amber-300/30 bg-amber-400/10 px-3 py-3 text-sm text-amber-100">
-                  <p className="font-semibold text-offwhite">Wrong Email Deletion</p>
-                  <p className="mt-2 text-amber-100/90">
-                    Use this only when the applicant entered a non-existent email and cannot receive the verification token. Deleting this wrong-email pending record lets the person start a new registration with the correct email address.
-                  </p>
-                  <button
-                    type="button"
-                    className="mt-3 rounded-md border border-amber-200/40 px-4 py-2 text-sm text-amber-50 transition hover:bg-amber-300/10"
-                    onClick={() => void recoverPendingVerificationApplicant()}
-                  >
-                    Delete Wrong Email Record
-                  </button>
-                </div>
-              )}
-
-              {canChairmanReview && (
-                <div className="space-y-3">
-                <div className="rounded-lg border border-white/15 bg-navy/35 px-3 py-3 text-xs text-mist/75">
-                    Batch creation and batch assignments now run in{" "}
-                    <a
-                      href="/portal/members?tab=batch-workflow"
-                      className="inline-flex items-baseline border-b border-gold/70 text-gold-soft transition hover:border-gold hover:text-gold"
-                    >
-                      Members &gt; Batch Workflow
-                    </a>
-                    . Use that workspace when you want a focused batch-only flow.
-                  </div>
-                  <div className="rounded-lg border border-white/20 bg-white/5 p-3">
-                  <p className="mb-2 text-sm text-offwhite">Applicant Batch</p>
-                  {batches.length > 0 ? (
-                    <div className="mb-3 overflow-x-auto rounded-lg border border-white/15">
-                      <table className="min-w-full text-xs text-offwhite">
+                  <div className="hidden md:block">
+                    <div className="overflow-x-auto rounded-lg border border-white/20">
+                      <table className="min-w-[860px] text-sm text-offwhite">
                         <thead className="bg-navy/70 text-gold-soft">
                           <tr>
+                            <th className="px-3 py-2 text-left">Select</th>
+                            <th className="px-3 py-2 text-left">Applicant</th>
+                            <th className="px-3 py-2 text-left">Email</th>
                             <th className="px-3 py-2 text-left">Batch</th>
-                            <th className="px-3 py-2 text-left">Treasurer</th>
-                            <th className="px-3 py-2 text-left">Applicants</th>
+                            <th className="px-3 py-2 text-left">Status</th>
+                            <th className="px-3 py-2 text-left">Decision</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {batches.map((batch) => (
-                            <tr key={batch.id} className="border-b border-white/10">
-                              <td className="px-3 py-2">#{batch.id} {batch.name}</td>
-                              <td className="px-3 py-2">{batch.batch_treasurer?.name ?? "Unassigned"}</td>
-                              <td className="px-3 py-2">{batch.applications_count}</td>
+                          {pagedApplications.map((app) => (
+                            <tr key={app.id} className={`border-b border-white/15 ${selectedApplicationId === app.id ? "bg-gold/10" : ""}`}>
+                              <td className="px-3 py-2">
+                                <button
+                                  type="button"
+                                  className={`rounded border px-2 py-1 text-xs ${selectedApplicationId === app.id ? "border-gold bg-gold text-ink" : "border-white/30 text-offwhite"}`}
+                                  onClick={() => setSelectedApplicationId((current) => (current === app.id ? null : app.id))}
+                                >
+                                  {selectedApplicationId === app.id ? "Selected" : "Select"}
+                                </button>
+                              </td>
+                              <td className="px-3 py-2">{appName(app)}</td>
+                              <td className="px-3 py-2 text-mist/85">{app.email}</td>
+                              <td className="px-3 py-2 text-mist/85">{app.batch?.name ?? "Unassigned"}</td>
+                              <td className="px-3 py-2"><span className={`rounded-full border px-2 py-1 text-[11px] ${statusBadgeClasses(app.status)}`}>{statusLabel(app.status)}</span></td>
+                              <td className="px-3 py-2"><span className={`rounded-full border px-2 py-1 text-[11px] ${statusBadgeClasses(app.decision_status)}`}>{statusLabel(app.decision_status)}</span></td>
                             </tr>
                           ))}
                         </tbody>
                       </table>
                     </div>
-                  ) : (
-                    <p className="mb-3 text-xs text-mist/75">No applicant batches yet.</p>
-                  )}
-                  <div className="grid gap-2 md:grid-cols-2">
-                    <input value={batchName} onChange={(e) => setBatchName(e.target.value)} placeholder="Batch name" className="rounded-md border border-white/25 bg-white/10 px-2 py-1 text-offwhite" />
-                    <select value={batchTreasurerUserId} onChange={(e) => setBatchTreasurerUserId(e.target.value)} className={READABLE_SELECT_CLASS}>
-                      <option value="">Select batch treasurer</option>
-                      {batchCandidates.map((candidate) => (
-                        <option key={candidate.user_id} value={String(candidate.user_id)}>
-                          {candidate.full_name} ({candidate.email})
-                        </option>
-                      ))}
-                    </select>
-                    <input value={batchStartDate} onChange={(e) => setBatchStartDate(e.target.value)} type="date" className="rounded-md border border-white/25 bg-white/10 px-2 py-1 text-offwhite" />
-                    <input value={batchTargetDate} onChange={(e) => setBatchTargetDate(e.target.value)} type="date" className="rounded-md border border-white/25 bg-white/10 px-2 py-1 text-offwhite" />
-                    <textarea value={batchDescription} onChange={(e) => setBatchDescription(e.target.value)} placeholder="Batch description" className="min-h-[80px] rounded-md border border-white/25 bg-white/10 px-2 py-1 text-offwhite md:col-span-2" />
+                    <div className="mt-2 text-[11px] text-mist/65 sm:text-xs">
+                      Scroll sideways on narrow screens to see all review columns.
+                    </div>
                   </div>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <button className="btn-secondary" onClick={() => void createApplicantBatch()}>Create Batch</button>
-                    <select value={batchIdToAssign} onChange={(e) => setBatchIdToAssign(e.target.value)} className={READABLE_SELECT_CLASS}>
-                      <option value="">Select batch to assign</option>
-                      {batches.map((batch) => (
-                        <option key={batch.id} value={String(batch.id)}>
-                          #{batch.id} {batch.name}
-                        </option>
-                      ))}
-                    </select>
-                    <button className="btn-secondary" onClick={() => void assignBatchToApplication()}>Assign Batch</button>
+
+                  <div className="flex flex-col gap-2 text-xs text-mist/80 sm:flex-row sm:items-center sm:justify-between">
+                    <span>Page {applicationsPage} of {applicationsLastPage} | Total {applications.length}</span>
+                    <div className="flex gap-2">
+                      <button type="button" className="btn-secondary disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0" disabled={applications.length === 0 || applicationsPage <= 1} onClick={() => setApplicationsPage((current) => Math.max(1, current - 1))}>Prev</button>
+                      <button type="button" className="btn-secondary disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0" disabled={applications.length === 0 || applicationsPage >= applicationsLastPage} onClick={() => setApplicationsPage((current) => Math.min(applicationsLastPage, current + 1))}>Next</button>
+                    </div>
                   </div>
                 </div>
+              )}
+
+              {selectedApplication && (
+                <div className="mb-4 rounded-xl border border-white/15 bg-navy/35 px-4 py-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.18em] text-gold-soft">Selected Applicant</p>
+                      <h3 className="mt-2 font-heading text-xl text-offwhite">{appName(selectedApplication)}</h3>
+                      <p className="mt-1 text-sm text-mist/75">{selectedApplication.email}</p>
+                      <p className="mt-1 text-xs text-mist/70">{selectedApplicationDetails?.batch?.name ?? selectedApplication.batch?.name ?? "No batch assigned"}</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${statusBadgeClasses(selectedApplication.status)}`}>{statusLabel(selectedApplication.status)}</span>
+                      <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${statusBadgeClasses(selectedApplication.decision_status)}`}>{statusLabel(selectedApplication.decision_status)}</span>
+                    </div>
+                  </div>
                 </div>
               )}
 
-              {canChairmanSetStage && (
-                <div className="flex flex-wrap items-center gap-2">
-                  <label htmlFor="committee-stage" className="text-xs font-semibold text-mist/85">Set Stage</label>
-                  <select id="committee-stage" value={stageValue} onChange={(e) => setStageValue(e.target.value)} className={READABLE_SELECT_CLASS}>
-                    <option value="interview" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Interview</option>
-                    <option value="introduction" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Introduction</option>
-                    <option value="indoctrination_initiation" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Indoctrination (Initiation)</option>
-                    <option value="incubation" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Incubation</option>
-                    <option value="induction" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Induction</option>
-                  </select>
-                  <button className="btn-secondary" onClick={() => void setStageForApplicant()}>Update Stage</button>
+              {!selectedApplication && committeeSection !== "queue" && (
+                <div className="rounded-lg border border-dashed border-white/15 px-4 py-10 text-center text-sm text-mist/70">
+                  Select an applicant from the Queue tab first.
                 </div>
               )}
 
-              {canManageChairmanNotices && (
-                <div className="rounded-lg border border-white/15 bg-navy/35 px-3 py-3 text-xs text-mist/75">
-                  Need to post an applicant-facing notice or internal note? Use the dedicated <span className="text-gold-soft">Chairman Notices</span> tab so communication stays separate from review actions.
-                </div>
-              )}
-
-              {(canChairmanSetContributionTarget || canChairmanLogContributionPayment || canBatchTreasurerManagePayments) && (
-                <div className="flex flex-wrap items-center gap-2">
-                  <label htmlFor="committee-contribution-category" className="text-xs font-semibold text-mist/85">Category</label>
-                  <select
-                    id="committee-contribution-category"
-                    value={selectedContributionCategory}
-                    onChange={(e) => setSelectedContributionCategory(e.target.value as "project" | "community_service" | "fellowship" | "five_i_activities")}
-                    className={READABLE_SELECT_CLASS}
-                  >
-                    <option value="project" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Projects</option>
-                    <option value="community_service" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Community Service</option>
-                    <option value="fellowship" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Fellowship</option>
-                    <option value="five_i_activities" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>5I Activities</option>
-                  </select>
-                  {canChairmanSetContributionTarget && (
-                    <>
-                      <label htmlFor="committee-required-fee" className="text-xs font-semibold text-mist/85">Target Payment</label>
-                      <input id="committee-required-fee" value={requiredAmount} onChange={(e) => setRequiredAmount(e.target.value)} type="number" step="0.01" placeholder="Target amount" className="rounded-md border border-white/25 bg-white/10 px-2 py-1 text-offwhite" />
-                      <button className="btn-secondary" onClick={() => void setFeeRequirement()}>Set Target</button>
-                    </>
+              {selectedApplication && committeeSection === "review" && (
+                <div className="space-y-4">
+                  {canChairmanReview && (
+                    <div className="flex flex-wrap gap-2">
+                      <button className="btn-secondary" onClick={() => void chairmanAction("approve")} disabled={selectedApplication.status !== "under_review"}>Approve</button>
+                      {selectedApplicationDetails?.activation_eligible && <button className="btn-secondary" onClick={() => void activateApplicantAsMember()}>Activate as Member</button>}
+                      <button className="btn-secondary" onClick={() => void chairmanAction("probation")}>Set Probation</button>
+                      <button className="btn-secondary" onClick={() => void chairmanAction("reject", { reason: "Rejected by chairman review." })}>Reject</button>
+                    </div>
                   )}
-                  {(canChairmanLogContributionPayment || canBatchTreasurerManagePayments) && (
-                    <>
-                      <label htmlFor="committee-payment-amount" className="text-xs font-semibold text-mist/85">Partial/Full Payment</label>
-                      <input id="committee-payment-amount" value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} type="number" step="0.01" placeholder="Amount paid" className="rounded-md border border-white/25 bg-white/10 px-2 py-1 text-offwhite" />
-                      <button className="btn-secondary" onClick={() => void addFeePayment()}>Log Payment</button>
-                    </>
+
+                  {canChairmanSetStage && (
+                    <div className="rounded-lg border border-white/20 bg-white/5 p-4">
+                      <p className="mb-3 text-sm font-semibold text-offwhite">Workflow Stage</p>
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                        <select id="committee-stage" value={stageValue} onChange={(e) => setStageValue(e.target.value)} className={READABLE_SELECT_CLASS}>
+                          <option value="interview" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Interview</option>
+                          <option value="introduction" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Introduction</option>
+                          <option value="indoctrination_initiation" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Indoctrination (Initiation)</option>
+                          <option value="incubation" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Incubation</option>
+                          <option value="induction" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Induction</option>
+                        </select>
+                        <button className="btn-secondary" onClick={() => void setStageForApplicant()}>Update Stage</button>
+                      </div>
+                    </div>
+                  )}
+
+                  {canChairmanReview && selectedApplication.status === "withdrawn" && selectedApplicationDetails && (
+                    <div className="rounded-lg border border-gold/25 bg-gold/10 px-4 py-4 text-sm text-mist/85">
+                      <p className="font-semibold text-offwhite">Chairman-Only Rejoin Rule</p>
+                      <p className="mt-2">
+                        Withdrawn applicants may return only through this chairman workflow. Documents may be reused for <span className="text-gold-soft">{selectedApplicationDetails.document_reuse_policy?.grace_months ?? 3} months</span> from withdrawal, even when the applicant later joins another batch.
+                      </p>
+                      <p className="mt-2 text-xs text-mist/75">
+                        Withdrawn at: <span className="text-offwhite">{selectedApplicationDetails.withdrawn_at ? new Date(selectedApplicationDetails.withdrawn_at).toLocaleString() : "Not recorded"}</span>
+                        {" "} | Document reuse until: <span className="text-offwhite">{selectedApplicationDetails.document_reuse_until ? new Date(selectedApplicationDetails.document_reuse_until).toLocaleString() : "Expired"}</span>
+                      </p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button type="button" className="btn-secondary" disabled={!selectedApplicationDetails.document_reuse_policy?.eligible} onClick={() => void rejoinWithdrawnApplicant()}>
+                          {selectedApplicationDetails.document_reuse_policy?.eligible ? "Rejoin With Document Grace" : "Document Grace Expired"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {canChairmanReview && selectedApplication.status === "pending_verification" && (
+                    <div className="rounded-lg border border-amber-300/30 bg-amber-400/10 px-4 py-4 text-sm text-amber-100">
+                      <p className="font-semibold text-offwhite">Wrong Email Deletion</p>
+                      <p className="mt-2 text-amber-100/90">
+                        Use this only when the applicant entered a non-existent email and cannot receive the verification token.
+                      </p>
+                      <button type="button" className="mt-3 rounded-md border border-amber-200/40 px-4 py-2 text-sm text-amber-50 transition hover:bg-amber-300/10" onClick={() => void recoverPendingVerificationApplicant()}>
+                        Delete Wrong Email Record
+                      </button>
+                    </div>
+                  )}
+
+                  {canManageChairmanNotices && (
+                    <div className="rounded-lg border border-white/15 bg-navy/35 px-3 py-3 text-xs text-mist/75">
+                      Need to post an applicant-facing notice or internal note? Use the dedicated <span className="text-gold-soft">Chairman Notices</span> tab so communication stays separate from review actions.
+                    </div>
                   )}
                 </div>
               )}
 
-              {selectedApplicationDetails && (
-                <div className="rounded-lg border border-white/20 bg-white/5 p-3">
+              {selectedApplication && committeeSection === "batches" && canChairmanReview && (
+                <div className="space-y-4">
+                  <div className="rounded-lg border border-white/15 bg-navy/35 px-3 py-3 text-xs text-mist/75">
+                    Batch creation and batch assignments also remain available in{" "}
+                    <a href="/portal/members?tab=batch-workflow" className="inline-flex items-baseline border-b border-gold/70 text-gold-soft transition hover:border-gold hover:text-gold">
+                      Members &gt; Batch Workflow
+                    </a>
+                    {" "}for a dedicated member-side view.
+                  </div>
+
+                  <div className="grid gap-3 lg:grid-cols-2">
+                    {batches.map((batch) => (
+                      <div key={batch.id} className={`rounded-xl border p-4 ${editingBatchId === batch.id ? "border-gold/60 bg-gold/10" : "border-white/15 bg-white/5"}`}>
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div>
+                            <p className="text-sm font-semibold text-offwhite">#{batch.id} {batch.name}</p>
+                            <p className="mt-1 text-xs text-mist/75">{dateRangeLabel(batch.start_date, batch.target_completion_date)}</p>
+                            <p className="mt-1 text-xs text-mist/70">{batch.description ?? "No batch description yet."}</p>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <button type="button" className="btn-secondary" onClick={() => startBatchEdit(batch)}>Edit</button>
+                            <button type="button" className="btn-secondary" onClick={() => setBatchIdToAssign(String(batch.id))}>Use For Applicant</button>
+                          </div>
+                        </div>
+                        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                          <div className="rounded-md border border-white/15 bg-navy/35 px-3 py-2 text-xs text-mist/80">
+                            Treasurer: <span className="text-offwhite">{batch.batch_treasurer?.name ?? "Unassigned"}</span>
+                          </div>
+                          <div className="rounded-md border border-white/15 bg-navy/35 px-3 py-2 text-xs text-mist/80">
+                            Applicants: <span className="text-offwhite">{batch.applications_count}</span> | Members: <span className="text-offwhite">{batch.members_count}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    {batches.length === 0 && <p className="text-sm text-mist/75">No applicant batches yet.</p>}
+                  </div>
+
+                  <div className="rounded-xl border border-white/20 bg-white/5 p-4">
+                    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                      <h3 className="font-heading text-xl text-offwhite">{editingBatchId ? "Edit Applicant Batch" : "Create Applicant Batch"}</h3>
+                      {editingBatchId && <button type="button" className="btn-secondary" onClick={() => resetBatchForm()}>Reset</button>}
+                    </div>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <input value={batchName} onChange={(e) => setBatchName(e.target.value)} placeholder="Batch name" className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite" />
+                      <input value={batchStartDate} onChange={(e) => setBatchStartDate(e.target.value)} type="date" className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite" />
+                      <input value={batchTargetDate} onChange={(e) => setBatchTargetDate(e.target.value)} type="date" className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite" />
+                      <div className="rounded-md border border-white/15 bg-white/5 px-3 py-2 text-xs text-mist/80">
+                        Active schedule: <span className="text-offwhite">{dateRangeLabel(batchStartDate || null, batchTargetDate || null)}</span>
+                      </div>
+                      <textarea value={batchDescription} onChange={(e) => setBatchDescription(e.target.value)} placeholder="Batch description" className="min-h-[96px] rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite md:col-span-2" />
+                    </div>
+
+                    <div className="mt-4 rounded-lg border border-white/15 bg-navy/35 p-3">
+                      <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <p className="text-sm font-semibold text-offwhite">Treasurer Selection</p>
+                        <input
+                          value={batchTreasurerSearch}
+                          onChange={(e) => setBatchTreasurerSearch(e.target.value)}
+                          placeholder="Filter candidates by name, email, stage, or batch"
+                          className="w-full rounded-md border border-white/25 bg-white/10 px-3 py-2 text-sm text-offwhite sm:max-w-sm"
+                        />
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        {filteredBatchCandidates.map((candidate) => {
+                          const isChosen = String(candidate.user_id) === batchTreasurerUserId;
+                          return (
+                            <button
+                              key={candidate.user_id}
+                              type="button"
+                              onClick={() => setBatchTreasurerUserId(isChosen ? "" : String(candidate.user_id))}
+                              className={`rounded-xl border p-3 text-left transition ${isChosen ? "border-gold/60 bg-gold/10" : "border-white/15 bg-white/5 hover:border-gold/30"}`}
+                            >
+                              <p className="text-sm font-semibold text-offwhite">{candidate.full_name}</p>
+                              <p className="mt-1 text-xs text-mist/75">{candidate.email}</p>
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                <span className={`rounded-full border px-2 py-1 text-[11px] ${statusBadgeClasses(candidate.status)}`}>{statusLabel(candidate.status)}</span>
+                                <span className="rounded-full border border-white/20 px-2 py-1 text-[11px] text-mist">{candidate.current_stage_label}</span>
+                              </div>
+                              <p className="mt-2 text-xs text-mist/70">{candidate.batch_name ? `Current batch: ${candidate.batch_name}` : "No batch assigned yet."}</p>
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {selectedBatchTreasurerCandidate && (
+                        <div className="mt-3 rounded-md border border-gold/25 bg-gold/10 px-3 py-2 text-sm text-mist/85">
+                          Selected treasurer: <span className="text-offwhite">{selectedBatchTreasurerCandidate.full_name}</span> | {selectedBatchTreasurerCandidate.current_stage_label}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <button className="btn-secondary" onClick={() => void saveApplicantBatch()}>{editingBatchId ? "Save Batch Changes" : "Create Batch"}</button>
+                      <select value={batchIdToAssign} onChange={(e) => setBatchIdToAssign(e.target.value)} className={READABLE_SELECT_CLASS}>
+                        <option value="">Select batch to assign</option>
+                        {batches.map((batch) => (
+                          <option key={batch.id} value={String(batch.id)}>
+                            #{batch.id} {batch.name}
+                          </option>
+                        ))}
+                      </select>
+                      <button className="btn-secondary" onClick={() => void assignBatchToApplication()}>Assign Batch</button>
+                    </div>
+                    {selectedBatch && (
+                      <p className="mt-3 text-xs text-mist/75">Selected batch for applicant assignment: <span className="text-offwhite">{selectedBatch.name}</span> | {dateRangeLabel(selectedBatch.start_date, selectedBatch.target_completion_date)}</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {selectedApplication && committeeSection === "finance" && selectedApplicationDetails && (
+                <div className="space-y-4">
+                  <div className="grid gap-3 lg:grid-cols-2">
+                    <div className="rounded-xl border border-white/15 bg-white/5 p-4">
+                      <p className="text-sm font-semibold text-offwhite">Selected Applicant Requirement Progress</p>
+                      <div className="mt-3 space-y-2">
+                        {selectedApplicationDetails.fees.requirements.map((req) => {
+                          const requirementStatus = inferRequirementReviewStatus(req);
+                          return (
+                            <div key={req.category} className="rounded-md border border-white/15 bg-navy/35 p-3">
+                              <div className="flex flex-wrap items-start justify-between gap-2">
+                                <div>
+                                  <p className="text-sm text-offwhite">{req.category_label}</p>
+                                  <p className="text-xs text-mist/75">Target: {money(req.target_payment)} | Paid: {money(req.partial_payment_total)} | Variance: {money(req.variance)}</p>
+                                </div>
+                                <span className={`rounded-full border px-2 py-1 text-[11px] font-semibold ${reviewStatusClasses(requirementStatus)}`}>{formatReviewStatusLabel(requirementStatus)}</span>
+                              </div>
+                              <p className="mt-2 text-xs text-mist/80">{req.note ?? "No requirement note yet."}</p>
+                            </div>
+                          );
+                        })}
+                        {selectedApplicationDetails.fees.requirements.length === 0 && <p className="text-xs text-mist/70">No fee requirements recorded yet.</p>}
+                      </div>
+                    </div>
+
+                    {selectedApplicationDetails.batch?.finance_summary && (
+                      <div className="rounded-xl border border-white/15 bg-white/5 p-4">
+                        <p className="text-sm font-semibold text-offwhite">Batch Finance Summary</p>
+                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                          <div className="rounded-md border border-white/15 bg-navy/35 p-3">
+                            <p className="text-xs uppercase tracking-[0.18em] text-gold-soft">Contributions</p>
+                            <p className="mt-2 text-base text-offwhite">{money(selectedApplicationDetails.batch.finance_summary.contribution_total)}</p>
+                          </div>
+                          <div className="rounded-md border border-white/15 bg-navy/35 p-3">
+                            <p className="text-xs uppercase tracking-[0.18em] text-gold-soft">Expenses</p>
+                            <p className="mt-2 text-base text-offwhite">{money(selectedApplicationDetails.batch.finance_summary.expense_total)}</p>
+                          </div>
+                          <div className="rounded-md border border-white/15 bg-navy/35 p-3">
+                            <p className="text-xs uppercase tracking-[0.18em] text-gold-soft">Net Balance</p>
+                            <p className="mt-2 text-base text-offwhite">{money(selectedApplicationDetails.batch.finance_summary.net_balance)}</p>
+                          </div>
+                          <div className="rounded-md border border-white/15 bg-navy/35 p-3">
+                            <p className="text-xs uppercase tracking-[0.18em] text-gold-soft">Pending Review</p>
+                            <p className="mt-2 text-base text-offwhite">{selectedApplicationDetails.batch.finance_summary.pending_contribution_reviews + selectedApplicationDetails.batch.finance_summary.pending_expense_reviews}</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {(canChairmanSetContributionTarget || canChairmanLogContributionPayment || canBatchTreasurerManagePayments) && (
+                    <div className="rounded-xl border border-white/20 bg-white/5 p-4">
+                      <p className="mb-3 text-sm font-semibold text-offwhite">Contribution Encoding</p>
+                      <div className="grid gap-3 lg:grid-cols-[1fr_auto_auto_auto]">
+                        <select id="committee-contribution-category" value={selectedContributionCategory} onChange={(e) => setSelectedContributionCategory(e.target.value as "project" | "community_service" | "fellowship" | "five_i_activities")} className={READABLE_SELECT_CLASS}>
+                          <option value="project" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Projects</option>
+                          <option value="community_service" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Community Service</option>
+                          <option value="fellowship" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Fellowship</option>
+                          <option value="five_i_activities" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>5I Activities</option>
+                        </select>
+                        {canChairmanSetContributionTarget && (
+                          <>
+                            <input value={requiredAmount} onChange={(e) => setRequiredAmount(e.target.value)} type="number" step="0.01" placeholder="Target amount" className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite" />
+                            <button className="btn-secondary" onClick={() => void setFeeRequirement()}>Set Target</button>
+                          </>
+                        )}
+                        {(canChairmanLogContributionPayment || canBatchTreasurerManagePayments) && (
+                          <>
+                            <input value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} type="number" step="0.01" placeholder="Payment amount" className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite" />
+                            <button className="btn-secondary" onClick={() => void addFeePayment()}>Log Payment</button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedApplicationDetails.batch && canManageSelectedBatchFinance && (
+                    <div className="rounded-xl border border-white/20 bg-white/5 p-4">
+                      <p className="mb-3 text-sm font-semibold text-offwhite">Batch Expense Encoding</p>
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <input value={batchExpenseDate} onChange={(e) => setBatchExpenseDate(e.target.value)} type="date" className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite" />
+                        <input value={batchExpenseCategory} onChange={(e) => setBatchExpenseCategory(e.target.value)} placeholder="Expense category" className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite" />
+                        <input value={batchExpenseDescription} onChange={(e) => setBatchExpenseDescription(e.target.value)} placeholder="Expense description" className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite md:col-span-2" />
+                        <input value={batchExpenseAmount} onChange={(e) => setBatchExpenseAmount(e.target.value)} type="number" step="0.01" placeholder="Expense amount" className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite" />
+                        <textarea value={batchExpenseNote} onChange={(e) => setBatchExpenseNote(e.target.value)} placeholder="Expense note or supporting details" className="min-h-[96px] rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite" />
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button className="btn-secondary" onClick={() => void addBatchExpenseRecord()}>Record Batch Expense</button>
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedApplicationDetails.batch && (
+                    <div className="grid gap-4 xl:grid-cols-2">
+                      <div className="rounded-xl border border-white/20 bg-white/5 p-4">
+                        <p className="mb-3 text-sm font-semibold text-offwhite">Batch Contribution Table</p>
+                        <div className="space-y-3">
+                          {selectedApplicationDetails.batch.contribution_payments.map((payment) => (
+                            <div key={payment.id} className="rounded-lg border border-white/15 bg-navy/35 p-3">
+                              <div className="flex flex-wrap items-start justify-between gap-2">
+                                <div>
+                                  <p className="text-sm text-offwhite">{payment.applicant_name}</p>
+                                  <p className="text-xs text-mist/75">{payment.category_label} | {payment.payment_date ?? "No payment date"}</p>
+                                  <p className="mt-1 text-xs text-mist/80">{money(payment.amount)} by {payment.encoded_by?.name ?? "System"}</p>
+                                </div>
+                                <span className={`rounded-full border px-2 py-1 text-[11px] ${statusBadgeClasses(payment.verification_status)}`}>{statusLabel(payment.verification_status)}</span>
+                              </div>
+                              {payment.note && <p className="mt-2 text-xs text-mist/75">Entry note: {payment.note}</p>}
+                              {payment.verification_comment && <p className="mt-2 text-xs text-mist/75">Chairman note: {payment.verification_comment}</p>}
+                              {isMembershipChairman && canChairmanReview && (
+                                <div className="mt-3 space-y-2">
+                                  <textarea
+                                    value={paymentVerificationDrafts[payment.id] ?? payment.verification_comment ?? ""}
+                                    onChange={(e) => setPaymentVerificationDrafts((current) => ({ ...current, [payment.id]: e.target.value }))}
+                                    placeholder="Verification comment for this contribution"
+                                    className="min-h-[84px] w-full rounded-md border border-white/20 bg-white/10 px-3 py-2 text-sm text-offwhite"
+                                  />
+                                  <div className="flex flex-wrap gap-2">
+                                    <button type="button" className="btn-secondary" onClick={() => void verifyContributionPayment(payment.id, "verified")}>Verify</button>
+                                    <button type="button" className="btn-secondary" onClick={() => void verifyContributionPayment(payment.id, "needs_revision")}>Needs Revision</button>
+                                    <button type="button" className="btn-secondary" onClick={() => void verifyContributionPayment(payment.id, "pending")}>Mark Pending</button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                          {selectedApplicationDetails.batch.contribution_payments.length === 0 && <p className="text-sm text-mist/70">No batch contribution payments recorded yet.</p>}
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl border border-white/20 bg-white/5 p-4">
+                        <p className="mb-3 text-sm font-semibold text-offwhite">Batch Expense Table</p>
+                        <div className="space-y-3">
+                          {selectedApplicationDetails.batch.expenses.map((expense) => (
+                            <div key={expense.id} className="rounded-lg border border-white/15 bg-navy/35 p-3">
+                              <div className="flex flex-wrap items-start justify-between gap-2">
+                                <div>
+                                  <p className="text-sm text-offwhite">{expense.description}</p>
+                                  <p className="text-xs text-mist/75">{expense.category} | {expense.expense_date ?? "No expense date"}</p>
+                                  <p className="mt-1 text-xs text-mist/80">{money(expense.amount)} by {expense.encoded_by?.name ?? "System"}</p>
+                                </div>
+                                <span className={`rounded-full border px-2 py-1 text-[11px] ${statusBadgeClasses(expense.verification_status)}`}>{statusLabel(expense.verification_status)}</span>
+                              </div>
+                              {expense.note && <p className="mt-2 text-xs text-mist/75">Entry note: {expense.note}</p>}
+                              {expense.verification_comment && <p className="mt-2 text-xs text-mist/75">Chairman note: {expense.verification_comment}</p>}
+                              {isMembershipChairman && canChairmanReview && (
+                                <div className="mt-3 space-y-2">
+                                  <textarea
+                                    value={expenseVerificationDrafts[expense.id] ?? expense.verification_comment ?? ""}
+                                    onChange={(e) => setExpenseVerificationDrafts((current) => ({ ...current, [expense.id]: e.target.value }))}
+                                    placeholder="Verification comment for this expense"
+                                    className="min-h-[84px] w-full rounded-md border border-white/20 bg-white/10 px-3 py-2 text-sm text-offwhite"
+                                  />
+                                  <div className="flex flex-wrap gap-2">
+                                    <button type="button" className="btn-secondary" onClick={() => void verifyExpenseRecord(expense.id, "verified")}>Verify</button>
+                                    <button type="button" className="btn-secondary" onClick={() => void verifyExpenseRecord(expense.id, "needs_revision")}>Needs Revision</button>
+                                    <button type="button" className="btn-secondary" onClick={() => void verifyExpenseRecord(expense.id, "pending")}>Mark Pending</button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                          {selectedApplicationDetails.batch.expenses.length === 0 && <p className="text-sm text-mist/70">No batch expenses recorded yet.</p>}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {selectedApplication && committeeSection === "documents" && selectedApplicationDetails && (
+                <div className="space-y-4">
+                  {selectedApplicationDetails.batch && canChairmanReview && (
+                    <div className="rounded-lg border border-white/20 bg-white/5 p-4">
+                      <p className="mb-2 text-sm text-offwhite">Batch Documents</p>
+                      <div className="mb-3 space-y-3">
+                        <FileSelectionPreview
+                          id="batch-document-upload"
+                          label="Shared Batch Document"
+                          accept=".jpg,.jpeg,.png,.webp,.pdf"
+                          file={batchDocumentFile}
+                          buttonLabel="Choose Batch File"
+                          helperText="Image files render a thumbnail here before upload. PDFs stay readable through file details."
+                          onChange={setBatchDocumentFile}
+                          onClear={() => setBatchDocumentFile(null)}
+                        />
+                        <button className="btn-secondary" onClick={() => void uploadSharedBatchDocument()} disabled={!batchDocumentFile}>Upload Batch Doc</button>
+                      </div>
+                      <div className="space-y-2">
+                        {selectedApplicationDetails.batch.documents.map((doc) => (
+                          <div key={doc.id} className="rounded border border-white/20 px-3 py-3 text-xs text-mist/85">
+                            <p>{doc.original_name}</p>
+                            <button className="mt-2 rounded border border-white/30 px-2 py-1 text-offwhite" onClick={() => void viewBatchDocument(doc.id, doc.original_name)}>View</button>
+                          </div>
+                        ))}
+                        {selectedApplicationDetails.batch.documents.length === 0 && <p className="text-xs text-mist/70">No shared batch documents yet.</p>}
+                      </div>
+                    </div>
+                  )}
+
+                  {canChairmanReviewDocs && (
+                    <div className="rounded-lg border border-white/20 bg-white/5 p-4">
+                      <div className="mb-3 grid gap-3 lg:grid-cols-2">
+                        <div className="rounded-lg border border-white/15 bg-white/5 p-3">
+                          <p className="text-sm font-semibold text-offwhite">Document Summary</p>
+                          <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                            <div className="rounded-md border border-green-400/30 bg-green-400/10 p-3 text-center">
+                              <p className="text-xs uppercase tracking-[0.18em] text-green-100">Approved</p>
+                              <p className="mt-1 text-lg font-semibold text-offwhite">{selectedApplicationReviewSummary.documents.approved}</p>
+                            </div>
+                            <div className="rounded-md border border-red-400/30 bg-red-400/10 p-3 text-center">
+                              <p className="text-xs uppercase tracking-[0.18em] text-red-100">Disapproved</p>
+                              <p className="mt-1 text-lg font-semibold text-offwhite">{selectedApplicationReviewSummary.documents.rejected}</p>
+                            </div>
+                            <div className="rounded-md border border-amber-300/30 bg-amber-300/10 p-3 text-center">
+                              <p className="text-xs uppercase tracking-[0.18em] text-amber-100">Pending Review</p>
+                              <p className="mt-1 text-lg font-semibold text-offwhite">{selectedApplicationReviewSummary.documents.pending}</p>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="rounded-lg border border-white/15 bg-white/5 p-3">
+                          <p className="text-sm font-semibold text-offwhite">Requirement Summary</p>
+                          <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                            <div className="rounded-md border border-green-400/30 bg-green-400/10 p-3 text-center">
+                              <p className="text-xs uppercase tracking-[0.18em] text-green-100">Approved</p>
+                              <p className="mt-1 text-lg font-semibold text-offwhite">{selectedApplicationReviewSummary.requirements.approved}</p>
+                            </div>
+                            <div className="rounded-md border border-red-400/30 bg-red-400/10 p-3 text-center">
+                              <p className="text-xs uppercase tracking-[0.18em] text-red-100">Disapproved</p>
+                              <p className="mt-1 text-lg font-semibold text-offwhite">{selectedApplicationReviewSummary.requirements.rejected}</p>
+                            </div>
+                            <div className="rounded-md border border-amber-300/30 bg-amber-300/10 p-3 text-center">
+                              <p className="text-xs uppercase tracking-[0.18em] text-amber-100">Pending Review</p>
+                              <p className="mt-1 text-lg font-semibold text-offwhite">{selectedApplicationReviewSummary.requirements.pending}</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <p className="mb-2 text-sm text-offwhite">Applicant Documents</p>
+                      {pagedCommitteeDocuments.map((doc) => (
+                        <ApplicantDocumentCard
+                          key={doc.id}
+                          document={doc}
+                          onView={(documentUrl, originalName) => viewDocument(documentUrl, originalName)}
+                          actions={(
+                            <>
+                              <button className="rounded border border-green-400/40 px-2 py-1 text-xs text-green-200" onClick={() => void reviewDocument(doc.id, "approved")}>Approve</button>
+                              <button className="rounded border border-red-400/40 px-2 py-1 text-xs text-red-200" onClick={() => void reviewDocument(doc.id, "rejected")}>Reject</button>
+                            </>
+                          )}
+                        />
+                      ))}
+                      {selectedApplicationDetails.documents.length === 0 && <p className="text-xs text-mist/70">No uploaded documents yet.</p>}
+                      <div className="mt-4 flex flex-col gap-2 text-xs text-mist/80 sm:flex-row sm:items-center sm:justify-between">
+                        <span>Page {committeeDocumentsPage} of {committeeDocumentsLastPage} | Total {selectedApplicationDetails.documents.length}</span>
+                        <div className="flex gap-2">
+                          <button type="button" className="btn-secondary" disabled={committeeDocumentsPage <= 1} onClick={() => setCommitteeDocumentsPage((current) => Math.max(1, current - 1))}>Prev</button>
+                          <button type="button" className="btn-secondary" disabled={committeeDocumentsPage >= committeeDocumentsLastPage} onClick={() => setCommitteeDocumentsPage((current) => Math.min(committeeDocumentsLastPage, current + 1))}>Next</button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {selectedApplication && committeeSection === "notes" && selectedApplicationDetails && (
+                <div className="rounded-lg border border-white/20 bg-white/5 p-4">
                   <p className="mb-2 text-sm text-offwhite">Application Notes</p>
                   {selectedApplicationDetails.notices.map((item) => (
-                    <div key={item.id} className="mb-2 rounded border border-white/20 px-2 py-2 text-xs text-mist/85">
+                    <div key={item.id} className="mb-2 rounded border border-white/20 px-3 py-3 text-xs text-mist/85">
                       <p>{item.notice_text}</p>
-                      <p className="mt-1 text-mist/70">
-                        {item.visibility === "internal" ? "Internal Only" : "Applicant Visible"} | {new Date(item.created_at).toLocaleString()} by {item.created_by?.name ?? "System"}
-                      </p>
+                      <p className="mt-1 text-mist/70">{item.visibility === "internal" ? "Internal Only" : "Applicant Visible"} | {new Date(item.created_at).toLocaleString()} by {item.created_by?.name ?? "System"}</p>
                     </div>
                   ))}
                   {selectedApplicationDetails.notices.length === 0 && <p className="text-xs text-mist/70">No notices or internal notes yet.</p>}
                 </div>
               )}
-
-              {selectedApplicationDetails?.batch && canChairmanReview && (
-                <div className="rounded-lg border border-white/20 bg-white/5 p-3">
-                  <p className="mb-2 text-sm text-offwhite">Batch Documents</p>
-                  <div className="mb-3 space-y-3">
-                    <FileSelectionPreview
-                      id="batch-document-upload"
-                      label="Shared Batch Document"
-                      accept=".jpg,.jpeg,.png,.webp,.pdf"
-                      file={batchDocumentFile}
-                      buttonLabel="Choose Batch File"
-                      helperText="Image files render a thumbnail here before upload. PDFs stay readable through file details."
-                      onChange={setBatchDocumentFile}
-                      onClear={() => setBatchDocumentFile(null)}
-                    />
-                    <button className="btn-secondary" onClick={() => void uploadSharedBatchDocument()} disabled={!batchDocumentFile}>Upload Batch Doc</button>
-                  </div>
-                  {selectedApplicationDetails.batch.documents.map((doc) => (
-                    <div key={doc.id} className="mb-2 rounded border border-white/20 px-2 py-2 text-xs text-mist/85">
-                      <p>{doc.original_name}</p>
-                      <button className="mt-2 rounded border border-white/30 px-2 py-1 text-offwhite" onClick={() => void viewBatchDocument(doc.id, doc.original_name)}>View</button>
-                    </div>
-                  ))}
-                  {selectedApplicationDetails.batch.documents.length === 0 && <p className="text-xs text-mist/70">No shared batch documents yet.</p>}
-                </div>
-              )}
-
-              {canChairmanReviewDocs && selectedApplicationDetails && (
-                <div className="rounded-lg border border-white/20 bg-white/5 p-3">
-                  <div className="mb-3 rounded-md border border-white/15 bg-white/5 px-3 py-2 text-xs text-mist/75">
-                    Applicant-facing history includes only notices marked <span className="text-gold-soft">Applicant Visible</span>. Internal committee notes remain confined to this review workspace.
-                  </div>
-                  <div className="mb-3 rounded-md border border-white/15 bg-navy/40 p-3">
-                    <p className="text-sm font-semibold text-offwhite">Applicant Record Access</p>
-                    <p className="mt-2 text-xs text-mist/75">
-                      Applicant owners can view their own documents and requirements. Committee-side access extends to authorized officers with applicant document or review access, plus assigned batch treasurers for their batch. Only document reviewers can approve or disapprove uploaded files.
-                    </p>
-                  </div>
-                  <div className="mb-4 grid gap-3 lg:grid-cols-2">
-                    <div className="rounded-lg border border-white/15 bg-white/5 p-3">
-                      <p className="text-sm font-semibold text-offwhite">Document Summary</p>
-                      <div className="mt-3 grid gap-2 sm:grid-cols-3">
-                        <div className="rounded-md border border-green-400/30 bg-green-400/10 p-3 text-center">
-                          <p className="text-xs uppercase tracking-[0.18em] text-green-100">Approved</p>
-                          <p className="mt-1 text-lg font-semibold text-offwhite">{selectedApplicationReviewSummary.documents.approved}</p>
-                        </div>
-                        <div className="rounded-md border border-red-400/30 bg-red-400/10 p-3 text-center">
-                          <p className="text-xs uppercase tracking-[0.18em] text-red-100">Disapproved</p>
-                          <p className="mt-1 text-lg font-semibold text-offwhite">{selectedApplicationReviewSummary.documents.rejected}</p>
-                        </div>
-                        <div className="rounded-md border border-amber-300/30 bg-amber-300/10 p-3 text-center">
-                          <p className="text-xs uppercase tracking-[0.18em] text-amber-100">Pending Review</p>
-                          <p className="mt-1 text-lg font-semibold text-offwhite">{selectedApplicationReviewSummary.documents.pending}</p>
-                        </div>
-                      </div>
-                      <p className="mt-3 text-xs text-mist/70">Total uploaded documents: {selectedApplicationReviewSummary.totalDocuments}</p>
-                    </div>
-                    <div className="rounded-lg border border-white/15 bg-white/5 p-3">
-                      <p className="text-sm font-semibold text-offwhite">Requirement Summary</p>
-                      <div className="mt-3 grid gap-2 sm:grid-cols-3">
-                        <div className="rounded-md border border-green-400/30 bg-green-400/10 p-3 text-center">
-                          <p className="text-xs uppercase tracking-[0.18em] text-green-100">Approved</p>
-                          <p className="mt-1 text-lg font-semibold text-offwhite">{selectedApplicationReviewSummary.requirements.approved}</p>
-                        </div>
-                        <div className="rounded-md border border-red-400/30 bg-red-400/10 p-3 text-center">
-                          <p className="text-xs uppercase tracking-[0.18em] text-red-100">Disapproved</p>
-                          <p className="mt-1 text-lg font-semibold text-offwhite">{selectedApplicationReviewSummary.requirements.rejected}</p>
-                        </div>
-                        <div className="rounded-md border border-amber-300/30 bg-amber-300/10 p-3 text-center">
-                          <p className="text-xs uppercase tracking-[0.18em] text-amber-100">Pending Review</p>
-                          <p className="mt-1 text-lg font-semibold text-offwhite">{selectedApplicationReviewSummary.requirements.pending}</p>
-                        </div>
-                      </div>
-                      <p className="mt-3 text-xs text-mist/70">Requirement status is inferred from payment progress: fully paid counts as Approved; unpaid or partial balances stay Pending Review.</p>
-                    </div>
-                  </div>
-                  <div className="mb-4 rounded-lg border border-white/15 bg-white/5 p-3">
-                    <p className="mb-2 text-sm font-semibold text-offwhite">Requirement Progress</p>
-                    <div className="space-y-2">
-                      {selectedApplicationDetails.fees.requirements.map((req) => {
-                        const requirementStatus = inferRequirementReviewStatus(req);
-
-                        return (
-                          <div key={req.category} className="rounded-md border border-white/15 bg-navy/35 p-3">
-                            <div className="flex flex-wrap items-start justify-between gap-2">
-                              <div>
-                                <p className="text-sm text-offwhite">{req.category_label}</p>
-                                <p className="text-xs text-mist/75">
-                                  Target: {money(req.target_payment)} | Paid: {money(req.partial_payment_total)} | Variance: {money(req.variance)}
-                                </p>
-                              </div>
-                              <span className={`rounded-full border px-2 py-1 text-[11px] font-semibold ${reviewStatusClasses(requirementStatus)}`}>
-                                {formatReviewStatusLabel(requirementStatus)}
-                              </span>
-                            </div>
-                            <p className="mt-2 text-xs text-mist/80">{req.note ?? "No requirement note yet."}</p>
-                          </div>
-                        );
-                      })}
-                      {selectedApplicationDetails.fees.requirements.length === 0 && <p className="text-xs text-mist/70">No fee requirements recorded yet.</p>}
-                    </div>
-                  </div>
-                  <p className="mb-2 text-sm text-offwhite">Applicant Documents</p>
-                  {pagedCommitteeDocuments.map((doc) => (
-                    <ApplicantDocumentCard
-                      key={doc.id}
-                      document={doc}
-                      onView={(documentUrl, originalName) => viewDocument(documentUrl, originalName)}
-                      actions={(
-                        <>
-                          <button className="rounded border border-green-400/40 px-2 py-1 text-xs text-green-200" onClick={() => void reviewDocument(doc.id, "approved")}>Approve</button>
-                          <button className="rounded border border-red-400/40 px-2 py-1 text-xs text-red-200" onClick={() => void reviewDocument(doc.id, "rejected")}>Reject</button>
-                        </>
-                      )}
-                    />
-                  ))}
-                  {selectedApplicationDetails.documents.some((doc) => doc.reused_under_grace_period) && (
-                    <div className="mt-3 rounded-md border border-gold/25 bg-gold/10 px-3 py-2 text-xs text-mist/80">
-                      Documents marked as reused were copied forward under the chairman-only 3-month grace rule from a withdrawn application. They remain separate from prior contribution records.
-                    </div>
-                  )}
-                  {selectedApplicationDetails.documents.length === 0 && <p className="text-xs text-mist/70">No uploaded documents yet.</p>}
-                  <div className="mt-4 flex items-center justify-between text-xs text-mist/80">
-                    <span>Page {committeeDocumentsPage} of {committeeDocumentsLastPage} | Total {selectedApplicationDetails.documents.length}</span>
-                    <div className="flex gap-2">
-                      <button type="button" className="btn-secondary" disabled={committeeDocumentsPage <= 1} onClick={() => setCommitteeDocumentsPage((current) => Math.max(1, current - 1))}>Prev</button>
-                      <button type="button" className="btn-secondary" disabled={committeeDocumentsPage >= committeeDocumentsLastPage} onClick={() => setCommitteeDocumentsPage((current) => Math.min(committeeDocumentsLastPage, current + 1))}>Next</button>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
+            </>
           )}
         </div>
       )}

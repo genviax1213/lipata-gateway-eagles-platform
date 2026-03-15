@@ -7,6 +7,7 @@ use App\Models\ApplicantFeePayment;
 use App\Models\ApplicantFeeRequirement;
 use App\Models\ApplicantNotice;
 use App\Models\ApplicantBatch;
+use App\Models\ApplicantBatchExpense;
 use App\Models\ApplicantBatchDocument;
 use App\Models\Member;
 use App\Models\Applicant;
@@ -17,6 +18,7 @@ use App\Notifications\ApplicantVerificationToken;
 use App\Support\ImageUploadOptimizer;
 use App\Support\GoogleOAuthClaimStore;
 use App\Support\Permissions;
+use App\Support\RoleHierarchy;
 use App\Support\TextCase;
 use App\Support\VerificationToken;
 use Illuminate\Database\Eloquent\Builder;
@@ -450,7 +452,7 @@ class ApplicantController extends Controller
         return $timeline;
     }
 
-    private function applicantPayload(Applicant $application, bool $includeInternalNotices = false): array
+    private function applicantPayload(Applicant $application, bool $includeInternalNotices = false, bool $includeBatchFinance = false): array
     {
         $application->loadMissing([
             'reviewer:id,name',
@@ -459,9 +461,14 @@ class ApplicantController extends Controller
             'documents.reviewedBy:id,name',
             'feeRequirements.setBy:id,name',
             'feeRequirements.payments.encodedBy:id,name',
+            'feeRequirements.payments.verifiedBy:id,name',
             'member:id,created_at',
             'batch.batchTreasurer:id,name,email',
             'batch.documents.uploadedBy:id,name',
+            'batch.expenses.encodedBy:id,name',
+            'batch.expenses.verifiedBy:id,name',
+            'batch.applications.feeRequirements.payments.encodedBy:id,name',
+            'batch.applications.feeRequirements.payments.verifiedBy:id,name',
         ]);
 
         $requiredAmount = 0.0;
@@ -483,6 +490,10 @@ class ApplicantController extends Controller
                     'payment_date' => optional($payment->payment_date)->toDateString(),
                     'note' => $payment->note,
                     'encoded_by' => $payment->encodedBy ? ['id' => $payment->encodedBy->id, 'name' => $payment->encodedBy->name] : null,
+                    'verification_status' => $payment->verification_status ?: 'pending',
+                    'verification_comment' => $payment->verification_comment,
+                    'verified_at' => optional($payment->verified_at)?->toISOString(),
+                    'verified_by' => $payment->verifiedBy ? ['id' => $payment->verifiedBy->id, 'name' => $payment->verifiedBy->name] : null,
                 ];
             })->values();
 
@@ -503,6 +514,57 @@ class ApplicantController extends Controller
                 'payments' => $payments,
             ];
         })->values();
+
+        $batchContributionRecords = collect();
+        $batchExpenseRecords = collect();
+
+        if ($includeBatchFinance && $application->batch) {
+            $categoryLabels = $this->applicantContributionCategoryLabels();
+
+            $batchContributionRecords = $application->batch->applications
+                ->flatMap(function (Applicant $batchApplication) use ($categoryLabels) {
+                    $applicantLabel = trim($batchApplication->first_name . ' ' . ($batchApplication->middle_name ? $batchApplication->middle_name . ' ' : '') . $batchApplication->last_name);
+
+                    return $batchApplication->feeRequirements->flatMap(function (ApplicantFeeRequirement $requirement) use ($batchApplication, $applicantLabel, $categoryLabels) {
+                        return $requirement->payments->map(function (ApplicantFeePayment $payment) use ($batchApplication, $applicantLabel, $requirement, $categoryLabels) {
+                            return [
+                                'id' => $payment->id,
+                                'applicant_id' => $batchApplication->id,
+                                'applicant_name' => $applicantLabel,
+                                'category' => $requirement->category,
+                                'category_label' => $categoryLabels[$requirement->category] ?? Str::headline((string) $requirement->category),
+                                'amount' => $payment->amount,
+                                'payment_date' => optional($payment->payment_date)->toDateString(),
+                                'note' => $payment->note,
+                                'encoded_by' => $payment->encodedBy ? ['id' => $payment->encodedBy->id, 'name' => $payment->encodedBy->name] : null,
+                                'verification_status' => $payment->verification_status ?: 'pending',
+                                'verification_comment' => $payment->verification_comment,
+                                'verified_at' => optional($payment->verified_at)?->toISOString(),
+                                'verified_by' => $payment->verifiedBy ? ['id' => $payment->verifiedBy->id, 'name' => $payment->verifiedBy->name] : null,
+                            ];
+                        });
+                    });
+                })
+                ->sortByDesc(fn (array $row) => sprintf('%s-%010d', (string) ($row['payment_date'] ?? ''), (int) $row['id']))
+                ->values();
+
+            $batchExpenseRecords = $application->batch->expenses
+                ->sortByDesc(fn (ApplicantBatchExpense $expense) => sprintf('%s-%010d', (string) optional($expense->expense_date)?->toDateString(), $expense->id))
+                ->values()
+                ->map(fn (ApplicantBatchExpense $expense) => [
+                    'id' => $expense->id,
+                    'expense_date' => optional($expense->expense_date)?->toDateString(),
+                    'category' => $expense->category,
+                    'description' => $expense->description,
+                    'amount' => $expense->amount,
+                    'note' => $expense->note,
+                    'encoded_by' => $expense->encodedBy ? ['id' => $expense->encodedBy->id, 'name' => $expense->encodedBy->name] : null,
+                    'verification_status' => $expense->verification_status ?: 'pending',
+                    'verification_comment' => $expense->verification_comment,
+                    'verified_at' => optional($expense->verified_at)?->toISOString(),
+                    'verified_by' => $expense->verifiedBy ? ['id' => $expense->verifiedBy->id, 'name' => $expense->verifiedBy->name] : null,
+                ]);
+        }
 
         return [
             'id' => $application->id,
@@ -573,6 +635,19 @@ class ApplicantController extends Controller
                         'uploaded_by' => $doc->uploadedBy ? ['id' => $doc->uploadedBy->id, 'name' => $doc->uploadedBy->name] : null,
                         'created_at' => optional($doc->created_at)?->toISOString(),
                     ]),
+                'contribution_payments' => $includeBatchFinance ? $batchContributionRecords->values() : [],
+                'expenses' => $includeBatchFinance ? $batchExpenseRecords->values() : [],
+                'finance_summary' => $includeBatchFinance ? [
+                    'contribution_total' => round((float) $batchContributionRecords->sum(fn (array $row) => (float) $row['amount']), 2),
+                    'expense_total' => round((float) $batchExpenseRecords->sum(fn (array $row) => (float) $row['amount']), 2),
+                    'net_balance' => round(
+                        (float) $batchContributionRecords->sum(fn (array $row) => (float) $row['amount'])
+                        - (float) $batchExpenseRecords->sum(fn (array $row) => (float) $row['amount']),
+                        2
+                    ),
+                    'pending_contribution_reviews' => $batchContributionRecords->where('verification_status', 'pending')->count(),
+                    'pending_expense_reviews' => $batchExpenseRecords->where('verification_status', 'pending')->count(),
+                ] : null,
             ] : null,
             'notices' => $application->notices
                 ->filter(fn (ApplicantNotice $notice) => $includeInternalNotices || $notice->visibility === 'applicant')
@@ -673,6 +748,21 @@ class ApplicantController extends Controller
 
         return $application->batch !== null
             && (int) $application->batch->batch_treasurer_user_id === (int) $user->id;
+    }
+
+    private function canManageBatchFinance(User $user, ApplicantBatch $batch): bool
+    {
+        if ($user->hasPermission(Permissions::APPLICATIONS_FEE_PAY) || $user->hasPermission(Permissions::APPLICATIONS_REVIEW)) {
+            return true;
+        }
+
+        return (int) $batch->batch_treasurer_user_id === (int) $user->id;
+    }
+
+    private function canVerifyApplicantFinance(User $user): bool
+    {
+        return (string) optional($user->role)->name === RoleHierarchy::MEMBERSHIP_CHAIRMAN
+            && $user->hasPermission(Permissions::APPLICATIONS_REVIEW);
     }
 
     private function canReviewApplication(User $user, Applicant $application): bool
@@ -1001,7 +1091,9 @@ class ApplicantController extends Controller
             return response()->json(['message' => 'No application found for this account.'], 404);
         }
 
-        return response()->json($this->applicantPayload($application));
+        $includeBatchFinance = $application->batch && (int) $application->batch->batch_treasurer_user_id === (int) $user->id;
+
+        return response()->json($this->applicantPayload($application, false, $includeBatchFinance));
     }
 
     public function myProfile(Request $request)
@@ -1067,8 +1159,9 @@ class ApplicantController extends Controller
         }
 
         $includeInternal = $user->hasPermission(Permissions::APPLICATIONS_REVIEW);
+        $includeBatchFinance = $applicant->batch !== null && $this->canManageBatchFinance($user, $applicant->batch);
 
-        return response()->json($this->applicantPayload($applicant, $includeInternal));
+        return response()->json($this->applicantPayload($applicant, $includeInternal, $includeBatchFinance));
     }
 
     public function uploadDocument(Request $request, Applicant $applicant)
@@ -1324,6 +1417,100 @@ class ApplicantController extends Controller
             'payment' => $payment->fresh(),
             'requirement' => $requirement->fresh(),
         ], 201);
+    }
+
+    public function verifyFeePayment(Request $request, ApplicantFeePayment $applicantFeePayment)
+    {
+        /** @var User $user */
+        $user = $request->user();
+
+        if (!$this->canVerifyApplicantFinance($user)) {
+            abort(403);
+        }
+
+        $validated = $request->validate([
+            'verification_status' => 'required|in:pending,verified,needs_revision',
+            'verification_comment' => 'nullable|string|max:3000',
+        ]);
+
+        $applicantFeePayment->verification_status = $validated['verification_status'];
+        $applicantFeePayment->verification_comment = $this->trimOrNull($validated['verification_comment'] ?? null);
+        $applicantFeePayment->verified_by_user_id = $user->id;
+        $applicantFeePayment->verified_at = now();
+        $applicantFeePayment->save();
+
+        return response()->json([
+            'message' => 'Applicant contribution verification updated.',
+            'payment' => $applicantFeePayment->fresh('verifiedBy:id,name'),
+        ]);
+    }
+
+    public function addBatchExpense(Request $request, ApplicantBatch $applicantBatch)
+    {
+        /** @var User $user */
+        $user = $request->user();
+
+        if (!$this->canManageBatchFinance($user, $applicantBatch)) {
+            abort(403);
+        }
+
+        $validated = $request->validate([
+            'expense_date' => 'required|date',
+            'category' => 'required|string|min:2|max:80',
+            'description' => 'required|string|min:3|max:255',
+            'amount' => 'required|numeric|min:0.01',
+            'note' => 'nullable|string|max:3000',
+        ]);
+
+        $expense = ApplicantBatchExpense::query()->create([
+            'applicant_batch_id' => $applicantBatch->id,
+            'expense_date' => $validated['expense_date'],
+            'category' => trim((string) $validated['category']),
+            'description' => trim((string) $validated['description']),
+            'amount' => $validated['amount'],
+            'note' => $this->trimOrNull($validated['note'] ?? null),
+            'verification_status' => 'pending',
+            'encoded_by_user_id' => $user->id,
+        ]);
+
+        Log::info('application.batch_expense_recorded', [
+            'actor_user_id' => $user->id,
+            'batch_id' => $applicantBatch->id,
+            'expense_id' => $expense->id,
+            'amount' => $expense->amount,
+            'ip' => $request->ip(),
+        ]);
+
+        return response()->json([
+            'message' => 'Applicant batch expense recorded.',
+            'expense' => $expense->fresh(['encodedBy:id,name', 'verifiedBy:id,name']),
+        ], 201);
+    }
+
+    public function verifyBatchExpense(Request $request, ApplicantBatchExpense $applicantBatchExpense)
+    {
+        /** @var User $user */
+        $user = $request->user();
+
+        if (!$this->canVerifyApplicantFinance($user)) {
+            abort(403);
+        }
+
+        $validated = $request->validate([
+            'verification_status' => 'required|in:pending,verified,needs_revision',
+            'verification_comment' => 'nullable|string|max:3000',
+        ]);
+
+        $applicantBatchExpense->verification_status = $validated['verification_status'];
+        $applicantBatchExpense->verification_comment = $this->trimOrNull($validated['verification_comment'] ?? null);
+        $applicantBatchExpense->verified_by_user_id = $user->id;
+        $applicantBatchExpense->verified_at = now();
+        $applicantBatchExpense->save();
+
+        return response()->json([
+            'message' => 'Applicant batch expense verification updated.',
+            'expense' => $applicantBatchExpense->fresh(['encodedBy:id,name', 'verifiedBy:id,name']),
+        ]);
     }
 
     public function approve(Request $request, Applicant $applicant)
@@ -1635,7 +1822,21 @@ class ApplicantController extends Controller
 
         return response()->json([
             'message' => 'Applicant batch created.',
-            'batch' => $batch->load('batchTreasurer:id,name,email'),
+            'batch' => [
+                'id' => $batch->id,
+                'name' => $batch->name,
+                'description' => $batch->description,
+                'start_date' => optional($batch->start_date)?->toDateString(),
+                'target_completion_date' => optional($batch->target_completion_date)?->toDateString(),
+                'applications_count' => 0,
+                'members_count' => 0,
+                'created_at' => optional($batch->created_at)?->toISOString(),
+                'batch_treasurer' => $batch->load('batchTreasurer:id,name,email')->batchTreasurer ? [
+                    'id' => $batch->batchTreasurer->id,
+                    'name' => $batch->batchTreasurer->name,
+                    'email' => $batch->batchTreasurer->email,
+                ] : null,
+            ],
         ], 201);
     }
 
@@ -1686,7 +1887,23 @@ class ApplicantController extends Controller
 
         return response()->json([
             'message' => 'Applicant batch updated.',
-            'batch' => $applicantBatch->fresh()->load('batchTreasurer:id,name,email'),
+            'batch' => [
+                'id' => $applicantBatch->id,
+                'name' => $applicantBatch->name,
+                'description' => $applicantBatch->description,
+                'start_date' => optional($applicantBatch->start_date)?->toDateString(),
+                'target_completion_date' => optional($applicantBatch->target_completion_date)?->toDateString(),
+                'applications_count' => $applicantBatch->applications()->count(),
+                'members_count' => (int) Member::query()
+                    ->whereRaw('LOWER(TRIM(batch)) = ?', [strtolower(trim((string) $applicantBatch->name))])
+                    ->count(),
+                'created_at' => optional($applicantBatch->created_at)?->toISOString(),
+                'batch_treasurer' => $applicantBatch->fresh()->load('batchTreasurer:id,name,email')->batchTreasurer ? [
+                    'id' => $applicantBatch->batchTreasurer->id,
+                    'name' => $applicantBatch->batchTreasurer->name,
+                    'email' => $applicantBatch->batchTreasurer->email,
+                ] : null,
+            ],
         ]);
     }
 
@@ -1712,6 +1929,7 @@ class ApplicantController extends Controller
                 'target_completion_date' => optional($batch->target_completion_date)?->toDateString(),
                 'applications_count' => $batch->applications_count,
                 'members_count' => (int) ($memberCounts[strtolower(trim((string) $batch->name))] ?? 0),
+                'created_at' => optional($batch->created_at)?->toISOString(),
                 'batch_treasurer' => $batch->batchTreasurer ? [
                     'id' => $batch->batchTreasurer->id,
                     'name' => $batch->batchTreasurer->name,
@@ -1725,7 +1943,7 @@ class ApplicantController extends Controller
     public function batchTreasurerCandidates()
     {
         $rows = Applicant::query()
-            ->with('user:id,name,email')
+            ->with(['user:id,name,email', 'batch:id,name'])
             ->whereIn('status', [
                 Applicant::STATUS_OFFICIAL_APPLICANT,
                 Applicant::STATUS_ELIGIBLE_FOR_ACTIVATION,
@@ -1739,6 +1957,14 @@ class ApplicantController extends Controller
                 'full_name' => trim($application->first_name . ' ' . ($application->middle_name ? $application->middle_name . ' ' : '') . $application->last_name),
                 'email' => $application->email,
                 'status' => $application->status,
+                'current_stage' => $application->current_stage,
+                'current_stage_label' => $this->fiveIStageLabel($application->current_stage),
+                'batch_id' => $application->batch_id,
+                'batch_name' => $application->batch?->name,
+                'selection_label' => trim($application->first_name . ' ' . ($application->middle_name ? $application->middle_name . ' ' : '') . $application->last_name)
+                    . ' | '
+                    . $this->fiveIStageLabel($application->current_stage)
+                    . ($application->batch?->name ? ' | Batch: ' . $application->batch->name : ' | No batch yet'),
             ]);
 
         return response()->json(['data' => $rows]);

@@ -3,7 +3,9 @@
 namespace Tests\Feature;
 
 use App\Models\ApplicantBatch;
+use App\Models\ApplicantBatchExpense;
 use App\Models\ApplicantDocument;
+use App\Models\ApplicantFeePayment;
 use App\Models\ApplicantFeeRequirement;
 use App\Models\Member;
 use App\Models\Applicant;
@@ -226,6 +228,130 @@ class ApplicantFlowTest extends TestCase
             'category' => ApplicantFeeRequirement::CATEGORY_PROJECT,
             'amount' => 250,
         ])->assertStatus(201);
+    }
+
+    public function test_batch_treasurer_can_log_batch_expense_for_assigned_batch(): void
+    {
+        $applicantRole = Role::query()->where('name', 'applicant')->firstOrFail();
+        $treasurer = User::factory()->create([
+            'role_id' => $applicantRole->id,
+            'email' => 'batch-expense-treasurer@example.test',
+        ]);
+
+        $batch = ApplicantBatch::query()->create([
+            'name' => 'Batch Finance',
+            'batch_treasurer_user_id' => $treasurer->id,
+        ]);
+
+        Sanctum::actingAs($treasurer);
+
+        $this->postJson("/api/v1/applicant-batches/{$batch->id}/expenses", [
+            'expense_date' => '2026-03-15',
+            'category' => 'Logistics',
+            'description' => 'Tarpaulin printing',
+            'amount' => 1850.50,
+            'note' => 'Batch orientation materials',
+        ])->assertCreated()
+            ->assertJsonPath('expense.category', 'Logistics')
+            ->assertJsonPath('expense.verification_status', 'pending');
+
+        $this->assertDatabaseHas('applicant_batch_expenses', [
+            'applicant_batch_id' => $batch->id,
+            'category' => 'Logistics',
+            'description' => 'Tarpaulin printing',
+            'verification_status' => 'pending',
+        ]);
+    }
+
+    public function test_membership_chairman_can_verify_applicant_payment_and_batch_expense(): void
+    {
+        $chairmanRole = Role::query()->where('name', 'membership_chairman')->firstOrFail();
+        $applicantRole = Role::query()->where('name', 'applicant')->firstOrFail();
+
+        $chairman = User::factory()->create(['role_id' => $chairmanRole->id]);
+        $treasurer = User::factory()->create([
+            'role_id' => $applicantRole->id,
+            'email' => 'finance-review-treasurer@example.test',
+        ]);
+        $applicantUser = User::factory()->create([
+            'role_id' => $applicantRole->id,
+            'email' => 'finance-review-applicant@example.test',
+        ]);
+
+        $batch = ApplicantBatch::query()->create([
+            'name' => 'Batch Review',
+            'batch_treasurer_user_id' => $treasurer->id,
+        ]);
+
+        $application = Applicant::query()->create([
+            'user_id' => $applicantUser->id,
+            'batch_id' => $batch->id,
+            'first_name' => 'Finance',
+            'middle_name' => 'Review',
+            'last_name' => 'Applicant',
+            'email' => 'finance-review-applicant@example.test',
+            'membership_status' => 'applicant',
+            'status' => Applicant::STATUS_OFFICIAL_APPLICANT,
+            'decision_status' => 'approved',
+            'current_stage' => 'incubation',
+            'is_login_blocked' => false,
+            'verification_token' => hash('sha256', 'finance-review-token'),
+            'email_verified_at' => now(),
+            'reviewed_at' => now(),
+        ]);
+
+        $requirement = ApplicantFeeRequirement::query()->create([
+            'applicant_id' => $application->id,
+            'category' => ApplicantFeeRequirement::CATEGORY_PROJECT,
+            'required_amount' => 600,
+            'set_by_user_id' => $chairman->id,
+        ]);
+
+        $payment = ApplicantFeePayment::query()->create([
+            'applicant_fee_requirement_id' => $requirement->id,
+            'amount' => 300,
+            'payment_date' => '2026-03-14',
+            'note' => 'Initial remittance',
+            'encoded_by_user_id' => $treasurer->id,
+        ]);
+
+        $expense = ApplicantBatchExpense::query()->create([
+            'applicant_batch_id' => $batch->id,
+            'expense_date' => '2026-03-14',
+            'category' => 'Supplies',
+            'description' => 'Applicant kits',
+            'amount' => 220,
+            'note' => 'Chairman review needed',
+            'encoded_by_user_id' => $treasurer->id,
+        ]);
+
+        Sanctum::actingAs($chairman);
+
+        $this->postJson("/api/v1/applicants/fee-payments/{$payment->id}/verify", [
+            'verification_status' => 'verified',
+            'verification_comment' => 'Receipt matches the remitted amount.',
+        ])->assertOk()
+            ->assertJsonPath('payment.verification_status', 'verified');
+
+        $this->postJson("/api/v1/applicant-batch-expenses/{$expense->id}/verify", [
+            'verification_status' => 'needs_revision',
+            'verification_comment' => 'Attach the supplier receipt before final approval.',
+        ])->assertOk()
+            ->assertJsonPath('expense.verification_status', 'needs_revision');
+
+        $this->assertDatabaseHas('applicant_fee_payments', [
+            'id' => $payment->id,
+            'verification_status' => 'verified',
+            'verification_comment' => 'Receipt matches the remitted amount.',
+            'verified_by_user_id' => $chairman->id,
+        ]);
+
+        $this->assertDatabaseHas('applicant_batch_expenses', [
+            'id' => $expense->id,
+            'verification_status' => 'needs_revision',
+            'verification_comment' => 'Attach the supplier receipt before final approval.',
+            'verified_by_user_id' => $chairman->id,
+        ]);
     }
 
     public function test_archived_withdrawn_applicant_can_start_reapplication(): void
