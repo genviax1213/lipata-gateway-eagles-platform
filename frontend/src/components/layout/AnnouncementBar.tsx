@@ -251,11 +251,7 @@ export default function AnnouncementBar() {
               >
                 {pushPending ? "Updating Alerts..." : pushEnabled ? "Browser Alerts On" : "Enable Browser Alerts"}
               </button>
-            ) : (
-              <span className="text-[11px] uppercase tracking-[0.16em] text-mist/65">
-                {supportsBrowserPush ? "Browser alerts unavailable" : "Browser push not supported"}
-              </span>
-            )}
+            ) : null}
             {pushError && <span className="text-[11px] text-amber-200/90">{pushError}</span>}
           </div>
         </div>
