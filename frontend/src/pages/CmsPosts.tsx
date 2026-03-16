@@ -474,7 +474,11 @@ export default function CmsPosts() {
     if (Number.isNaN(baseDate.getTime())) return "";
     const preview = new Date(baseDate);
     preview.setMonth(preview.getMonth() + 1);
-    return preview.toLocaleString();
+    return preview.toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
   }, [form.published_at, form.show_on_announcement_bar]);
 
   function isOwnPost(post: CmsPost): boolean {
