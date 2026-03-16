@@ -17,7 +17,6 @@ const sectionOptions = [
   "history",
   "resolutions",
   "contact",
-  "news",
 ];
 
 const PAGE_SIZES = [
@@ -364,6 +363,10 @@ export default function CmsPosts() {
   const visibleSectionOptions = useMemo(
     () => sectionOptions.filter((section) => section !== "resolutions" || canManageResolutions),
     [canManageResolutions],
+  );
+  const editorSectionOptions = useMemo(
+    () => visibleSectionOptions.filter((section) => section !== "news"),
+    [visibleSectionOptions],
   );
   const [activeTab, setActiveTab] = useState<CmsTab>(limitedMode ? "posts" : "editor");
   const [editorMode, setEditorMode] = useState<"article" | "video">("article");
@@ -1276,7 +1279,7 @@ export default function CmsPosts() {
             onChange={(e) => setForm((prev) => ({ ...prev, section: e.target.value }))}
             className="rounded-md border border-white/25 bg-white/10 px-4 py-2.5 text-offwhite"
           >
-            {visibleSectionOptions.map((section) => (
+            {editorSectionOptions.map((section) => (
               <option key={section} value={section} style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>
                 {titleCaseWords(section)}
               </option>
@@ -2009,7 +2012,7 @@ export default function CmsPosts() {
             )}
 
             <p className="text-xs uppercase tracking-[0.22em] text-gold-soft">
-              {(form.section || "news").replaceAll("_", " ")}
+              {(form.section || "activities").replaceAll("_", " ")}
             </p>
             <h3 className="mt-2 font-heading text-3xl leading-tight text-offwhite md:text-5xl">
               {form.title || "Article title preview"}

@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
+import { useAuth } from "../contexts/useAuth";
 import api from "../services/api";
 import type { CmsPost } from "../types/cms";
 import PublicPostCard from "../components/cms/PublicPostCard";
 
 export default function Activities() {
+  const { user } = useAuth();
+  const hasMemberProfile = Boolean((user as { has_member_profile?: unknown } | null)?.has_member_profile);
   const [posts, setPosts] = useState<CmsPost[]>([]);
   const [page, setPage] = useState(1);
   const [lastPage, setLastPage] = useState(1);
@@ -16,7 +19,8 @@ export default function Activities() {
 
     const load = async () => {
       try {
-        const res = await api.get("/content/activities", {
+        const endpoint = hasMemberProfile ? "/member-content/activities" : "/content/activities";
+        const res = await api.get(endpoint, {
           params: {
             paginate: true,
             page,
@@ -57,7 +61,7 @@ export default function Activities() {
     return () => {
       mounted = false;
     };
-  }, [page, searchQuery]);
+  }, [hasMemberProfile, page, searchQuery]);
 
   return (
     <section className="section-wrap py-16 md:py-20">

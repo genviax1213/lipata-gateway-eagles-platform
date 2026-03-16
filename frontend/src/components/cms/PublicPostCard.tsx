@@ -95,6 +95,12 @@ export default function PublicPostCard({
         </div>
       )}
 
+      {post.show_on_announcement_bar && post.announcement_text && (
+        <div className="mb-3 rounded-md border border-gold/25 bg-gold/10 px-3 py-2">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gold-soft">Announcement</p>
+          <p className="mt-1 text-sm text-offwhite">{post.announcement_text}</p>
+        </div>
+      )}
       <h2 className="font-heading text-2xl text-offwhite group-hover:text-gold-soft">{post.title}</h2>
       <p className="mt-2 text-sm text-mist/85">{description}</p>
       {post.slug && (

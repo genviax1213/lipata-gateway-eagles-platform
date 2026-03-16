@@ -106,6 +106,32 @@ class PublicContentSectionsTest extends TestCase
             ->assertJsonPath('0.video_thumbnail_text', 'Anniversary recap');
     }
 
+    public function test_public_activities_search_matches_public_announcement_headline(): void
+    {
+        $author = User::factory()->create();
+
+        Post::query()->create([
+            'title' => 'Regular Club Update',
+            'slug' => 'regular-club-update',
+            'section' => 'activities',
+            'excerpt' => 'Club update.',
+            'content' => '<p>Club update.</p>',
+            'announcement_text' => 'Emergency blood drive',
+            'show_on_announcement_bar' => true,
+            'announcement_audience' => 'public',
+            'status' => 'published',
+            'published_at' => now()->subMinute(),
+            'announcement_expires_at' => now()->addWeek(),
+            'author_id' => $author->id,
+        ]);
+
+        $this->getJson('/api/v1/content/activities?q=blood drive')
+            ->assertOk()
+            ->assertJsonCount(1)
+            ->assertJsonPath('0.slug', 'regular-club-update')
+            ->assertJsonPath('0.announcement_text', 'Emergency blood drive');
+    }
+
     public function test_public_activities_feed_hides_members_only_announcement_articles(): void
     {
         $author = User::factory()->create();
@@ -270,6 +296,51 @@ class PublicContentSectionsTest extends TestCase
             ->assertJsonPath('0.announcement_audience', 'members');
     }
 
+    public function test_authenticated_member_activities_feed_and_search_include_members_only_announcements(): void
+    {
+        $author = User::factory()->create();
+        $memberRole = Role::query()->where('name', 'member')->firstOrFail();
+        $member = User::factory()->create([
+            'role_id' => $memberRole->id,
+            'email' => 'member-activities-announcement@example.test',
+        ]);
+        Member::query()->create([
+            'member_number' => 'MEM-ANN-003',
+            'first_name' => 'Visible',
+            'last_name' => 'Member',
+            'email' => 'member-activities-announcement@example.test',
+            'user_id' => $member->id,
+            'membership_status' => 'active',
+        ]);
+
+        $private = Post::query()->create([
+            'title' => 'Members Briefing',
+            'slug' => 'members-briefing',
+            'section' => 'activities',
+            'excerpt' => 'Members briefing.',
+            'content' => '<p>Members briefing.</p>',
+            'announcement_text' => 'Council planning night',
+            'show_on_announcement_bar' => true,
+            'announcement_audience' => 'members',
+            'status' => 'published',
+            'published_at' => now()->subMinute(),
+            'announcement_expires_at' => now()->addWeek(),
+            'author_id' => $author->id,
+        ]);
+
+        Sanctum::actingAs($member);
+
+        $this->getJson('/api/v1/member-content/activities')
+            ->assertOk()
+            ->assertJsonFragment(['id' => $private->id])
+            ->assertJsonFragment(['announcement_text' => 'Council planning night']);
+
+        $this->getJson('/api/v1/member-content/activities?q=planning night')
+            ->assertOk()
+            ->assertJsonCount(1)
+            ->assertJsonPath('0.slug', 'members-briefing');
+    }
+
     public function test_members_only_announcement_article_is_hidden_from_public_but_available_to_authenticated_member(): void
     {
         $author = User::factory()->create();
@@ -321,6 +392,7 @@ class PublicContentSectionsTest extends TestCase
         Sanctum::actingAs($user);
 
         $this->getJson('/api/v1/member-content/announcements')->assertForbidden();
+        $this->getJson('/api/v1/member-content/activities')->assertForbidden();
         $this->getJson('/api/v1/member-content/post/anything')->assertForbidden();
     }
 

@@ -111,6 +111,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/member-content/announcements', [PostController::class, 'memberAnnouncements']);
         Route::get('/member-content/post/{slug}', [PostController::class, 'memberBySlug']);
         Route::get('/member-content/resolutions', [PostController::class, 'memberResolutions']);
+        Route::get('/member-content/{section}', [PostController::class, 'memberBySection']);
 
         Route::get('/cms/posts', [PostController::class, 'index']);
         Route::get('/cms/posts/available-images', [PostController::class, 'availableImages']);

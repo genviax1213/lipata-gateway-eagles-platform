@@ -36,48 +36,18 @@ class PostController extends Controller
             abort(404);
         }
 
-        $query = Post::query()
-            ->where('section', $section)
-            ->where('status', 'published')
-            ->where(function ($q) {
-                $q->whereNull('published_at')->orWhere('published_at', '<=', now());
-            })
-            ->where(function ($q) {
-                $q->whereNull('announcement_audience')->orWhere('announcement_audience', 'public');
-            })
-            ->latest('published_at')
-            ->latest('id');
+        return $this->respondWithSection($request, $section, ['public']);
+    }
 
-        if ($request->filled('post_type')) {
-            $query->where('post_type', $request->string('post_type'));
+    public function memberBySection(Request $request, string $section)
+    {
+        $this->ensureAnnouncementMemberAccess($request);
+
+        if ($this->isMemberOnlySection($section)) {
+            abort(404);
         }
 
-        if ($request->filled('q')) {
-            $term = trim((string) $request->string('q'));
-            $query->where(function ($q) use ($term) {
-                $q->where('title', 'like', "%{$term}%")
-                    ->orWhere('slug', 'like', "%{$term}%")
-                    ->orWhere('excerpt', 'like', "%{$term}%")
-                    ->orWhere('content', 'like', "%{$term}%")
-                    ->orWhere('video_thumbnail_text', 'like', "%{$term}%");
-            });
-        }
-
-        if (filter_var($request->query('featured_only', false), FILTER_VALIDATE_BOOLEAN)) {
-            $query->where('is_featured', true);
-        }
-
-        $paginate = filter_var($request->query('paginate', false), FILTER_VALIDATE_BOOLEAN);
-
-        if ($paginate) {
-            $perPage = max(1, min(24, (int) $request->query('per_page', 6)));
-            $posts = $query->paginate($perPage);
-            $posts->getCollection()->transform(fn (Post $post) => $this->transform($post));
-            return response()->json($posts);
-        }
-
-        $posts = $query->get();
-        return response()->json($posts->map(fn (Post $post) => $this->transform($post)));
+        return $this->respondWithSection($request, $section, ['public', 'members']);
     }
 
     public function showPublicImage(string $path)
@@ -1219,5 +1189,68 @@ class PostController extends Controller
         }
 
         return $post->status === 'draft' && $request->user()->can('create', Post::class);
+    }
+
+    private function respondWithSection(Request $request, string $section, array $audiences)
+    {
+        $query = $this->sectionQuery($request, $section, $audiences);
+
+        $paginate = filter_var($request->query('paginate', false), FILTER_VALIDATE_BOOLEAN);
+
+        if ($paginate) {
+            $perPage = max(1, min(24, (int) $request->query('per_page', 6)));
+            $posts = $query->paginate($perPage);
+            $posts->getCollection()->transform(fn (Post $post) => $this->transform($post));
+
+            return response()->json($posts);
+        }
+
+        $posts = $query->get();
+
+        return response()->json($posts->map(fn (Post $post) => $this->transform($post)));
+    }
+
+    private function sectionQuery(Request $request, string $section, array $audiences)
+    {
+        $query = Post::query()
+            ->where('section', $section)
+            ->where('status', 'published')
+            ->where(function ($q) {
+                $q->whereNull('published_at')->orWhere('published_at', '<=', now());
+            })
+            ->where(function ($q) use ($audiences) {
+                if (in_array('members', $audiences, true)) {
+                    $q->whereNull('announcement_audience')
+                        ->orWhereIn('announcement_audience', $audiences);
+
+                    return;
+                }
+
+                $q->whereNull('announcement_audience')->orWhere('announcement_audience', 'public');
+            })
+            ->latest('published_at')
+            ->latest('id');
+
+        if ($request->filled('post_type')) {
+            $query->where('post_type', $request->string('post_type'));
+        }
+
+        if ($request->filled('q')) {
+            $term = trim((string) $request->string('q'));
+            $query->where(function ($q) use ($term) {
+                $q->where('title', 'like', "%{$term}%")
+                    ->orWhere('slug', 'like', "%{$term}%")
+                    ->orWhere('excerpt', 'like', "%{$term}%")
+                    ->orWhere('content', 'like', "%{$term}%")
+                    ->orWhere('announcement_text', 'like', "%{$term}%")
+                    ->orWhere('video_thumbnail_text', 'like', "%{$term}%");
+            });
+        }
+
+        if (filter_var($request->query('featured_only', false), FILTER_VALIDATE_BOOLEAN)) {
+            $query->where('is_featured', true);
+        }
+
+        return $query;
     }
 }
