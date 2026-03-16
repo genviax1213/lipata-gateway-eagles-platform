@@ -13,7 +13,6 @@ type AnnouncementItem = {
   excerpt: string;
   to: string;
   meta: string;
-  expiresAt: string | null;
 };
 
 type PushConfig = {
@@ -103,10 +102,7 @@ export default function AnnouncementBar() {
       headline: post.announcement_text?.trim() || "Club announcement",
       excerpt: post.excerpt?.trim() || "Read the latest club notice and schedule details.",
       to: `/news/${post.slug}`,
-      meta: post.announcement_expires_at
-        ? `Until ${formatAnnouncementDate(post.announcement_expires_at)}`
-        : `Posted ${formatAnnouncementDate(post.published_at)}`,
-      expiresAt: post.announcement_expires_at,
+      meta: post.published_at ? `Posted ${formatAnnouncementDate(post.published_at)}` : "Active announcement",
     }))
   ), [announcements]);
 
@@ -328,7 +324,7 @@ export default function AnnouncementBar() {
             <p className="mt-4 text-base leading-7 text-mist/88">{featuredAnnouncement.excerpt}</p>
             <p className="mt-4 text-sm text-mist/72">
               {featuredAnnouncement.meta}
-              {featuredAnnouncement.expiresAt ? " · Browser alerts will only fire when you enable them on this device." : ""}
+              {" · Browser alerts will only fire when you enable them on this device."}
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
               <Link to={featuredAnnouncement.to} className="btn-primary" onClick={() => setModalOpen(false)}>

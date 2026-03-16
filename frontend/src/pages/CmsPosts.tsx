@@ -467,20 +467,6 @@ export default function CmsPosts() {
     || processingImage
     || (!editingId && !canCreatePosts)
     || (editingId !== null && (!editingPost || !canEditPost(editingPost)));
-  const announcementExpiryPreview = useMemo(() => {
-    if (!form.show_on_announcement_bar) return "";
-
-    const baseDate = form.published_at ? new Date(form.published_at) : new Date();
-    if (Number.isNaN(baseDate.getTime())) return "";
-    const preview = new Date(baseDate);
-    preview.setMonth(preview.getMonth() + 1);
-    return preview.toLocaleDateString(undefined, {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
-  }, [form.published_at, form.show_on_announcement_bar]);
-
   function isOwnPost(post: CmsPost): boolean {
     if (post.is_owned !== undefined) return Boolean(post.is_owned);
     return Boolean(post.author?.id && post.author.id === currentUserId);
@@ -1561,7 +1547,7 @@ export default function CmsPosts() {
                     </label>
                     <div className="flex flex-col gap-2 text-xs text-mist/75 md:flex-row md:items-center md:justify-between">
                       <span>
-                        The public notice stays in the announcement bar until {announcementExpiryPreview || "one month after publish"}.
+                        The announcement stays in the bar while it is active.
                       </span>
                       <span>{form.announcement_text.length}/60</span>
                     </div>
