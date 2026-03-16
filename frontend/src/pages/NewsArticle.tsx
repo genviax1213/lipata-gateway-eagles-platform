@@ -9,6 +9,7 @@ import { buildVideoThumbnailCandidates } from "../utils/video";
 export default function NewsArticle() {
   const { slug } = useParams();
   const { user } = useAuth();
+  const hasMemberProfile = Boolean((user as { has_member_profile?: unknown } | null)?.has_member_profile);
   const [post, setPost] = useState<CmsPost | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -32,7 +33,7 @@ export default function NewsArticle() {
       }
 
       try {
-        const endpoint = user ? `/member-content/post/${slug}` : `/content/post/${slug}`;
+        const endpoint = hasMemberProfile ? `/member-content/post/${slug}` : `/content/post/${slug}`;
         const res = await api.get(endpoint);
         if (!mounted) return;
         setPost(res.data as CmsPost);
@@ -49,7 +50,7 @@ export default function NewsArticle() {
     return () => {
       mounted = false;
     };
-  }, [slug, user]);
+  }, [hasMemberProfile, slug]);
 
   const backTo = post?.section === "history" ? "/history" : post?.section === "news" || post?.section === "activities" ? "/activities" : "/";
   const backLabel = post?.section === "history" ? "Back to History" : post?.section === "news" || post?.section === "activities" ? "Back to Activities" : "Back to Homepage";

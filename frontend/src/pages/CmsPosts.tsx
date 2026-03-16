@@ -1572,7 +1572,7 @@ export default function CmsPosts() {
                         className="w-full rounded-md border border-white/25 bg-white/10 px-4 py-2.5 text-offwhite"
                       >
                         <option value="public">Public only</option>
-                        <option value="members">Logged-in members too</option>
+                        <option value="members">Logged-in members only</option>
                       </select>
                     </label>
                     <label className="inline-flex items-center gap-2 text-sm text-offwhite">

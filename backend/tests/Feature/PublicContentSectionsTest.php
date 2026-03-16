@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\CalendarEvent;
+use App\Models\Member;
 use App\Models\Post;
 use App\Models\Role;
 use App\Models\User;
@@ -221,6 +222,14 @@ class PublicContentSectionsTest extends TestCase
             'role_id' => $memberRole->id,
             'email' => 'announcement-member@example.test',
         ]);
+        Member::query()->create([
+            'member_number' => 'MEM-ANN-001',
+            'first_name' => 'Announcement',
+            'last_name' => 'Member',
+            'email' => 'announcement-member@example.test',
+            'user_id' => $member->id,
+            'membership_status' => 'active',
+        ]);
 
         Post::query()->create([
             'title' => 'Public Reminder',
@@ -269,6 +278,14 @@ class PublicContentSectionsTest extends TestCase
             'role_id' => $memberRole->id,
             'email' => 'private-article-member@example.test',
         ]);
+        Member::query()->create([
+            'member_number' => 'MEM-ANN-002',
+            'first_name' => 'Private',
+            'last_name' => 'Member',
+            'email' => 'private-article-member@example.test',
+            'user_id' => $member->id,
+            'membership_status' => 'active',
+        ]);
 
         Post::query()->create([
             'title' => 'Members Activity Article',
@@ -293,6 +310,18 @@ class PublicContentSectionsTest extends TestCase
             ->assertOk()
             ->assertJsonPath('slug', 'members-activity-article')
             ->assertJsonPath('announcement_audience', 'members');
+    }
+
+    public function test_non_member_authenticated_user_cannot_access_member_announcement_endpoints(): void
+    {
+        $user = User::factory()->create([
+            'email' => 'non-member-announcement@example.test',
+        ]);
+
+        Sanctum::actingAs($user);
+
+        $this->getJson('/api/v1/member-content/announcements')->assertForbidden();
+        $this->getJson('/api/v1/member-content/post/anything')->assertForbidden();
     }
 
     public function test_public_schedules_endpoint_returns_upcoming_calendar_entries(): void

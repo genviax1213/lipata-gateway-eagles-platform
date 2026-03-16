@@ -71,9 +71,10 @@ Route::prefix('v1')->group(function () {
     Route::middleware(['auth:sanctum', 'active.session'])->group(function () {
 
         Route::get('/user', function (Request $request) {
-            $user = $request->user()->load('role.permissions:id,name');
+            $user = $request->user()->load('role.permissions:id,name', 'memberProfile:id,user_id,email');
             return response()->json(array_merge($user->toArray(), [
                 'has_authored_posts' => Post::query()->where('author_id', $user->id)->exists(),
+                'has_member_profile' => $user->memberProfile !== null,
             ]));
         });
         Route::post('/logout', [AuthController::class, 'logout']);

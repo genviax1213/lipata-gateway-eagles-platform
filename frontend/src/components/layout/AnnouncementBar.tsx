@@ -33,6 +33,7 @@ function formatAnnouncementDate(value: string | null): string {
 
 export default function AnnouncementBar() {
   const { user } = useAuth();
+  const hasMemberProfile = Boolean((user as { has_member_profile?: unknown } | null)?.has_member_profile);
   const [announcements, setAnnouncements] = useState<CmsPost[]>([]);
   const [pushConfig, setPushConfig] = useState<PushConfig | null>(null);
   const [pushEnabled, setPushEnabled] = useState(false);
@@ -52,7 +53,7 @@ export default function AnnouncementBar() {
 
     const load = async () => {
       try {
-        const endpoint = user ? "/member-content/announcements" : "/content/announcements";
+        const endpoint = hasMemberProfile ? "/member-content/announcements" : "/content/announcements";
         const announcementsResponse = await api.get<CmsPost[]>(endpoint, { params: { limit: 4 } });
 
         if (!active) return;
@@ -92,7 +93,7 @@ export default function AnnouncementBar() {
     return () => {
       active = false;
     };
-  }, [supportsBrowserPush, user]);
+  }, [hasMemberProfile, supportsBrowserPush]);
 
   const items = useMemo<AnnouncementItem[]>(() => (
     announcements.map((post) => ({

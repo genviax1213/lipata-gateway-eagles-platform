@@ -16,6 +16,8 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Throwable;
+use App\Models\User;
+use App\Models\Member;
 
 class PostController extends Controller
 {
@@ -125,6 +127,7 @@ class PostController extends Controller
 
     public function memberAnnouncements()
     {
+        $this->ensureAnnouncementMemberAccess(request());
         $posts = $this->announcementQuery(['public', 'members'])->get();
 
         return response()->json($posts->map(fn (Post $post) => $this->transform($post)));
@@ -152,6 +155,7 @@ class PostController extends Controller
 
     public function memberBySlug(string $slug)
     {
+        $this->ensureAnnouncementMemberAccess(request());
         $post = Post::query()
             ->where('slug', $slug)
             ->where('status', 'published')
@@ -1163,6 +1167,29 @@ class PostController extends Controller
     private function canManageAnnouncementSettings(Request $request): bool
     {
         return (bool) $request->user()?->can('create', Post::class);
+    }
+
+    private function ensureAnnouncementMemberAccess(Request $request): void
+    {
+        if ($this->resolveMemberViewer($request->user()) !== null) {
+            return;
+        }
+
+        abort(403);
+    }
+
+    private function resolveMemberViewer(?User $user): ?Member
+    {
+        if (!$user) {
+            return null;
+        }
+
+        $user->loadMissing('memberProfile');
+        if ($user->memberProfile) {
+            return $user->memberProfile;
+        }
+
+        return Member::query()->where('email', $user->email)->first();
     }
 
     private function announcementQuery(array $audiences)
