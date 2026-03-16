@@ -191,12 +191,9 @@ export default function AnnouncementBar() {
       <section className="relative z-10 border-b border-white/10 bg-[linear-gradient(90deg,rgba(216,179,95,0.14),rgba(12,22,38,0.92),rgba(216,179,95,0.1))]">
         <div className="section-wrap flex flex-col gap-3 py-2 text-xs text-mist/85 md:flex-row md:items-center md:justify-between md:text-sm">
           <div className="flex items-center gap-3">
-            <Link
-              to="/activities"
-              className="rounded-full border border-gold/35 bg-gold/10 px-2.5 py-1 font-semibold uppercase tracking-[0.18em] text-gold-soft transition hover:border-gold/60 hover:bg-gold/15 hover:text-gold hover:underline underline-offset-4"
-            >
+            <span className="rounded-full border border-gold/35 bg-gold/10 px-2.5 py-1 font-semibold uppercase tracking-[0.18em] text-gold-soft">
               Announcements
-            </Link>
+            </span>
             <span>Watch this space for new events, notices, and public updates.</span>
           </div>
           {supportsBrowserPush && pushConfig?.enabled && (
@@ -224,27 +221,31 @@ export default function AnnouncementBar() {
       <section className="relative z-10 border-b border-white/10 bg-[linear-gradient(90deg,rgba(216,179,95,0.16),rgba(12,22,38,0.94),rgba(216,179,95,0.08))]">
         <div className="section-wrap flex flex-col gap-3 py-2 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex min-w-0 flex-col gap-2 md:flex-row md:items-center md:gap-4">
-            <Link
-              to="/activities"
-              className="w-fit rounded-full border border-gold/35 bg-gold/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-gold-soft transition hover:border-gold/60 hover:bg-gold/15 hover:text-gold hover:underline underline-offset-4"
-            >
+            <span className="w-fit rounded-full border border-gold/35 bg-gold/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-gold-soft">
               Announcements
-            </Link>
+            </span>
             <div className="flex flex-1 gap-2 overflow-x-auto pb-1 md:pb-0">
               {items.map((item) => (
-                <Link
+                <div
                   key={item.version}
-                  to={item.to}
-                  className="group min-w-[15rem] flex-1 rounded-lg border border-white/12 bg-white/[0.04] px-3 py-2 text-left transition hover:border-gold/40 hover:bg-white/[0.09] hover:shadow-[0_10px_24px_rgba(224,180,74,0.12)]"
+                  className="min-w-[15rem] flex-1 rounded-lg border border-white/12 bg-white/[0.04] px-3 py-2 text-left transition hover:border-gold/40 hover:bg-white/[0.09] hover:shadow-[0_10px_24px_rgba(224,180,74,0.12)]"
                 >
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gold-soft">
+                  <Link
+                    to={item.to}
+                    className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gold-soft decoration-gold/0 underline-offset-4 transition hover:text-gold hover:decoration-gold hover:underline"
+                  >
                     {item.headline}
-                  </div>
-                  <div className="mt-1 line-clamp-1 text-sm font-semibold text-offwhite decoration-gold/0 underline-offset-4 transition group-hover:text-gold-soft group-hover:decoration-gold group-hover:underline">
-                    {item.title}
+                  </Link>
+                  <div className="mt-1 line-clamp-1 text-sm font-semibold text-offwhite">
+                    <Link
+                      to={item.to}
+                      className="decoration-gold/0 underline-offset-4 transition hover:text-gold-soft hover:decoration-gold hover:underline"
+                    >
+                      {item.title}
+                    </Link>
                   </div>
                   <div className="mt-1 text-xs text-mist/75">{item.meta}</div>
-                </Link>
+                </div>
               ))}
             </div>
           </div>
@@ -273,10 +274,22 @@ export default function AnnouncementBar() {
           <div className="pointer-events-auto w-full rounded-2xl border border-gold/30 bg-[linear-gradient(180deg,rgba(11,20,35,0.96),rgba(7,12,24,0.96))] p-4 shadow-[0_24px_50px_rgba(2,6,23,0.48)]">
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gold-soft">
-                  {featuredAnnouncement.headline}
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em]">
+                  <Link
+                    to={featuredAnnouncement.to}
+                    className="text-gold-soft decoration-gold/0 underline-offset-4 transition hover:text-gold hover:decoration-gold hover:underline"
+                  >
+                    {featuredAnnouncement.headline}
+                  </Link>
                 </p>
-                <p className="mt-2 text-base font-semibold text-offwhite">{featuredAnnouncement.title}</p>
+                <p className="mt-2 text-base font-semibold text-offwhite">
+                  <Link
+                    to={featuredAnnouncement.to}
+                    className="decoration-gold/0 underline-offset-4 transition hover:text-gold-soft hover:decoration-gold hover:underline"
+                  >
+                    {featuredAnnouncement.title}
+                  </Link>
+                </p>
                 <p className="mt-2 text-sm text-mist/85">{featuredAnnouncement.excerpt}</p>
                 <p className="mt-2 text-xs text-mist/70">{featuredAnnouncement.meta}</p>
               </div>
@@ -315,11 +328,23 @@ export default function AnnouncementBar() {
             aria-labelledby="announcement-modal-title"
             className="relative z-10 w-full max-w-2xl rounded-[1.75rem] border border-gold/25 bg-[linear-gradient(180deg,rgba(12,22,38,0.98),rgba(7,12,24,0.98))] p-6 shadow-[0_30px_60px_rgba(2,6,23,0.58)]"
           >
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gold-soft">
-              {featuredAnnouncement.headline}
+            <p className="text-xs font-semibold uppercase tracking-[0.2em]">
+              <Link
+                to={featuredAnnouncement.to}
+                className="text-gold-soft decoration-gold/0 underline-offset-4 transition hover:text-gold hover:decoration-gold hover:underline"
+                onClick={() => setModalOpen(false)}
+              >
+                {featuredAnnouncement.headline}
+              </Link>
             </p>
             <h2 id="announcement-modal-title" className="mt-3 font-heading text-3xl text-offwhite md:text-4xl">
-              {featuredAnnouncement.title}
+              <Link
+                to={featuredAnnouncement.to}
+                className="decoration-gold/0 underline-offset-4 transition hover:text-gold-soft hover:decoration-gold hover:underline"
+                onClick={() => setModalOpen(false)}
+              >
+                {featuredAnnouncement.title}
+              </Link>
             </h2>
             <p className="mt-4 text-base leading-7 text-mist/88">{featuredAnnouncement.excerpt}</p>
             <p className="mt-4 text-sm text-mist/72">
