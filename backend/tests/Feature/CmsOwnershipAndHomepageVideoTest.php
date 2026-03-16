@@ -218,6 +218,49 @@ class CmsOwnershipAndHomepageVideoTest extends TestCase
             ->assertJsonPath('can_edit', true);
     }
 
+    public function test_former_author_cannot_change_announcement_settings_on_owned_post(): void
+    {
+        $memberRole = Role::query()->where('name', 'member')->firstOrFail();
+        $author = User::factory()->create([
+            'role_id' => $memberRole->id,
+            'email' => 'announcement-owner@example.test',
+        ]);
+
+        $post = Post::query()->create([
+            'title' => 'Announcement Article',
+            'slug' => 'announcement-article',
+            'section' => 'activities',
+            'excerpt' => 'Owned excerpt',
+            'content' => '<p>Owned body</p>',
+            'status' => 'published',
+            'show_on_announcement_bar' => true,
+            'announcement_text' => 'Original announcement',
+            'send_push_notification' => true,
+            'announcement_expires_at' => now()->addMonth(),
+            'author_id' => $author->id,
+        ]);
+
+        Sanctum::actingAs($author);
+
+        $this->putJson("/api/v1/cms/posts/{$post->id}", [
+            'title' => 'Owner Edited Article',
+            'section' => 'activities',
+            'excerpt' => 'Owner edit',
+            'content' => '<p>Owner edit</p>',
+            'status' => 'published',
+        ])->assertOk()
+            ->assertJsonPath('title', 'Owner Edited Article')
+            ->assertJsonPath('show_on_announcement_bar', true)
+            ->assertJsonPath('announcement_text', 'Original announcement')
+            ->assertJsonPath('send_push_notification', true);
+
+        $post->refresh();
+
+        $this->assertTrue((bool) $post->show_on_announcement_bar);
+        $this->assertSame('Original announcement', $post->announcement_text);
+        $this->assertTrue((bool) $post->send_push_notification);
+    }
+
     public function test_admin_can_delete_other_users_posts_but_cannot_edit_them(): void
     {
         $officerRole = Role::query()->where('name', 'officer')->firstOrFail();

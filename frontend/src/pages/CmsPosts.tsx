@@ -355,6 +355,7 @@ export default function CmsPosts() {
   const canManageCmsPosts = hasCmsRoleAccess || hasAuthoredPosts;
   const limitedMode = canManageCmsPosts && !hasCmsRoleAccess;
   const canCreatePosts = hasCmsRoleAccess;
+  const canManageAnnouncementSettings = hasCmsRoleAccess;
   const canDeletePosts = hasPermission(user, "posts.delete") || roleName === "superadmin" || roleName === "admin";
   const canManageHomepageVideo = roleName === "superadmin" || roleName === "admin";
   const canManageResolutions = resolutionsManagerRoles.has(roleName);
@@ -1004,10 +1005,14 @@ export default function CmsPosts() {
         status: form.status,
         is_featured: form.is_featured ? 1 : 0,
         show_on_homepage_community: form.show_on_homepage_community ? 1 : 0,
-        show_on_announcement_bar: form.show_on_announcement_bar ? 1 : 0,
-        announcement_text: form.show_on_announcement_bar ? form.announcement_text : "",
-        send_push_notification: form.show_on_announcement_bar && form.send_push_notification ? 1 : 0,
         ...(form.selected_image_path ? { selected_image_path: form.selected_image_path } : {}),
+        ...(canManageAnnouncementSettings
+          ? {
+              show_on_announcement_bar: form.show_on_announcement_bar ? 1 : 0,
+              announcement_text: form.show_on_announcement_bar ? form.announcement_text : "",
+              send_push_notification: form.show_on_announcement_bar && form.send_push_notification ? 1 : 0,
+            }
+          : {}),
         ...(form.published_at
           ? { published_at: new Date(form.published_at).toISOString() }
           : {}),
@@ -1026,9 +1031,11 @@ export default function CmsPosts() {
         payload.append("status", basePayload.status);
         payload.append("is_featured", String(basePayload.is_featured));
         payload.append("show_on_homepage_community", String(basePayload.show_on_homepage_community));
-        payload.append("show_on_announcement_bar", String(basePayload.show_on_announcement_bar));
-        payload.append("announcement_text", basePayload.announcement_text);
-        payload.append("send_push_notification", String(basePayload.send_push_notification));
+        if (canManageAnnouncementSettings) {
+          payload.append("show_on_announcement_bar", String(basePayload.show_on_announcement_bar));
+          payload.append("announcement_text", basePayload.announcement_text ?? "");
+          payload.append("send_push_notification", String(basePayload.send_push_notification));
+        }
         if (basePayload.published_at) payload.append("published_at", basePayload.published_at);
         if (basePayload.selected_image_path) payload.append("selected_image_path", basePayload.selected_image_path);
         payload.append("image", imageToUpload);
@@ -1512,7 +1519,7 @@ export default function CmsPosts() {
             />
             Show on Homepage Community
           </label>
-          {form.section === "activities" && (
+          {form.section === "activities" && canManageAnnouncementSettings && (
             <div className="md:col-span-2 rounded-xl border border-gold/20 bg-gold/5 p-4">
               <div className="flex flex-col gap-4">
                 <label className="inline-flex items-center gap-2 text-sm text-offwhite">

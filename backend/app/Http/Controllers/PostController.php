@@ -416,6 +416,9 @@ class PostController extends Controller
         $validated['post_type'] = $validated['post_type'] ?? ($post->post_type ?: 'article');
         $validated['content'] = $this->sanitizeRichContent((string) ($validated['content'] ?? ''));
         $this->applyVideoPayload($validated);
+        if (!$this->canManageAnnouncementSettings($request)) {
+            $this->preserveExistingAnnouncementPayload($validated, $post);
+        }
         $this->applyAnnouncementPayload($validated);
 
         if ($validated['title'] !== $post->title) {
@@ -661,6 +664,15 @@ class PostController extends Controller
             : now();
 
         $validated['announcement_expires_at'] = $effectiveAt->copy()->addMonth();
+    }
+
+    private function preserveExistingAnnouncementPayload(array &$validated, Post $post): void
+    {
+        $validated['show_on_announcement_bar'] = (bool) $post->show_on_announcement_bar;
+        $validated['announcement_text'] = $post->announcement_text;
+        $validated['announcement_expires_at'] = $post->announcement_expires_at;
+        $validated['send_push_notification'] = (bool) $post->send_push_notification;
+        $validated['push_notification_sent_at'] = $post->push_notification_sent_at;
     }
 
     private function dispatchAnnouncementPushIfNeeded(Post $post): void
@@ -1115,6 +1127,11 @@ class PostController extends Controller
             RoleHierarchy::ADMIN,
             RoleHierarchy::SECRETARY,
         ], true);
+    }
+
+    private function canManageAnnouncementSettings(Request $request): bool
+    {
+        return (bool) $request->user()?->can('create', Post::class);
     }
 
     private function canUpdatePost(Request $request, Post $post): bool

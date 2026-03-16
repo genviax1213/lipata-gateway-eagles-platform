@@ -191,9 +191,12 @@ export default function AnnouncementBar() {
       <section className="relative z-10 border-b border-white/10 bg-[linear-gradient(90deg,rgba(216,179,95,0.14),rgba(12,22,38,0.92),rgba(216,179,95,0.1))]">
         <div className="section-wrap flex flex-col gap-3 py-2 text-xs text-mist/85 md:flex-row md:items-center md:justify-between md:text-sm">
           <div className="flex items-center gap-3">
-            <span className="rounded-full border border-gold/35 bg-gold/10 px-2.5 py-1 font-semibold uppercase tracking-[0.18em] text-gold-soft">
+            <Link
+              to="/activities"
+              className="rounded-full border border-gold/35 bg-gold/10 px-2.5 py-1 font-semibold uppercase tracking-[0.18em] text-gold-soft transition hover:border-gold/60 hover:bg-gold/15 hover:text-gold hover:underline underline-offset-4"
+            >
               Announcements
-            </span>
+            </Link>
             <span>Watch this space for new events, notices, and public updates.</span>
           </div>
           {supportsBrowserPush && pushConfig?.enabled && (
@@ -221,20 +224,25 @@ export default function AnnouncementBar() {
       <section className="relative z-10 border-b border-white/10 bg-[linear-gradient(90deg,rgba(216,179,95,0.16),rgba(12,22,38,0.94),rgba(216,179,95,0.08))]">
         <div className="section-wrap flex flex-col gap-3 py-2 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex min-w-0 flex-col gap-2 md:flex-row md:items-center md:gap-4">
-            <span className="w-fit rounded-full border border-gold/35 bg-gold/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-gold-soft">
+            <Link
+              to="/activities"
+              className="w-fit rounded-full border border-gold/35 bg-gold/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-gold-soft transition hover:border-gold/60 hover:bg-gold/15 hover:text-gold hover:underline underline-offset-4"
+            >
               Announcements
-            </span>
+            </Link>
             <div className="flex flex-1 gap-2 overflow-x-auto pb-1 md:pb-0">
               {items.map((item) => (
                 <Link
                   key={item.version}
                   to={item.to}
-                  className="min-w-[15rem] flex-1 rounded-lg border border-white/12 bg-white/[0.04] px-3 py-2 text-left transition hover:border-gold/30 hover:bg-white/[0.08]"
+                  className="group min-w-[15rem] flex-1 rounded-lg border border-white/12 bg-white/[0.04] px-3 py-2 text-left transition hover:border-gold/40 hover:bg-white/[0.09] hover:shadow-[0_10px_24px_rgba(224,180,74,0.12)]"
                 >
                   <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gold-soft">
                     {item.headline}
                   </div>
-                  <div className="mt-1 line-clamp-1 text-sm font-semibold text-offwhite">{item.title}</div>
+                  <div className="mt-1 line-clamp-1 text-sm font-semibold text-offwhite decoration-gold/0 underline-offset-4 transition group-hover:text-gold-soft group-hover:decoration-gold group-hover:underline">
+                    {item.title}
+                  </div>
                   <div className="mt-1 text-xs text-mist/75">{item.meta}</div>
                 </Link>
               ))}
