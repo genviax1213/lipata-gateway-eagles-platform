@@ -24,6 +24,7 @@ use App\Http\Controllers\AttendanceController;
 use App\Http\Controllers\DirectoryExportController;
 use App\Http\Controllers\HomepageVideoController;
 use App\Http\Controllers\ContactInquiryController;
+use App\Http\Controllers\PushSubscriptionController;
 use App\Models\Post;
 
 Route::prefix('v1')->group(function () {
@@ -31,8 +32,12 @@ Route::prefix('v1')->group(function () {
     Route::get('/content/homepage-community', [PostController::class, 'publicHomepageCommunity']);
     Route::get('/content/images/{path}', [PostController::class, 'showPublicImage'])->where('path', '.*');
     Route::get('/content/schedules', [CalendarEventController::class, 'publicIndex']);
+    Route::get('/content/announcements', [PostController::class, 'publicAnnouncements']);
     Route::get('/content/{section}', [PostController::class, 'publicBySection']);
     Route::get('/content/post/{slug}', [PostController::class, 'publicBySlug']);
+    Route::get('/notifications/push/config', [PushSubscriptionController::class, 'config']);
+    Route::post('/notifications/push/subscriptions', [PushSubscriptionController::class, 'store']);
+    Route::delete('/notifications/push/subscriptions', [PushSubscriptionController::class, 'destroy']);
     Route::post('/contact/inquiries', [ContactInquiryController::class, 'store'])
         ->middleware('throttle:6,1');
     Route::post('/applicant-registrations', [ApplicantController::class, 'submit'])

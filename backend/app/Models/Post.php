@@ -24,6 +24,11 @@ class Post extends Model
         'video_thumbnail_text',
         'is_featured',
         'show_on_homepage_community',
+        'show_on_announcement_bar',
+        'announcement_text',
+        'announcement_expires_at',
+        'send_push_notification',
+        'push_notification_sent_at',
         'status',
         'published_at',
         'author_id',
@@ -32,6 +37,10 @@ class Post extends Model
     protected $casts = [
         'is_featured' => 'boolean',
         'show_on_homepage_community' => 'boolean',
+        'show_on_announcement_bar' => 'boolean',
+        'announcement_expires_at' => 'datetime',
+        'send_push_notification' => 'boolean',
+        'push_notification_sent_at' => 'datetime',
         'published_at' => 'datetime',
     ];
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import type { CmsPost } from "../../types/cms";
 import { htmlToPlainText } from "../../utils/richText";
@@ -16,11 +16,7 @@ function contentSnippet(value: string, max = 180): string {
   return `${plain.slice(0, max).trim()}...`;
 }
 
-export default function PublicPostCard({
-  post,
-  readLabel = "Read Article",
-  emptyLabel = "No cover image",
-}: PublicPostCardProps) {
+function VideoPostThumbnail({ post, emptyLabel }: { post: CmsPost; emptyLabel: string }) {
   const [thumbnailIndex, setThumbnailIndex] = useState(0);
   const [useFallbackThumbnail, setUseFallbackThumbnail] = useState(false);
   const thumbnailCandidates = useMemo(
@@ -35,14 +31,6 @@ export default function PublicPostCard({
   const resolvedVideoThumbnailUrl = useFallbackThumbnail
     ? "/images/lgec-logo.png"
     : (videoThumbnailUrl ?? "/images/lgec-logo.png");
-  const description = post.post_type === "video"
-    ? (post.excerpt ?? post.video_thumbnail_text ?? "Watch the LGEC video post.")
-    : (post.excerpt ?? contentSnippet(post.content));
-
-  useEffect(() => {
-    setThumbnailIndex(0);
-    setUseFallbackThumbnail(false);
-  }, [post.id, post.video_embed_url, post.video_thumbnail_url, post.video_url]);
 
   const handleVideoThumbnailError = () => {
     if (useFallbackThumbnail) return;
@@ -56,27 +44,45 @@ export default function PublicPostCard({
   };
 
   return (
+    <div className="mb-4 relative overflow-hidden rounded-md">
+      <img
+        src={resolvedVideoThumbnailUrl}
+        alt={post.title}
+        className="h-44 w-full rounded-md object-cover"
+        onError={handleVideoThumbnailError}
+      />
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-ink/80 via-ink/25 to-transparent" />
+      <div className="pointer-events-none absolute bottom-3 right-3 inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/20 bg-gold/90 text-ink shadow-[0_12px_24px_rgba(2,6,23,0.35)]">
+        <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current" focusable="false">
+          <path d="M8 6.5v11l9-5.5-9-5.5Z" />
+        </svg>
+      </div>
+      {useFallbackThumbnail && (
+        <div className="pointer-events-none absolute inset-x-4 bottom-4 rounded-md border border-white/12 bg-ink/70 px-3 py-2 text-xs text-mist/90 backdrop-blur">
+          {post.video_thumbnail_text?.trim() || emptyLabel}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function PublicPostCard({
+  post,
+  readLabel = "Read Article",
+  emptyLabel = "No cover image",
+}: PublicPostCardProps) {
+  const description = post.post_type === "video"
+    ? (post.excerpt ?? post.video_thumbnail_text ?? "Watch the LGEC video post.")
+    : (post.excerpt ?? contentSnippet(post.content));
+
+  return (
     <article className="surface-card card-lift group h-full overflow-hidden p-4">
       {post.post_type === "video" ? (
-        <div className="mb-4 relative overflow-hidden rounded-md">
-          <img
-            src={resolvedVideoThumbnailUrl}
-            alt={post.title}
-            className="h-44 w-full rounded-md object-cover"
-            onError={handleVideoThumbnailError}
-          />
-          <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-ink/80 via-ink/25 to-transparent" />
-          <div className="pointer-events-none absolute bottom-3 right-3 inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/20 bg-gold/90 text-ink shadow-[0_12px_24px_rgba(2,6,23,0.35)]">
-            <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current" focusable="false">
-              <path d="M8 6.5v11l9-5.5-9-5.5Z" />
-            </svg>
-          </div>
-          {useFallbackThumbnail && (
-            <div className="pointer-events-none absolute inset-x-4 bottom-4 rounded-md border border-white/12 bg-ink/70 px-3 py-2 text-xs text-mist/90 backdrop-blur">
-              {post.video_thumbnail_text?.trim() || emptyLabel}
-            </div>
-          )}
-        </div>
+        <VideoPostThumbnail
+          key={`${post.id}:${post.video_embed_url ?? ""}:${post.video_thumbnail_url ?? ""}:${post.video_url ?? ""}`}
+          post={post}
+          emptyLabel={emptyLabel}
+        />
       ) : post.image_url ? (
         <img
           src={post.image_url}

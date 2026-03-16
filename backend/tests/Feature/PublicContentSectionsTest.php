@@ -105,6 +105,60 @@ class PublicContentSectionsTest extends TestCase
             ->assertJsonPath('0.video_thumbnail_text', 'Anniversary recap');
     }
 
+    public function test_public_announcements_endpoint_returns_only_active_flagged_activity_posts(): void
+    {
+        $author = User::factory()->create();
+
+        $visible = Post::query()->create([
+            'title' => 'Assembly Reminder',
+            'slug' => 'assembly-reminder',
+            'section' => 'activities',
+            'excerpt' => 'Please arrive before 7:00 PM.',
+            'content' => '<p>Assembly notice.</p>',
+            'announcement_text' => 'General assembly tonight',
+            'show_on_announcement_bar' => true,
+            'status' => 'published',
+            'published_at' => now()->subHour(),
+            'announcement_expires_at' => now()->addWeek(),
+            'author_id' => $author->id,
+        ]);
+
+        Post::query()->create([
+            'title' => 'Expired Notice',
+            'slug' => 'expired-notice',
+            'section' => 'activities',
+            'excerpt' => 'Expired announcement.',
+            'content' => '<p>Expired.</p>',
+            'announcement_text' => 'Expired',
+            'show_on_announcement_bar' => true,
+            'status' => 'published',
+            'published_at' => now()->subDays(10),
+            'announcement_expires_at' => now()->subMinute(),
+            'author_id' => $author->id,
+        ]);
+
+        Post::query()->create([
+            'title' => 'News Story',
+            'slug' => 'news-story',
+            'section' => 'news',
+            'excerpt' => 'Wrong section.',
+            'content' => '<p>Wrong section.</p>',
+            'announcement_text' => 'Wrong section',
+            'show_on_announcement_bar' => true,
+            'status' => 'published',
+            'published_at' => now()->subHour(),
+            'announcement_expires_at' => now()->addWeek(),
+            'author_id' => $author->id,
+        ]);
+
+        $this->getJson('/api/v1/content/announcements')
+            ->assertOk()
+            ->assertJsonCount(1)
+            ->assertJsonPath('0.id', $visible->id)
+            ->assertJsonPath('0.show_on_announcement_bar', true)
+            ->assertJsonPath('0.announcement_text', 'General assembly tonight');
+    }
+
     public function test_public_schedules_endpoint_returns_upcoming_calendar_entries(): void
     {
         $creator = User::factory()->create();

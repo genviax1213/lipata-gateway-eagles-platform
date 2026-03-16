@@ -379,7 +379,7 @@ class FinanceController extends Controller
                 });
         }
 
-        $rows = $members->map(function (Member $member) use ($month, $monthlyCompliantMemberIds, $monthlyStatsByMember, $projectByMemberYear, $effectiveYears) {
+        $rows = $members->map(function (Member $member) use ($actor, $month, $monthlyCompliantMemberIds, $monthlyStatsByMember, $projectByMemberYear, $effectiveYears) {
             $hasMonthlyForMonth = $monthlyCompliantMemberIds->contains($member->id);
             $monthlyStats = $monthlyStatsByMember->get($member->id);
             $memberProjectYears = collect($projectByMemberYear->get($member->id, []))
@@ -432,6 +432,8 @@ class FinanceController extends Controller
 
     public function reportPreview(Request $request)
     {
+        /** @var User $actor */
+        $actor = $request->user();
         $validated = $request->validate([
             'category' => 'required|in:monthly_contribution,alalayang_agila_contribution,project_contribution,extra_contribution',
             'finance_account_id' => 'nullable|integer|exists:finance_accounts,id',
@@ -460,7 +462,7 @@ class FinanceController extends Controller
                 'reversals:id,reversal_of_contribution_id',
             ]);
 
-        if (BootstrapSuperadminPrivacy::shouldFilterBootstrapEmail($request->user())) {
+        if (BootstrapSuperadminPrivacy::shouldFilterBootstrapEmail($actor)) {
             $query->where(function ($builder): void {
                 $builder
                     ->whereNull('member_id')
@@ -535,7 +537,7 @@ class FinanceController extends Controller
         $labels = $this->categoryLabels();
 
         $rows->setCollection(
-            $rows->getCollection()->map(function (Contribution $row) use ($labels) {
+            $rows->getCollection()->map(function (Contribution $row) use ($actor, $labels) {
                 $member = $row->member;
                 $beneficiaryName = null;
                 if ($row->beneficiaryMember) {
@@ -550,7 +552,7 @@ class FinanceController extends Controller
                         'id' => $member->id,
                         'member_number' => $member->member_number,
                         'name' => $this->formatMemberName($member),
-                        'email' => BootstrapSuperadminPrivacy::maskEmailForViewer($request->user(), $member->email),
+                        'email' => BootstrapSuperadminPrivacy::maskEmailForViewer($actor, $member->email),
                     ] : null,
                     'amount' => (float) $row->amount,
                     'note' => $row->note,

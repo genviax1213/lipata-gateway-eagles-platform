@@ -383,6 +383,14 @@ class MemberController extends Controller
 
         $this->authorize('manageOwnProfile', $member);
 
+        if ($request->exists('email')) {
+            $request->request->remove('email');
+        }
+
+        if ($request->exists('batch')) {
+            $request->merge(['batch' => $member->batch]);
+        }
+
         $validated = $request->validate($this->baseMemberValidationRules());
         $profileData = $this->normalizeMemberPayload($validated);
 

@@ -48,8 +48,8 @@ export default function NewsArticle() {
     };
   }, [slug]);
 
-  const backTo = post?.section === "history" ? "/history" : post?.section === "news" ? "/news" : post?.section === "activities" ? "/activities" : "/";
-  const backLabel = post?.section === "history" ? "Back to History" : post?.section === "news" ? "Back to News" : post?.section === "activities" ? "Back to Activities" : "Back to Homepage";
+  const backTo = post?.section === "history" ? "/history" : post?.section === "news" || post?.section === "activities" ? "/activities" : "/";
+  const backLabel = post?.section === "history" ? "Back to History" : post?.section === "news" || post?.section === "activities" ? "Back to Activities" : "Back to Homepage";
   const renderedHtml = useMemo(() => sanitizeRichHtml(post?.content ?? ""), [post?.content]);
   const estimatedWords = useMemo(
     () => htmlToPlainText(post?.content ?? "").split(/\s+/).filter(Boolean).length,

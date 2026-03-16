@@ -3,15 +3,19 @@
 namespace App\Http\Controllers;
 
 use App\Models\Post;
+use App\Services\WebPushAnnouncementService;
 use App\Support\EmbeddedVideo;
 use App\Support\ImageUploadOptimizer;
 use App\Support\RoleHierarchy;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 class PostController extends Controller
 {
@@ -19,6 +23,10 @@ class PostController extends Controller
     private const DEFAULT_CMS_IMAGE_TARGET_KB = 1536; // 1.5 MB best-effort output target
     private const MAX_RICH_CONTENT_CHARS = 120000;
     private const MEMBER_ONLY_SECTION = 'resolutions';
+
+    public function __construct(private readonly WebPushAnnouncementService $webPushAnnouncementService)
+    {
+    }
 
     public function publicBySection(Request $request, string $section)
     {
@@ -97,6 +105,27 @@ class PostController extends Controller
             })
             ->latest('published_at')
             ->latest('id')
+            ->get();
+
+        return response()->json($posts->map(fn (Post $post) => $this->transform($post)));
+    }
+
+    public function publicAnnouncements()
+    {
+        $limit = max(1, min(6, (int) request()->query('limit', 4)));
+        $posts = Post::query()
+            ->where('section', 'activities')
+            ->where('show_on_announcement_bar', true)
+            ->where('status', 'published')
+            ->where(function ($q) {
+                $q->whereNull('published_at')->orWhere('published_at', '<=', now());
+            })
+            ->where(function ($q) {
+                $q->whereNull('announcement_expires_at')->orWhere('announcement_expires_at', '>', now());
+            })
+            ->latest('published_at')
+            ->latest('id')
+            ->limit($limit)
             ->get();
 
         return response()->json($posts->map(fn (Post $post) => $this->transform($post)));
@@ -290,6 +319,9 @@ class PostController extends Controller
             ],
             'is_featured' => 'sometimes|boolean',
             'show_on_homepage_community' => 'sometimes|boolean',
+            'show_on_announcement_bar' => 'sometimes|boolean',
+            'announcement_text' => 'nullable|string|max:60',
+            'send_push_notification' => 'sometimes|boolean',
             'status' => 'required|in:draft,published',
             'published_at' => 'nullable|date',
             'image' => 'nullable|image|max:' . $this->maxCmsImageKb(),
@@ -304,6 +336,7 @@ class PostController extends Controller
         $validated['post_type'] = $validated['post_type'] ?? 'article';
         $validated['content'] = $this->sanitizeRichContent((string) ($validated['content'] ?? ''));
         $this->applyVideoPayload($validated);
+        $this->applyAnnouncementPayload($validated);
 
         $slug = Str::slug($validated['title']);
         $validated['slug'] = $this->uniqueSlug($slug);
@@ -338,6 +371,7 @@ class PostController extends Controller
         }
 
         $post = Post::create($validated);
+        $this->dispatchAnnouncementPushIfNeeded($post);
 
         return response()->json($this->transform($post), 201);
     }
@@ -365,6 +399,9 @@ class PostController extends Controller
             ],
             'is_featured' => 'sometimes|boolean',
             'show_on_homepage_community' => 'sometimes|boolean',
+            'show_on_announcement_bar' => 'sometimes|boolean',
+            'announcement_text' => 'nullable|string|max:60',
+            'send_push_notification' => 'sometimes|boolean',
             'status' => 'required|in:draft,published',
             'published_at' => 'nullable|date',
             'image' => 'nullable|image|max:' . $this->maxCmsImageKb(),
@@ -379,6 +416,7 @@ class PostController extends Controller
         $validated['post_type'] = $validated['post_type'] ?? ($post->post_type ?: 'article');
         $validated['content'] = $this->sanitizeRichContent((string) ($validated['content'] ?? ''));
         $this->applyVideoPayload($validated);
+        $this->applyAnnouncementPayload($validated);
 
         if ($validated['title'] !== $post->title) {
             $post->slug = $this->uniqueSlug(Str::slug($validated['title']), $post->id);
@@ -414,6 +452,7 @@ class PostController extends Controller
 
         $post->fill($validated);
         $post->save();
+        $this->dispatchAnnouncementPushIfNeeded($post);
 
         return response()->json($this->transform($post));
     }
@@ -523,9 +562,15 @@ class PostController extends Controller
             'video_thumbnail_text' => $post->video_thumbnail_text,
             'is_featured' => (bool) $post->is_featured,
             'show_on_homepage_community' => (bool) $post->show_on_homepage_community,
+            'show_on_announcement_bar' => (bool) $post->show_on_announcement_bar,
+            'announcement_text' => $post->announcement_text,
+            'announcement_expires_at' => optional($post->announcement_expires_at)?->toISOString(),
+            'send_push_notification' => (bool) $post->send_push_notification,
+            'push_notification_sent_at' => optional($post->push_notification_sent_at)?->toISOString(),
             'status' => $post->status,
             'published_at' => optional($post->published_at)?->toISOString(),
             'created_at' => optional($post->created_at)?->toISOString(),
+            'updated_at' => optional($post->updated_at)?->toISOString(),
             'is_owned' => $isOwned,
             'can_edit' => $canEdit,
             'can_delete' => $canDelete,
@@ -584,6 +629,66 @@ class PostController extends Controller
         $validated['content'] = '';
     }
 
+    private function applyAnnouncementPayload(array &$validated): void
+    {
+        $showOnAnnouncementBar = filter_var($validated['show_on_announcement_bar'] ?? false, FILTER_VALIDATE_BOOLEAN);
+        $validated['show_on_announcement_bar'] = $showOnAnnouncementBar;
+        $validated['announcement_text'] = trim((string) ($validated['announcement_text'] ?? '')) ?: null;
+        $validated['send_push_notification'] = filter_var($validated['send_push_notification'] ?? false, FILTER_VALIDATE_BOOLEAN);
+
+        if (!$showOnAnnouncementBar) {
+            $validated['announcement_text'] = null;
+            $validated['announcement_expires_at'] = null;
+            $validated['send_push_notification'] = false;
+            $validated['push_notification_sent_at'] = null;
+            return;
+        }
+
+        if (($validated['section'] ?? '') !== 'activities') {
+            throw ValidationException::withMessages([
+                'show_on_announcement_bar' => 'Only activities articles can appear in the announcement bar.',
+            ]);
+        }
+
+        if ($validated['announcement_text'] === null) {
+            throw ValidationException::withMessages([
+                'announcement_text' => 'Announcement text is required when showing an article in the announcement bar.',
+            ]);
+        }
+
+        $effectiveAt = isset($validated['published_at']) && $validated['published_at']
+            ? Carbon::parse((string) $validated['published_at'])
+            : now();
+
+        $validated['announcement_expires_at'] = $effectiveAt->copy()->addMonth();
+    }
+
+    private function dispatchAnnouncementPushIfNeeded(Post $post): void
+    {
+        if (!$post->show_on_announcement_bar
+            || !$post->send_push_notification
+            || $post->status !== 'published'
+            || ($post->published_at && $post->published_at->isFuture())
+            || ($post->announcement_expires_at && $post->announcement_expires_at->isPast())
+            || $post->push_notification_sent_at) {
+            return;
+        }
+
+        try {
+            $sent = $this->webPushAnnouncementService->sendAnnouncement($post);
+            if ($sent > 0) {
+                $post->forceFill([
+                    'push_notification_sent_at' => now(),
+                ])->save();
+            }
+        } catch (Throwable $exception) {
+            Log::warning('Announcement push dispatch failed.', [
+                'post_id' => $post->id,
+                'message' => $exception->getMessage(),
+            ]);
+        }
+    }
+
     private function cmsImageUrl(?string $imagePath): ?string
     {
         $path = $this->normalizeStorageImagePath($imagePath);
@@ -595,7 +700,7 @@ class PostController extends Controller
             return null;
         }
 
-        $root = request()?->root() ?? rtrim((string) config('app.url'), '/');
+        $root = rtrim((string) config('app.url'), '/');
         return rtrim($root, '/') . '/api/v1/content/images/' . $path;
     }
 
@@ -1014,6 +1119,10 @@ class PostController extends Controller
 
     private function canUpdatePost(Request $request, Post $post): bool
     {
-        return $this->isMemberOnlySection($post->section) && $this->canManageMemberOnlySection($request);
+        if ($this->isMemberOnlySection($post->section)) {
+            return $this->canManageMemberOnlySection($request);
+        }
+
+        return $post->status === 'draft' && $request->user()->can('create', Post::class);
     }
 }

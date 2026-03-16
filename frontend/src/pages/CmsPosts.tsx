@@ -46,6 +46,9 @@ type FormState = {
   status: "draft" | "published";
   is_featured: boolean;
   show_on_homepage_community: boolean;
+  show_on_announcement_bar: boolean;
+  announcement_text: string;
+  send_push_notification: boolean;
   published_at: string;
   image: File | null;
   selected_image_path: string;
@@ -118,6 +121,9 @@ const initialForm: FormState = {
   status: "published",
   is_featured: false,
   show_on_homepage_community: false,
+  show_on_announcement_bar: false,
+  announcement_text: "",
+  send_push_notification: false,
   published_at: "",
   image: null,
   selected_image_path: "",
@@ -431,16 +437,42 @@ export default function CmsPosts() {
       form.video_url.trim() !== "" ||
       form.video_thumbnail_url.trim() !== "" ||
       form.video_thumbnail_text.trim() !== "" ||
+      form.announcement_text.trim() !== "" ||
+      form.show_on_announcement_bar ||
+      form.send_push_notification ||
       htmlToPlainText(form.content).trim() !== "" ||
       form.image !== null ||
       form.selected_image_path !== "" ||
       sourceImage !== null
     );
-  }, [editingId, form.title, form.excerpt, form.video_url, form.video_thumbnail_url, form.video_thumbnail_text, form.content, form.image, form.selected_image_path, sourceImage]);
+  }, [
+    editingId,
+    form.title,
+    form.excerpt,
+    form.video_url,
+    form.video_thumbnail_url,
+    form.video_thumbnail_text,
+    form.announcement_text,
+    form.show_on_announcement_bar,
+    form.send_push_notification,
+    form.content,
+    form.image,
+    form.selected_image_path,
+    sourceImage,
+  ]);
   const submitDisabled = saving
     || processingImage
     || (!editingId && !canCreatePosts)
     || (editingId !== null && (!editingPost || !canEditPost(editingPost)));
+  const announcementExpiryPreview = useMemo(() => {
+    if (!form.show_on_announcement_bar) return "";
+
+    const baseDate = form.published_at ? new Date(form.published_at) : new Date();
+    if (Number.isNaN(baseDate.getTime())) return "";
+    const preview = new Date(baseDate);
+    preview.setMonth(preview.getMonth() + 1);
+    return preview.toLocaleString();
+  }, [form.published_at, form.show_on_announcement_bar]);
 
   function isOwnPost(post: CmsPost): boolean {
     if (post.is_owned !== undefined) return Boolean(post.is_owned);
@@ -621,7 +653,7 @@ export default function CmsPosts() {
     } catch {
       setError("Unable to load CMS posts.");
     }
-  }, [appliedPostQuery, appliedPostSectionFilter, fetchPosts]);
+  }, [appliedPostQuery, appliedPostSectionFilter, fetchPosts, postsMode]);
 
   async function applyPostSearch() {
     const nextQuery = postQueryDraft.trim();
@@ -919,6 +951,9 @@ export default function CmsPosts() {
       status: post.status,
       is_featured: post.is_featured,
       show_on_homepage_community: post.show_on_homepage_community,
+      show_on_announcement_bar: post.show_on_announcement_bar,
+      announcement_text: post.announcement_text ?? "",
+      send_push_notification: post.send_push_notification,
       published_at: toDateTimeLocal(post.published_at),
       image: null,
       selected_image_path: "",
@@ -969,6 +1004,9 @@ export default function CmsPosts() {
         status: form.status,
         is_featured: form.is_featured ? 1 : 0,
         show_on_homepage_community: form.show_on_homepage_community ? 1 : 0,
+        show_on_announcement_bar: form.show_on_announcement_bar ? 1 : 0,
+        announcement_text: form.show_on_announcement_bar ? form.announcement_text : "",
+        send_push_notification: form.show_on_announcement_bar && form.send_push_notification ? 1 : 0,
         ...(form.selected_image_path ? { selected_image_path: form.selected_image_path } : {}),
         ...(form.published_at
           ? { published_at: new Date(form.published_at).toISOString() }
@@ -988,6 +1026,9 @@ export default function CmsPosts() {
         payload.append("status", basePayload.status);
         payload.append("is_featured", String(basePayload.is_featured));
         payload.append("show_on_homepage_community", String(basePayload.show_on_homepage_community));
+        payload.append("show_on_announcement_bar", String(basePayload.show_on_announcement_bar));
+        payload.append("announcement_text", basePayload.announcement_text);
+        payload.append("send_push_notification", String(basePayload.send_push_notification));
         if (basePayload.published_at) payload.append("published_at", basePayload.published_at);
         if (basePayload.selected_image_path) payload.append("selected_image_path", basePayload.selected_image_path);
         payload.append("image", imageToUpload);
@@ -1028,6 +1069,25 @@ export default function CmsPosts() {
       section: visibleSectionOptions[0] ?? initialForm.section,
     }));
   }, [form.section, visibleSectionOptions]);
+
+  useEffect(() => {
+    if (form.section === "activities") {
+      return;
+    }
+
+    setForm((prev) => {
+      if (!prev.show_on_announcement_bar && !prev.send_push_notification && prev.announcement_text === "") {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        show_on_announcement_bar: false,
+        announcement_text: "",
+        send_push_notification: false,
+      };
+    });
+  }, [form.section]);
 
   async function saveHomepageVideo() {
     if (!canManageHomepageVideo) {
@@ -1452,6 +1512,60 @@ export default function CmsPosts() {
             />
             Show on Homepage Community
           </label>
+          {form.section === "activities" && (
+            <div className="md:col-span-2 rounded-xl border border-gold/20 bg-gold/5 p-4">
+              <div className="flex flex-col gap-4">
+                <label className="inline-flex items-center gap-2 text-sm text-offwhite">
+                  <input
+                    type="checkbox"
+                    checked={form.show_on_announcement_bar}
+                    onChange={(e) => setForm((prev) => ({
+                      ...prev,
+                      show_on_announcement_bar: e.target.checked,
+                      announcement_text: e.target.checked ? prev.announcement_text : "",
+                      send_push_notification: e.target.checked ? prev.send_push_notification : false,
+                    }))}
+                  />
+                  Show in site announcement bar
+                </label>
+
+                {form.show_on_announcement_bar && (
+                  <>
+                    <label className="block text-sm text-offwhite">
+                      <span className="mb-2 block text-mist/80">Announcement headline</span>
+                      <input
+                        aria-label="Announcement headline"
+                        value={form.announcement_text}
+                        onChange={(e) => setForm((prev) => ({ ...prev, announcement_text: e.target.value }))}
+                        maxLength={60}
+                        placeholder="Short notice for the bar, toast, and browser alert"
+                        className="w-full rounded-md border border-white/25 bg-white/10 px-4 py-2.5 text-offwhite placeholder:text-mist/70"
+                      />
+                    </label>
+                    <div className="flex flex-col gap-2 text-xs text-mist/75 md:flex-row md:items-center md:justify-between">
+                      <span>
+                        The public notice stays in the announcement bar until {announcementExpiryPreview || "one month after publish"}.
+                      </span>
+                      <span>{form.announcement_text.length}/60</span>
+                    </div>
+                    <label className="inline-flex items-center gap-2 text-sm text-offwhite">
+                      <input
+                        type="checkbox"
+                        checked={form.send_push_notification}
+                        onChange={(e) => setForm((prev) => ({ ...prev, send_push_notification: e.target.checked }))}
+                      />
+                      Send one-time browser push alert when this announcement is active
+                    </label>
+                    {editingPost?.push_notification_sent_at && (
+                      <p className="text-xs text-mist/70">
+                        Browser push alert already sent on {new Date(editingPost.push_notification_sent_at).toLocaleString()}.
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="mt-5 flex gap-3">

@@ -10,9 +10,10 @@ const About = lazy(() => import("../pages/About"));
 const History = lazy(() => import("../pages/History"));
 const MagnaCarta = lazy(() => import("../pages/MagnaCarta"));
 const Resolutions = lazy(() => import("../pages/Resolutions"));
+const Gmm = lazy(() => import("../pages/Gmm"));
 const Activities = lazy(() => import("../pages/Activities"));
 const Schedules = lazy(() => import("../pages/Schedules"));
-const Downloads = lazy(() => import("../pages/Downloads"));
+const Forms = lazy(() => import("../pages/Forms"));
 const Contact = lazy(() => import("../pages/Contact"));
 const ApplicantRegistration = lazy(() => import("../pages/ApplicantRegistration"));
 const MemberRegistration = lazy(() => import("../pages/MemberRegistration"));
@@ -55,15 +56,21 @@ export default function AppRoutes() {
               </ProtectedRoute>
             }
           />
-          <Route path="/activities" element={<Layout><Activities /></Layout>} />
-          <Route path="/schedules" element={<Layout><Schedules /></Layout>} />
-          <Route path="/news" element={<Navigate to="/activities" replace />} />
-          <Route path="/hymnals" element={<Navigate to="/downloads" replace />} />
           <Route
-            path="/downloads"
+            path="/gmm"
             element={
               <ProtectedRoute>
-                <Layout><Downloads /></Layout>
+                <Layout><Gmm /></Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route path="/activities" element={<Layout><Activities /></Layout>} />
+          <Route path="/schedules" element={<Layout><Schedules /></Layout>} />
+          <Route
+            path="/downloads/forms"
+            element={
+              <ProtectedRoute>
+                <Layout><Forms /></Layout>
               </ProtectedRoute>
             }
           />
@@ -94,14 +101,6 @@ export default function AppRoutes() {
                 <Login />
               </GuestRoute>
             }
-          />
-          <Route
-            path="/member-login"
-            element={<Navigate to="/login" replace />}
-          />
-          <Route
-            path="/portal-login"
-            element={<Navigate to="/login" replace />}
           />
           <Route
             path="/member-reset-password"

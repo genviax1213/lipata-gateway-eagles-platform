@@ -1,7 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
-import { useAuth } from "../../contexts/useAuth";
-import { canonicalRoutes } from "../../content/portalCopy";
 
 type NavLeaf = {
   label: string;
@@ -19,8 +17,6 @@ const navGroups: NavGroup[] = [
     items: [
       { label: "About", to: "/about" },
       { label: "History", to: "/history" },
-      { label: "Magna Carta", to: "/magna-carta" },
-      { label: "Resolutions", to: "/resolutions" },
     ],
   },
   {
@@ -30,13 +26,18 @@ const navGroups: NavGroup[] = [
       { label: "Schedules", to: "/schedules" },
     ],
   },
+  {
+    label: "Downloads",
+    items: [
+      { label: "Forms", to: "/downloads/forms" },
+      { label: "Magna Carta", to: "/magna-carta" },
+    ],
+  },
 ];
 
 export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [openGroup, setOpenGroup] = useState<string | null>(null);
-  const { user } = useAuth();
-  const isLoggedIn = Boolean(user);
   const location = useLocation();
   const desktopNavRef = useRef<HTMLDivElement | null>(null);
 
@@ -162,14 +163,8 @@ export default function Navbar() {
               </div>
             </div>
           ))}
-          <NavLink to="/downloads" className={navItem}>Downloads</NavLink>
-          <NavLink to="/contact" className={navItem}>Contact</NavLink>
-          <NavLink
-            to={isLoggedIn ? "/portal" : canonicalRoutes.login}
-            className="ml-2 rounded-md border border-gold/50 px-3 py-2 text-sm font-semibold text-gold transition hover:bg-gold/10"
-          >
-            Portal Login
-          </NavLink>
+          <NavLink to="/resolutions" className={navItem}>Resolutions</NavLink>
+          <NavLink to="/gmm" className={navItem}>GMM</NavLink>
         </div>
 
         {mobileOpen && (
@@ -195,18 +190,11 @@ export default function Navbar() {
                   </div>
                 </div>
               ))}
-              <NavLink to="/downloads" onClick={() => setMobileOpen(false)} className={navItem}>
-                Downloads
+              <NavLink to="/resolutions" onClick={() => setMobileOpen(false)} className={navItem}>
+                Resolutions
               </NavLink>
-              <NavLink to="/contact" onClick={() => setMobileOpen(false)} className={navItem}>
-                Contact
-              </NavLink>
-              <NavLink
-                to={isLoggedIn ? "/portal" : canonicalRoutes.login}
-                onClick={() => setMobileOpen(false)}
-                className="mt-1 rounded-md border border-gold/50 px-3 py-2 text-sm font-semibold text-gold transition hover:bg-gold/10"
-              >
-                Portal Login
+              <NavLink to="/gmm" onClick={() => setMobileOpen(false)} className={navItem}>
+                GMM
               </NavLink>
             </div>
           </div>

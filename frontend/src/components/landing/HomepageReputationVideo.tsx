@@ -46,24 +46,66 @@ function buildPlaybackUrl(video: HomepageReputationVideoData): string {
   }
 }
 
+function HomepageReputationVideoThumbnail({
+  video,
+  layout,
+}: {
+  video: HomepageReputationVideoData;
+  layout: "desktop" | "mobile" | "stack";
+}) {
+  const [thumbnailIndex, setThumbnailIndex] = useState(0);
+  const thumbnailCandidates = useMemo(() => buildVideoThumbnailCandidates(video), [video]);
+  const thumbnailUrl = thumbnailCandidates[thumbnailIndex] ?? null;
+
+  return (
+    <div className="homepage-video-teaser-media">
+      {thumbnailUrl ? (
+        <img
+          src={thumbnailUrl}
+          alt=""
+          aria-hidden="true"
+          loading="lazy"
+          decoding="async"
+          sizes={layout === "stack" ? "(min-width: 1024px) 32vw, 100vw" : "(min-width: 1024px) 18rem, 100vw"}
+          className="homepage-video-teaser-image"
+          onError={() => {
+            setThumbnailIndex((current) => {
+              if (current >= thumbnailCandidates.length - 1) return current;
+              return current + 1;
+            });
+          }}
+        />
+      ) : (
+        <div className="homepage-video-teaser-fallback" aria-hidden="true">
+          <img src="/images/lgec-logo.png" alt="" className="h-12 w-12 object-contain opacity-80" />
+        </div>
+      )}
+      <div className="homepage-video-teaser-overlay" aria-hidden="true" />
+      {video.thumbnailText ? (
+        <div className="homepage-video-thumbnail-copy" aria-hidden="true">
+          <span className="homepage-video-thumbnail-copy-text">{video.thumbnailText}</span>
+        </div>
+      ) : null}
+      <span className="homepage-video-play-badge" aria-hidden="true">
+        <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current" focusable="false">
+          <path d="M8 6.5v11l9-5.5-9-5.5Z" />
+        </svg>
+      </span>
+    </div>
+  );
+}
+
 export default function HomepageReputationVideo({
   video,
   layout = "desktop",
 }: HomepageReputationVideoProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [thumbnailIndex, setThumbnailIndex] = useState(0);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const titleId = useId();
   const descriptionId = useId();
   const playbackUrl = useMemo(() => buildPlaybackUrl(video), [video]);
-  const thumbnailCandidates = useMemo(() => buildVideoThumbnailCandidates(video), [video]);
-  const thumbnailUrl = thumbnailCandidates[thumbnailIndex] ?? null;
-
-  useEffect(() => {
-    setThumbnailIndex(0);
-  }, [thumbnailCandidates]);
 
   useEffect(() => {
     if (!isOpen || typeof document === "undefined") return;
@@ -129,40 +171,11 @@ export default function HomepageReputationVideo({
         aria-haspopup="dialog"
         aria-label={`Play ${video.title}`}
       >
-        <div className="homepage-video-teaser-media">
-          {thumbnailUrl ? (
-            <img
-              src={thumbnailUrl}
-              alt=""
-              aria-hidden="true"
-              loading="lazy"
-              decoding="async"
-              sizes={layout === "stack" ? "(min-width: 1024px) 32vw, 100vw" : "(min-width: 1024px) 18rem, 100vw"}
-              className="homepage-video-teaser-image"
-              onError={() => {
-                setThumbnailIndex((current) => {
-                  if (current >= thumbnailCandidates.length - 1) return current;
-                  return current + 1;
-                });
-              }}
-            />
-          ) : (
-            <div className="homepage-video-teaser-fallback" aria-hidden="true">
-              <img src="/images/lgec-logo.png" alt="" className="h-12 w-12 object-contain opacity-80" />
-            </div>
-          )}
-          <div className="homepage-video-teaser-overlay" aria-hidden="true" />
-          {video.thumbnailText ? (
-            <div className="homepage-video-thumbnail-copy" aria-hidden="true">
-              <span className="homepage-video-thumbnail-copy-text">{video.thumbnailText}</span>
-            </div>
-          ) : null}
-          <span className="homepage-video-play-badge" aria-hidden="true">
-            <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current" focusable="false">
-              <path d="M8 6.5v11l9-5.5-9-5.5Z" />
-            </svg>
-          </span>
-        </div>
+        <HomepageReputationVideoThumbnail
+          key={`${video.embedUrl}:${video.thumbnailUrl ?? ""}:${video.sourceUrl ?? ""}`}
+          video={video}
+          layout={layout}
+        />
       </button>
 
       {isOpen && typeof document !== "undefined"

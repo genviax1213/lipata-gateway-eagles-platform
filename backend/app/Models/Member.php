@@ -52,8 +52,6 @@ class Member extends Model
     protected $casts = [
         'email_verified' => 'boolean',
         'password_set' => 'boolean',
-        'date_of_birth' => 'date',
-        'induction_date' => 'date',
         'source_submitted_at' => 'datetime',
         'height_cm' => 'decimal:2',
         'weight_kg' => 'decimal:2',

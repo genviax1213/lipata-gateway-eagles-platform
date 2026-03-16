@@ -14,9 +14,15 @@ export interface CmsPost {
   video_thumbnail_text: string | null;
   is_featured: boolean;
   show_on_homepage_community: boolean;
+  show_on_announcement_bar: boolean;
+  announcement_text: string | null;
+  announcement_expires_at: string | null;
+  send_push_notification: boolean;
+  push_notification_sent_at: string | null;
   status: "draft" | "published";
   published_at: string | null;
   created_at: string | null;
+  updated_at: string | null;
   author?: {
     id: number;
     name: string;

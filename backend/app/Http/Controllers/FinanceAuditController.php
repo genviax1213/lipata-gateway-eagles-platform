@@ -84,6 +84,8 @@ class FinanceAuditController extends Controller
     public function report(Request $request)
     {
         $this->authorize('viewFinanceDirectory', Member::class);
+        /** @var User $actor */
+        $actor = $request->user();
 
         $validated = $request->validate([
             'month' => 'required|date_format:Y-m',
@@ -106,7 +108,7 @@ class FinanceAuditController extends Controller
 
         $members = Member::query()
             ->select(['id', 'member_number', 'first_name', 'middle_name', 'last_name', 'email'])
-            ->when(BootstrapSuperadminPrivacy::shouldFilterBootstrapEmail($request->user()), function ($query) {
+            ->when(BootstrapSuperadminPrivacy::shouldFilterBootstrapEmail($actor), function ($query) {
                 $query->whereRaw('LOWER(TRIM(COALESCE(email, ""))) <> ?', [BootstrapSuperadminPrivacy::bootstrapEmail()]);
             })
             ->when($memberSearch !== '', function ($query) use ($memberSearch): void {
@@ -279,7 +281,7 @@ class FinanceAuditController extends Controller
             ->get()
             ->groupBy(fn (FinanceAuditNote $note) => $this->noteKeyFromModel($note));
 
-        $rows = $rows->map(function (array $row) use ($members, $notes) {
+        $rows = $rows->map(function (array $row) use ($actor, $members, $notes) {
             /** @var Member|null $member */
             $member = $members->get($row['member_id']);
             $noteRows = collect($notes->get($this->noteKey($row), []))
@@ -302,7 +304,7 @@ class FinanceAuditController extends Controller
                     'id' => $member->id,
                     'member_number' => $member->member_number,
                     'name' => $this->formatMemberName($member),
-                    'email' => BootstrapSuperadminPrivacy::maskEmailForViewer($request->user(), $member->email),
+                    'email' => BootstrapSuperadminPrivacy::maskEmailForViewer($actor, $member->email),
                 ] : null,
                 'contribution_id' => $row['contribution_id'],
                 'target_month' => $row['target_month'],
