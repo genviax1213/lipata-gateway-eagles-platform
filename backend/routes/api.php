@@ -107,6 +107,8 @@ Route::prefix('v1')->group(function () {
         Route::get('/formal-photos/me/image', [FormalPhotoController::class, 'showMineImage'])->name('formal-photos.my-image');
         Route::get('/formal-photos/directory', [FormalPhotoController::class, 'indexDirectory'])->name('formal-photos.directory');
         Route::get('/formal-photos/{formalPhoto}/image', [FormalPhotoController::class, 'showImage'])->name('formal-photos.show-image');
+        Route::get('/member-content/announcements', [PostController::class, 'memberAnnouncements']);
+        Route::get('/member-content/post/{slug}', [PostController::class, 'memberBySlug']);
         Route::get('/member-content/resolutions', [PostController::class, 'memberResolutions']);
 
         Route::get('/cms/posts', [PostController::class, 'index']);

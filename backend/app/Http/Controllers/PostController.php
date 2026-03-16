@@ -40,6 +40,9 @@ class PostController extends Controller
             ->where(function ($q) {
                 $q->whereNull('published_at')->orWhere('published_at', '<=', now());
             })
+            ->where(function ($q) {
+                $q->whereNull('announcement_audience')->orWhere('announcement_audience', 'public');
+            })
             ->latest('published_at')
             ->latest('id');
 
@@ -103,6 +106,9 @@ class PostController extends Controller
             ->where(function ($q) {
                 $q->whereNull('published_at')->orWhere('published_at', '<=', now());
             })
+            ->where(function ($q) {
+                $q->whereNull('announcement_audience')->orWhere('announcement_audience', 'public');
+            })
             ->latest('published_at')
             ->latest('id')
             ->get();
@@ -112,21 +118,14 @@ class PostController extends Controller
 
     public function publicAnnouncements()
     {
-        $limit = max(1, min(6, (int) request()->query('limit', 4)));
-        $posts = Post::query()
-            ->where('section', 'activities')
-            ->where('show_on_announcement_bar', true)
-            ->where('status', 'published')
-            ->where(function ($q) {
-                $q->whereNull('published_at')->orWhere('published_at', '<=', now());
-            })
-            ->where(function ($q) {
-                $q->whereNull('announcement_expires_at')->orWhere('announcement_expires_at', '>', now());
-            })
-            ->latest('published_at')
-            ->latest('id')
-            ->limit($limit)
-            ->get();
+        $posts = $this->announcementQuery(['public'])->get();
+
+        return response()->json($posts->map(fn (Post $post) => $this->transform($post)));
+    }
+
+    public function memberAnnouncements()
+    {
+        $posts = $this->announcementQuery(['public', 'members'])->get();
 
         return response()->json($posts->map(fn (Post $post) => $this->transform($post)));
     }
@@ -138,6 +137,30 @@ class PostController extends Controller
             ->where('status', 'published')
             ->where(function ($q) {
                 $q->whereNull('published_at')->orWhere('published_at', '<=', now());
+            })
+            ->where(function ($q) {
+                $q->whereNull('announcement_audience')->orWhere('announcement_audience', 'public');
+            })
+            ->firstOrFail();
+
+        if ($this->isMemberOnlySection($post->section)) {
+            abort(404);
+        }
+
+        return response()->json($this->transform($post));
+    }
+
+    public function memberBySlug(string $slug)
+    {
+        $post = Post::query()
+            ->where('slug', $slug)
+            ->where('status', 'published')
+            ->where(function ($q) {
+                $q->whereNull('published_at')->orWhere('published_at', '<=', now());
+            })
+            ->where(function ($q) {
+                $q->whereNull('announcement_audience')
+                    ->orWhereIn('announcement_audience', ['public', 'members']);
             })
             ->firstOrFail();
 
@@ -321,6 +344,7 @@ class PostController extends Controller
             'show_on_homepage_community' => 'sometimes|boolean',
             'show_on_announcement_bar' => 'sometimes|boolean',
             'announcement_text' => 'nullable|string|max:60',
+            'announcement_audience' => 'sometimes|in:public,members',
             'send_push_notification' => 'sometimes|boolean',
             'status' => 'required|in:draft,published',
             'published_at' => 'nullable|date',
@@ -401,6 +425,7 @@ class PostController extends Controller
             'show_on_homepage_community' => 'sometimes|boolean',
             'show_on_announcement_bar' => 'sometimes|boolean',
             'announcement_text' => 'nullable|string|max:60',
+            'announcement_audience' => 'sometimes|in:public,members',
             'send_push_notification' => 'sometimes|boolean',
             'status' => 'required|in:draft,published',
             'published_at' => 'nullable|date',
@@ -567,6 +592,7 @@ class PostController extends Controller
             'show_on_homepage_community' => (bool) $post->show_on_homepage_community,
             'show_on_announcement_bar' => (bool) $post->show_on_announcement_bar,
             'announcement_text' => $post->announcement_text,
+            'announcement_audience' => $post->announcement_audience ?: 'public',
             'announcement_expires_at' => optional($post->announcement_expires_at)?->toISOString(),
             'send_push_notification' => (bool) $post->send_push_notification,
             'push_notification_sent_at' => optional($post->push_notification_sent_at)?->toISOString(),
@@ -637,10 +663,14 @@ class PostController extends Controller
         $showOnAnnouncementBar = filter_var($validated['show_on_announcement_bar'] ?? false, FILTER_VALIDATE_BOOLEAN);
         $validated['show_on_announcement_bar'] = $showOnAnnouncementBar;
         $validated['announcement_text'] = trim((string) ($validated['announcement_text'] ?? '')) ?: null;
+        $validated['announcement_audience'] = ($validated['announcement_audience'] ?? 'public') === 'members'
+            ? 'members'
+            : 'public';
         $validated['send_push_notification'] = filter_var($validated['send_push_notification'] ?? false, FILTER_VALIDATE_BOOLEAN);
 
         if (!$showOnAnnouncementBar) {
             $validated['announcement_text'] = null;
+            $validated['announcement_audience'] = 'public';
             $validated['announcement_expires_at'] = null;
             $validated['send_push_notification'] = false;
             $validated['push_notification_sent_at'] = null;
@@ -670,6 +700,7 @@ class PostController extends Controller
     {
         $validated['show_on_announcement_bar'] = (bool) $post->show_on_announcement_bar;
         $validated['announcement_text'] = $post->announcement_text;
+        $validated['announcement_audience'] = $post->announcement_audience ?: 'public';
         $validated['announcement_expires_at'] = $post->announcement_expires_at;
         $validated['send_push_notification'] = (bool) $post->send_push_notification;
         $validated['push_notification_sent_at'] = $post->push_notification_sent_at;
@@ -1132,6 +1163,26 @@ class PostController extends Controller
     private function canManageAnnouncementSettings(Request $request): bool
     {
         return (bool) $request->user()?->can('create', Post::class);
+    }
+
+    private function announcementQuery(array $audiences)
+    {
+        $limit = max(1, min(6, (int) request()->query('limit', 4)));
+
+        return Post::query()
+            ->where('section', 'activities')
+            ->where('show_on_announcement_bar', true)
+            ->whereIn('announcement_audience', $audiences)
+            ->where('status', 'published')
+            ->where(function ($q) {
+                $q->whereNull('published_at')->orWhere('published_at', '<=', now());
+            })
+            ->where(function ($q) {
+                $q->whereNull('announcement_expires_at')->orWhere('announcement_expires_at', '>', now());
+            })
+            ->latest('published_at')
+            ->latest('id')
+            ->limit($limit);
     }
 
     private function canUpdatePost(Request $request, Post $post): bool

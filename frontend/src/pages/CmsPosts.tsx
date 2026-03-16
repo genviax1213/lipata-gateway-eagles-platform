@@ -48,6 +48,7 @@ type FormState = {
   show_on_homepage_community: boolean;
   show_on_announcement_bar: boolean;
   announcement_text: string;
+  announcement_audience: "public" | "members";
   send_push_notification: boolean;
   published_at: string;
   image: File | null;
@@ -123,6 +124,7 @@ const initialForm: FormState = {
   show_on_homepage_community: false,
   show_on_announcement_bar: false,
   announcement_text: "",
+  announcement_audience: "public",
   send_push_notification: false,
   published_at: "",
   image: null,
@@ -954,6 +956,7 @@ export default function CmsPosts() {
       show_on_homepage_community: post.show_on_homepage_community,
       show_on_announcement_bar: post.show_on_announcement_bar,
       announcement_text: post.announcement_text ?? "",
+      announcement_audience: post.announcement_audience ?? "public",
       send_push_notification: post.send_push_notification,
       published_at: toDateTimeLocal(post.published_at),
       image: null,
@@ -1010,6 +1013,7 @@ export default function CmsPosts() {
           ? {
               show_on_announcement_bar: form.show_on_announcement_bar ? 1 : 0,
               announcement_text: form.show_on_announcement_bar ? form.announcement_text : "",
+              announcement_audience: form.show_on_announcement_bar ? form.announcement_audience : "public",
               send_push_notification: form.show_on_announcement_bar && form.send_push_notification ? 1 : 0,
             }
           : {}),
@@ -1034,6 +1038,7 @@ export default function CmsPosts() {
         if (canManageAnnouncementSettings) {
           payload.append("show_on_announcement_bar", String(basePayload.show_on_announcement_bar));
           payload.append("announcement_text", basePayload.announcement_text ?? "");
+          payload.append("announcement_audience", basePayload.announcement_audience ?? "public");
           payload.append("send_push_notification", String(basePayload.send_push_notification));
         }
         if (basePayload.published_at) payload.append("published_at", basePayload.published_at);
@@ -1530,6 +1535,7 @@ export default function CmsPosts() {
                       ...prev,
                       show_on_announcement_bar: e.target.checked,
                       announcement_text: e.target.checked ? prev.announcement_text : "",
+                      announcement_audience: e.target.checked ? prev.announcement_audience : "public",
                       send_push_notification: e.target.checked ? prev.send_push_notification : false,
                     }))}
                   />
@@ -1555,6 +1561,20 @@ export default function CmsPosts() {
                       </span>
                       <span>{form.announcement_text.length}/60</span>
                     </div>
+                    <label className="block text-sm text-offwhite">
+                      <span className="mb-2 block text-mist/80">Announcement audience</span>
+                      <select
+                        value={form.announcement_audience}
+                        onChange={(e) => setForm((prev) => ({
+                          ...prev,
+                          announcement_audience: e.target.value === "members" ? "members" : "public",
+                        }))}
+                        className="w-full rounded-md border border-white/25 bg-white/10 px-4 py-2.5 text-offwhite"
+                      >
+                        <option value="public">Public only</option>
+                        <option value="members">Logged-in members too</option>
+                      </select>
+                    </label>
                     <label className="inline-flex items-center gap-2 text-sm text-offwhite">
                       <input
                         type="checkbox"

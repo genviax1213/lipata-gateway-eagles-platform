@@ -43,6 +43,30 @@ class CmsOwnershipAndHomepageVideoTest extends TestCase
             ->assertJsonPath('title', 'Secretary Post');
     }
 
+    public function test_secretary_can_create_members_only_announcement_option(): void
+    {
+        $secretaryRole = Role::query()->where('name', 'secretary')->firstOrFail();
+        $secretary = User::factory()->create([
+            'role_id' => $secretaryRole->id,
+            'email' => 'secretary-announcement-option@example.test',
+        ]);
+
+        Sanctum::actingAs($secretary);
+
+        $this->postJson('/api/v1/cms/posts', [
+            'title' => 'Members Announcement',
+            'section' => 'activities',
+            'excerpt' => 'Members only announcement.',
+            'content' => '<p>Members only announcement.</p>',
+            'status' => 'published',
+            'show_on_announcement_bar' => true,
+            'announcement_text' => 'Members notice',
+            'announcement_audience' => 'members',
+        ])->assertCreated()
+            ->assertJsonPath('show_on_announcement_bar', true)
+            ->assertJsonPath('announcement_audience', 'members');
+    }
+
     public function test_only_superadmin_admin_and_secretary_can_manage_resolutions_posts(): void
     {
         $authorRole = Role::query()->where('name', 'secretary')->firstOrFail();

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { useAuth } from "../contexts/useAuth";
 import api from "../services/api";
 import type { CmsPost } from "../types/cms";
 import { htmlToPlainText, sanitizeRichHtml } from "../utils/richText";
@@ -7,6 +8,7 @@ import { buildVideoThumbnailCandidates } from "../utils/video";
 
 export default function NewsArticle() {
   const { slug } = useParams();
+  const { user } = useAuth();
   const [post, setPost] = useState<CmsPost | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -30,7 +32,8 @@ export default function NewsArticle() {
       }
 
       try {
-        const res = await api.get(`/content/post/${slug}`);
+        const endpoint = user ? `/member-content/post/${slug}` : `/content/post/${slug}`;
+        const res = await api.get(endpoint);
         if (!mounted) return;
         setPost(res.data as CmsPost);
       } catch {
@@ -46,7 +49,7 @@ export default function NewsArticle() {
     return () => {
       mounted = false;
     };
-  }, [slug]);
+  }, [slug, user]);
 
   const backTo = post?.section === "history" ? "/history" : post?.section === "news" || post?.section === "activities" ? "/activities" : "/";
   const backLabel = post?.section === "history" ? "Back to History" : post?.section === "news" || post?.section === "activities" ? "Back to Activities" : "Back to Homepage";

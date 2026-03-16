@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { useAuth } from "../../contexts/useAuth";
 import api from "../../services/api";
 import type { CmsPost } from "../../types/cms";
 import { serializePushSubscription, urlBase64ToUint8Array } from "../../utils/pushNotifications";
@@ -31,6 +32,7 @@ function formatAnnouncementDate(value: string | null): string {
 }
 
 export default function AnnouncementBar() {
+  const { user } = useAuth();
   const [announcements, setAnnouncements] = useState<CmsPost[]>([]);
   const [pushConfig, setPushConfig] = useState<PushConfig | null>(null);
   const [pushEnabled, setPushEnabled] = useState(false);
@@ -50,7 +52,8 @@ export default function AnnouncementBar() {
 
     const load = async () => {
       try {
-        const announcementsResponse = await api.get<CmsPost[]>("/content/announcements", { params: { limit: 4 } });
+        const endpoint = user ? "/member-content/announcements" : "/content/announcements";
+        const announcementsResponse = await api.get<CmsPost[]>(endpoint, { params: { limit: 4 } });
 
         if (!active) return;
 
@@ -89,7 +92,7 @@ export default function AnnouncementBar() {
     return () => {
       active = false;
     };
-  }, [supportsBrowserPush]);
+  }, [supportsBrowserPush, user]);
 
   const items = useMemo<AnnouncementItem[]>(() => (
     announcements.map((post) => ({
@@ -194,7 +197,7 @@ export default function AnnouncementBar() {
             <span className="rounded-full border border-gold/35 bg-gold/10 px-2.5 py-1 font-semibold uppercase tracking-[0.18em] text-gold-soft">
               Announcements
             </span>
-            <span>Watch this space for new events, notices, and public updates.</span>
+            <span>No announcement</span>
           </div>
           {supportsBrowserPush && pushConfig?.enabled && (
             <button

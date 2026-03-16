@@ -105,6 +105,41 @@ class PublicContentSectionsTest extends TestCase
             ->assertJsonPath('0.video_thumbnail_text', 'Anniversary recap');
     }
 
+    public function test_public_activities_feed_hides_members_only_announcement_articles(): void
+    {
+        $author = User::factory()->create();
+
+        Post::query()->create([
+            'title' => 'Public Activity',
+            'slug' => 'public-activity',
+            'section' => 'activities',
+            'excerpt' => 'Public',
+            'content' => '<p>Public</p>',
+            'status' => 'published',
+            'published_at' => now()->subMinute(),
+            'author_id' => $author->id,
+        ]);
+
+        Post::query()->create([
+            'title' => 'Members Activity',
+            'slug' => 'members-activity',
+            'section' => 'activities',
+            'excerpt' => 'Members',
+            'content' => '<p>Members</p>',
+            'status' => 'published',
+            'show_on_announcement_bar' => true,
+            'announcement_text' => 'Members only',
+            'announcement_audience' => 'members',
+            'published_at' => now()->subMinute(),
+            'author_id' => $author->id,
+        ]);
+
+        $this->getJson('/api/v1/content/activities')
+            ->assertOk()
+            ->assertJsonMissing(['slug' => 'members-activity'])
+            ->assertJsonFragment(['slug' => 'public-activity']);
+    }
+
     public function test_public_announcements_endpoint_returns_only_active_flagged_activity_posts(): void
     {
         $author = User::factory()->create();
@@ -117,6 +152,7 @@ class PublicContentSectionsTest extends TestCase
             'content' => '<p>Assembly notice.</p>',
             'announcement_text' => 'General assembly tonight',
             'show_on_announcement_bar' => true,
+            'announcement_audience' => 'public',
             'status' => 'published',
             'published_at' => now()->subHour(),
             'announcement_expires_at' => now()->addWeek(),
@@ -131,6 +167,7 @@ class PublicContentSectionsTest extends TestCase
             'content' => '<p>Expired.</p>',
             'announcement_text' => 'Expired',
             'show_on_announcement_bar' => true,
+            'announcement_audience' => 'public',
             'status' => 'published',
             'published_at' => now()->subDays(10),
             'announcement_expires_at' => now()->subMinute(),
@@ -145,6 +182,22 @@ class PublicContentSectionsTest extends TestCase
             'content' => '<p>Wrong section.</p>',
             'announcement_text' => 'Wrong section',
             'show_on_announcement_bar' => true,
+            'announcement_audience' => 'public',
+            'status' => 'published',
+            'published_at' => now()->subHour(),
+            'announcement_expires_at' => now()->addWeek(),
+            'author_id' => $author->id,
+        ]);
+
+        Post::query()->create([
+            'title' => 'Members Notice',
+            'slug' => 'members-notice',
+            'section' => 'activities',
+            'excerpt' => 'Members only.',
+            'content' => '<p>Members only.</p>',
+            'announcement_text' => 'Private alert',
+            'show_on_announcement_bar' => true,
+            'announcement_audience' => 'members',
             'status' => 'published',
             'published_at' => now()->subHour(),
             'announcement_expires_at' => now()->addWeek(),
@@ -156,7 +209,90 @@ class PublicContentSectionsTest extends TestCase
             ->assertJsonCount(1)
             ->assertJsonPath('0.id', $visible->id)
             ->assertJsonPath('0.show_on_announcement_bar', true)
-            ->assertJsonPath('0.announcement_text', 'General assembly tonight');
+            ->assertJsonPath('0.announcement_text', 'General assembly tonight')
+            ->assertJsonMissing(['announcement_text' => 'Private alert']);
+    }
+
+    public function test_authenticated_member_announcements_include_members_only_items(): void
+    {
+        $author = User::factory()->create();
+        $memberRole = Role::query()->where('name', 'member')->firstOrFail();
+        $member = User::factory()->create([
+            'role_id' => $memberRole->id,
+            'email' => 'announcement-member@example.test',
+        ]);
+
+        Post::query()->create([
+            'title' => 'Public Reminder',
+            'slug' => 'public-reminder',
+            'section' => 'activities',
+            'excerpt' => 'Public.',
+            'content' => '<p>Public.</p>',
+            'announcement_text' => 'Public alert',
+            'show_on_announcement_bar' => true,
+            'announcement_audience' => 'public',
+            'status' => 'published',
+            'published_at' => now()->subHour(),
+            'announcement_expires_at' => now()->addWeek(),
+            'author_id' => $author->id,
+        ]);
+
+        $private = Post::query()->create([
+            'title' => 'Members Reminder',
+            'slug' => 'members-reminder',
+            'section' => 'activities',
+            'excerpt' => 'Members.',
+            'content' => '<p>Members.</p>',
+            'announcement_text' => 'Members alert',
+            'show_on_announcement_bar' => true,
+            'announcement_audience' => 'members',
+            'status' => 'published',
+            'published_at' => now()->subMinute(),
+            'announcement_expires_at' => now()->addWeek(),
+            'author_id' => $author->id,
+        ]);
+
+        Sanctum::actingAs($member);
+
+        $this->getJson('/api/v1/member-content/announcements')
+            ->assertOk()
+            ->assertJsonCount(2)
+            ->assertJsonPath('0.id', $private->id)
+            ->assertJsonPath('0.announcement_audience', 'members');
+    }
+
+    public function test_members_only_announcement_article_is_hidden_from_public_but_available_to_authenticated_member(): void
+    {
+        $author = User::factory()->create();
+        $memberRole = Role::query()->where('name', 'member')->firstOrFail();
+        $member = User::factory()->create([
+            'role_id' => $memberRole->id,
+            'email' => 'private-article-member@example.test',
+        ]);
+
+        Post::query()->create([
+            'title' => 'Members Activity Article',
+            'slug' => 'members-activity-article',
+            'section' => 'activities',
+            'excerpt' => 'Members only article.',
+            'content' => '<p>Members only article.</p>',
+            'announcement_text' => 'Members article',
+            'show_on_announcement_bar' => true,
+            'announcement_audience' => 'members',
+            'status' => 'published',
+            'published_at' => now()->subMinute(),
+            'announcement_expires_at' => now()->addWeek(),
+            'author_id' => $author->id,
+        ]);
+
+        $this->getJson('/api/v1/content/post/members-activity-article')->assertNotFound();
+
+        Sanctum::actingAs($member);
+
+        $this->getJson('/api/v1/member-content/post/members-activity-article')
+            ->assertOk()
+            ->assertJsonPath('slug', 'members-activity-article')
+            ->assertJsonPath('announcement_audience', 'members');
     }
 
     public function test_public_schedules_endpoint_returns_upcoming_calendar_entries(): void
