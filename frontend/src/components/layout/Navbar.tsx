@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { MouseEvent as ReactMouseEvent } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
+import { useAuth } from "../../contexts/useAuth";
 
 type NavLeaf = {
   label: string;
@@ -36,10 +38,12 @@ const navGroups: NavGroup[] = [
 ];
 
 export default function Navbar() {
+  const { user } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [openGroup, setOpenGroup] = useState<string | null>(null);
   const location = useLocation();
   const desktopNavRef = useRef<HTMLDivElement | null>(null);
+  const isLoggedIn = Boolean(user);
 
   const activeGroup = useMemo(() => (
     navGroups.find((group) => group.items.some((item) => location.pathname === item.to))?.label ?? null
@@ -54,6 +58,25 @@ export default function Navbar() {
     `block rounded-md px-3 py-2 text-sm transition ${
       isActive ? "bg-gold/15 text-gold" : "text-offwhite/90 hover:bg-white/5 hover:text-gold"
     }`;
+
+  const goHomeWithReload = (event: ReactMouseEvent<HTMLAnchorElement>) => {
+    if (!isLoggedIn) {
+      setMobileOpen(false);
+      setOpenGroup(null);
+      return;
+    }
+
+    event.preventDefault();
+    setMobileOpen(false);
+    setOpenGroup(null);
+
+    if (window.location.pathname === "/") {
+      window.location.reload();
+      return;
+    }
+
+    window.location.assign("/");
+  };
 
   useEffect(() => {
     const handlePointerDown = (event: MouseEvent) => {
@@ -83,6 +106,7 @@ export default function Navbar() {
         <div className="md:hidden">
           <Link
             to="/"
+            onClick={goHomeWithReload}
             className="mx-auto flex w-full max-w-[42rem] items-center justify-center gap-2 text-center font-heading text-sm tracking-wide text-offwhite sm:text-base"
           >
             <img
@@ -120,6 +144,7 @@ export default function Navbar() {
         <div className="hidden items-center justify-center md:flex">
           <Link
             to="/"
+            onClick={goHomeWithReload}
             className="flex items-center justify-center gap-3 font-heading text-lg tracking-wide text-offwhite lg:text-2xl"
           >
             <img
@@ -137,7 +162,7 @@ export default function Navbar() {
         </div>
 
         <div ref={desktopNavRef} className="hidden items-center justify-center gap-2 pt-2 md:flex">
-          <NavLink to="/" className={navItem} end>Home</NavLink>
+          <NavLink to="/" className={navItem} end onClick={goHomeWithReload}>Home</NavLink>
           {navGroups.map((group) => (
             <div key={group.label} className="relative">
               <button
@@ -170,7 +195,7 @@ export default function Navbar() {
         {mobileOpen && (
           <div className="absolute left-0 right-0 top-full z-50 mt-2 rounded-lg border border-white/20 bg-ink/95 p-3 shadow-[0_14px_30px_rgba(2,6,23,0.5)] md:hidden">
             <div className="flex flex-col gap-1">
-              <NavLink to="/" onClick={() => setMobileOpen(false)} className={navItem} end>
+              <NavLink to="/" onClick={goHomeWithReload} className={navItem} end>
                 Home
               </NavLink>
               {navGroups.map((group) => (

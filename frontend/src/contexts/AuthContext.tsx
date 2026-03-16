@@ -186,6 +186,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.removeItem(AUTH_USER_CACHE_KEY);
     }
     setUser(res.data.user);
+    await syncUserSession(false);
     setLastActivityAt(Date.now());
   };
 

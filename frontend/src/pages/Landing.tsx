@@ -2,7 +2,6 @@ import { Link } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
 import api from "../services/api";
 import type { CmsPost } from "../types/cms";
-import { useAuth } from "../contexts/useAuth";
 import { htmlToPlainText } from "../utils/richText";
 import { canonicalRoutes } from "../content/portalCopy";
 import HeroFeatureCard from "../components/landing/HeroFeatureCard";
@@ -13,7 +12,6 @@ import HomepageReputationVideo, {
 
 const HERO_CACHE_KEY = "landing:homepage-hero";
 const HERO_CACHE_MAX_AGE_MS = 10 * 60 * 1000;
-const MEMBER_HOME_REFRESH_KEY = "landing:member-home-refresh";
 
 type HeroCachePayload = {
   savedAt: number;
@@ -137,8 +135,6 @@ function writeHeroCache(posts: CmsPost[]): void {
 }
 
 export default function Landing() {
-  const { user } = useAuth();
-  const hasMemberProfile = Boolean((user as { has_member_profile?: unknown } | null)?.has_member_profile);
   const cachedHeroPosts = useMemo(() => readHeroCache(), []);
   const [heroPosts, setHeroPosts] = useState<CmsPost[]>(cachedHeroPosts);
   const [heroPost, setHeroPost] = useState<CmsPost | null>(() => selectInitialHeroPost(cachedHeroPosts));
@@ -159,21 +155,6 @@ export default function Landing() {
   const heroContentPreview = heroPost?.content
     ? htmlToPlainText(heroPost.content).replace(/\s+/g, " ").trim()
     : "";
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    if (!hasMemberProfile) {
-      window.sessionStorage.removeItem(MEMBER_HOME_REFRESH_KEY);
-      return;
-    }
-
-    const refreshMarker = window.sessionStorage.getItem(MEMBER_HOME_REFRESH_KEY);
-    if (refreshMarker === "1") return;
-
-    window.sessionStorage.setItem(MEMBER_HOME_REFRESH_KEY, "1");
-    window.location.reload();
-  }, [hasMemberProfile]);
 
   useEffect(() => {
     let mounted = true;
