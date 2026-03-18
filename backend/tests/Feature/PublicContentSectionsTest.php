@@ -430,6 +430,59 @@ class PublicContentSectionsTest extends TestCase
             ->assertJsonPath('data.0.location', 'City Plaza');
     }
 
+    public function test_public_schedules_endpoint_serializes_local_calendar_times_as_correct_utc_iso(): void
+    {
+        $creator = User::factory()->create();
+
+        $event = CalendarEvent::query()->create([
+            'title' => 'Morning Planning Session',
+            'event_type' => 'meeting',
+            'starts_at' => '2026-03-21 08:00:00',
+            'ends_at' => '2026-03-21 10:30:00',
+            'location' => 'Clubhouse',
+            'description' => 'Planning agenda.',
+            'created_by_user_id' => $creator->id,
+            'updated_by_user_id' => $creator->id,
+        ]);
+
+        $this->getJson('/api/v1/content/schedules')
+            ->assertOk()
+            ->assertJsonFragment([
+                'id' => $event->id,
+                'starts_at' => '2026-03-21T00:00:00.000000Z',
+                'ends_at' => '2026-03-21T02:30:00.000000Z',
+            ]);
+    }
+
+    public function test_calendar_store_normalizes_iso_input_to_manila_local_storage_and_preserves_payload(): void
+    {
+        $secretaryRole = Role::query()->where('name', 'secretary')->firstOrFail();
+        $secretary = User::factory()->create([
+            'role_id' => $secretaryRole->id,
+        ]);
+
+        Sanctum::actingAs($secretary);
+
+        $this->postJson('/api/v1/calendar/events', [
+            'title' => 'Created Through Api',
+            'event_type' => 'event',
+            'starts_at' => '2026-03-21T00:00:00.000Z',
+            'ends_at' => '2026-03-21T02:00:00.000Z',
+            'location' => 'Main Hall',
+            'description' => 'Created from automated test.',
+        ])
+            ->assertCreated()
+            ->assertJsonPath('event.starts_at', '2026-03-21T00:00:00.000000Z')
+            ->assertJsonPath('event.ends_at', '2026-03-21T02:00:00.000000Z');
+
+        $this->assertDatabaseHas('calendar_events', [
+            'title' => 'Created Through Api',
+            'starts_at' => '2026-03-21 08:00:00',
+            'ends_at' => '2026-03-21 10:00:00',
+            'location' => 'Main Hall',
+        ]);
+    }
+
     public function test_contact_inquiry_notifies_superadmins_admins_secretaries_and_officers(): void
     {
         Notification::fake();
