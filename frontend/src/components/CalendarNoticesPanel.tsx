@@ -26,8 +26,26 @@ interface CalendarNoticesPanelProps {
 function toLocalDateTimeInput(value?: string | null): string {
   if (!value) return "";
   const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
   const tzOffset = date.getTimezoneOffset() * 60_000;
   return new Date(date.getTime() - tzOffset).toISOString().slice(0, 16);
+}
+
+function localDateTimeInputToIso(value?: string | null): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString();
+}
+
+function localDateKeyFromIso(value?: string | null): string {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function monthKey(date: Date): string {
@@ -81,8 +99,8 @@ export default function CalendarNoticesPanel({ canManage, onNotice, onError }: C
     return Array.from({ length: 42 }, (_, index) => {
       const date = new Date(start);
       date.setDate(start.getDate() + index);
-      const iso = date.toISOString().slice(0, 10);
-      const dayEvents = events.filter((event) => event.starts_at.slice(0, 10) === iso);
+      const iso = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+      const dayEvents = events.filter((event) => localDateKeyFromIso(event.starts_at) === iso);
 
       return {
         iso,
@@ -111,10 +129,29 @@ export default function CalendarNoticesPanel({ canManage, onNotice, onError }: C
   };
 
   const saveEvent = async () => {
+    const startsAt = localDateTimeInputToIso(form.starts_at);
+    const endsAt = localDateTimeInputToIso(form.ends_at);
+
+    if (!startsAt) {
+      onError("Choose a valid start date and time.");
+      return;
+    }
+
+    if (form.ends_at && !endsAt) {
+      onError("Choose a valid end date and time.");
+      return;
+    }
+
+    if (startsAt && endsAt && new Date(endsAt).getTime() < new Date(startsAt).getTime()) {
+      onError("End date and time must be after the start date and time.");
+      return;
+    }
+
     try {
       const payload = {
         ...form,
-        ends_at: form.ends_at || null,
+        starts_at: startsAt,
+        ends_at: endsAt,
         location: form.location.trim() || null,
         description: form.description.trim() || null,
       };
