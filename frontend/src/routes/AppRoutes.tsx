@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "../contexts/AuthContext";
 import ProtectedRoute from "./ProtectedRoute";
 import GuestRoute from "./GuestRoute";
+import VisitorTracker from "../components/VisitorTracker";
 
 const Login = lazy(() => import("../pages/Login"));
 const Landing = lazy(() => import("../pages/Landing"));
@@ -26,6 +27,7 @@ const UserRoles = lazy(() => import("../pages/UserRoles"));
 const Forum = lazy(() => import("../pages/Forum"));
 const SecuritySettings = lazy(() => import("../pages/SecuritySettings"));
 const Logs = lazy(() => import("../pages/Logs"));
+const Visitors = lazy(() => import("../pages/Visitors"));
 const Layout = lazy(() => import("../components/layout/Layout"));
 const AdminLayout = lazy(() => import("../components/layout/AdminLayout"));
 
@@ -33,6 +35,7 @@ export default function AppRoutes() {
   return (
     <BrowserRouter>
       <AuthProvider>
+        <VisitorTracker />
         <Suspense fallback={<div className="px-4 py-8 text-sm text-mist/80">Loading page...</div>}>
           <Routes>
 
@@ -195,6 +198,17 @@ export default function AppRoutes() {
               <ProtectedRoute>
                 <AdminLayout>
                   <Logs />
+                </AdminLayout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/portal/visitors"
+            element={
+              <ProtectedRoute>
+                <AdminLayout>
+                  <Visitors />
                 </AdminLayout>
               </ProtectedRoute>
             }

@@ -25,6 +25,7 @@ use App\Http\Controllers\DirectoryExportController;
 use App\Http\Controllers\HomepageVideoController;
 use App\Http\Controllers\ContactInquiryController;
 use App\Http\Controllers\PushSubscriptionController;
+use App\Http\Controllers\VisitorAnalyticsController;
 use App\Models\Post;
 
 Route::prefix('v1')->group(function () {
@@ -40,6 +41,8 @@ Route::prefix('v1')->group(function () {
     Route::delete('/notifications/push/subscriptions', [PushSubscriptionController::class, 'destroy']);
     Route::post('/contact/inquiries', [ContactInquiryController::class, 'store'])
         ->middleware('throttle:6,1');
+    Route::post('/visitor-analytics/track', [VisitorAnalyticsController::class, 'track'])
+        ->middleware('throttle:120,1');
     Route::post('/applicant-registrations', [ApplicantController::class, 'submit'])
         ->middleware('throttle:application-submit');
     Route::post('/applicant-registrations/reapply', [ApplicantController::class, 'reapply'])
@@ -89,6 +92,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/admin/logs/archives/{archive}/content', [LogManagementController::class, 'archiveContent'])->middleware('portal.permission:users.view');
         Route::get('/admin/logs/archives/{archive}/download', [LogManagementController::class, 'downloadArchive'])->middleware('portal.permission:users.view');
         Route::delete('/admin/logs/archives/{archive}', [LogManagementController::class, 'deleteArchive'])->middleware('portal.permission:users.manage');
+        Route::get('/admin/visitors/overview', [VisitorAnalyticsController::class, 'overview'])->middleware('portal.permission:users.view');
         Route::get('/dashboard/me', [DashboardController::class, 'me']);
         Route::get('/identity/my-qr', [IdentityQrController::class, 'showMine'])->middleware('portal.permission:identity.qr.view');
         Route::get('/calendar/events', [CalendarEventController::class, 'index'])->middleware('portal.permission:calendar.view');

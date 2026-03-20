@@ -82,6 +82,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const showRoleDelegation = isAdminUser(user) || hasPermission(user, "roles.delegate");
   const canViewMembers = isAdminUser(user) || roleName === "membership_chairman";
   const canViewLogs = isAdminUser(user);
+  const canViewVisitors = isAdminUser(user) || hasPermission(user, "users.view");
   const canViewApplicantList = hasPermission(user, "applications.view") || hasPermission(user, "applications.review");
   const canOpenMembersSection = canViewMembers || canViewApplicantList;
   const canManageCmsPosts = canReachCms(user);
@@ -128,10 +129,11 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       { to: "/portal/forum", label: "Forum", icon: "forum", show: canViewForum },
       { to: "/portal/posts", label: hasFullCmsAccess ? "CMS Posts" : "My Posts", icon: "cms", show: canManageCmsPosts },
       { to: "/portal/user-roles", label: "User Roles", icon: "roles", show: showRoleDelegation },
+      { to: "/portal/visitors", label: "Visitors", icon: "visitors", show: canViewVisitors },
       { to: "/portal/logs", label: "Logs", icon: "logs", show: canViewLogs },
       { to: "/portal/security", label: "Security Settings", icon: "security", show: true },
     ],
-    [canManageCmsPosts, canOpenMembersSection, canViewFinance, canViewForum, canViewLogs, hasFullCmsAccess, showRoleDelegation],
+    [canManageCmsPosts, canOpenMembersSection, canViewFinance, canViewForum, canViewLogs, canViewVisitors, hasFullCmsAccess, showRoleDelegation],
   );
 
   const renderIcon = (icon: string) => {
@@ -154,6 +156,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         return <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current stroke-2"><path d="M12 3l7 4v5c0 4.5-2.8 8.2-7 9-4.2-.8-7-4.5-7-9V7z" /><path d="M9 12a3 3 0 0 1 6 0v2H9z" /><path d="M10 12v-1a2 2 0 1 1 4 0v1" /></svg>;
       case "logs":
         return <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current stroke-2"><path d="M5 4h14v16H5z" /><path d="M8 8h8M8 12h8M8 16h5" /></svg>;
+      case "visitors":
+        return <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current stroke-2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>;
       case "logout":
         return <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current stroke-2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="M16 17l5-5-5-5" /><path d="M21 12H9" /></svg>;
       default:
