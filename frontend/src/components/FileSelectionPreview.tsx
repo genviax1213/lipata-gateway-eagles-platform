@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 interface FileSelectionPreviewProps {
   id: string;
@@ -33,10 +33,7 @@ export default function FileSelectionPreview({
   onChange,
   onClear,
 }: FileSelectionPreviewProps) {
-  const previewUrl = useMemo(() => {
-    if (!file || !isImageFile(file)) return null;
-    return URL.createObjectURL(file);
-  }, [file]);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   const extensionLabel = useMemo(() => {
     if (!file) return "";
@@ -45,10 +42,24 @@ export default function FileSelectionPreview({
   }, [file]);
 
   useEffect(() => {
+    if (!file || !isImageFile(file)) {
+      setPreviewUrl((current) => {
+        if (current) URL.revokeObjectURL(current);
+        return null;
+      });
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(file);
+    setPreviewUrl((current) => {
+      if (current) URL.revokeObjectURL(current);
+      return objectUrl;
+    });
+
     return () => {
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      URL.revokeObjectURL(objectUrl);
     };
-  }, [previewUrl]);
+  }, [file]);
 
   return (
     <div className="w-full rounded-xl border border-white/15 bg-white/5 p-3">

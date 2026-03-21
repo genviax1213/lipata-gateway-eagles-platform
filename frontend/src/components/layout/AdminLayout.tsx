@@ -409,15 +409,16 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       </div>
 
       {requiresDataPrivacyAcknowledgement && (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-ink/85 px-4 py-6 backdrop-blur-sm">
-          <div className="w-full max-w-3xl rounded-2xl border border-gold/30 bg-[#091729] p-5 text-offwhite shadow-[0_24px_80px_rgba(2,6,23,0.65)] md:p-7">
+        <div className="fixed inset-0 z-[90] overflow-y-auto bg-ink/85 px-4 py-6 backdrop-blur-sm">
+          <div className="flex min-h-full items-start justify-center">
+            <div className="flex max-h-[calc(100vh-3rem)] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-gold/30 bg-[#091729] p-5 text-offwhite shadow-[0_24px_80px_rgba(2,6,23,0.65)] md:p-7">
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-gold-soft">Required Before Continuing</p>
             <h2 className="mt-2 font-heading text-3xl text-offwhite">{dataPrivacyNoticeCopy.title}</h2>
             <p className="mt-2 text-sm text-mist/80">
               This acknowledgement is required once for every existing or newly activated portal user who has not yet confirmed the current notice version.
             </p>
 
-            <div className="mt-5">
+            <div className="mt-5 min-h-0 flex-1 overflow-y-auto pr-1">
               <DataPrivacyNoticeBlock
                 checked={privacyChecked}
                 onChange={setPrivacyChecked}
@@ -449,6 +450,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
                 {privacySubmitting ? "Saving..." : dataPrivacyNoticeCopy.submitLabel}
               </button>
             </div>
+          </div>
           </div>
         </div>
       )}

@@ -40,19 +40,30 @@ export default function FormalPhotoCard({
   const [securePreviewUrl, setSecurePreviewUrl] = useState<string | null>(null);
   const [previewFailed, setPreviewFailed] = useState(false);
   const [optimisticPreviewUrl, setOptimisticPreviewUrl] = useState<string | null>(null);
+  const [selectedPreviewUrl, setSelectedPreviewUrl] = useState<string | null>(null);
 
-  const selectedPreviewUrl = useMemo(
-    () => (sourceFile ? URL.createObjectURL(sourceFile) : null),
-    [sourceFile],
-  );
   const savedPhotoUrl = useMemo(() => resolveFormalPhotoImageUrl(formalPhoto), [formalPhoto]);
   const visiblePreviewUrl = selectedPreviewUrl ?? optimisticPreviewUrl ?? securePreviewUrl;
 
   useEffect(() => {
+    if (!sourceFile) {
+      setSelectedPreviewUrl((current) => {
+        if (current) URL.revokeObjectURL(current);
+        return null;
+      });
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(sourceFile);
+    setSelectedPreviewUrl((current) => {
+      if (current) URL.revokeObjectURL(current);
+      return objectUrl;
+    });
+
     return () => {
-      if (selectedPreviewUrl) URL.revokeObjectURL(selectedPreviewUrl);
+      URL.revokeObjectURL(objectUrl);
     };
-  }, [selectedPreviewUrl]);
+  }, [sourceFile]);
 
   useEffect(() => {
     return () => {
