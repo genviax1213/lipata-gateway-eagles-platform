@@ -24,7 +24,7 @@ export default function Resolutions() {
         const res = await api.get<PaginatedResolutionResponse>("/member-content/resolutions", {
           params: {
             page,
-            per_page: 4,
+            per_page: 6,
           },
         });
 
@@ -74,9 +74,9 @@ export default function Resolutions() {
 
       {posts.length > 0 && (
         <>
-          <div className="space-y-6">
+          <div className="grid gap-6 md:grid-cols-3">
             {posts.map((post) => (
-              <article key={post.id} className="article-shell reveal overflow-hidden">
+              <article key={post.id} className="article-shell reveal h-full overflow-hidden">
                 <div className="article-shell__inner p-6 md:p-8">
                   <header className="article-hero">
                     <div className="flex flex-wrap items-start justify-between gap-3">
