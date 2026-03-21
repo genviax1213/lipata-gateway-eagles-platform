@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Member;
+use App\Models\FormalPhoto;
 use App\Models\Role;
 use App\Models\User;
 use App\Models\ApplicantDocument;
@@ -448,3 +449,56 @@ Artisan::command('members:import-json {path : Source JSON path (absolute or rela
 
     return 0;
 })->purpose('Import members-only dataset and optionally sync users/member links without touching temp accounts');
+
+Artisan::command('formal-photos:audit {--missing-only : Show only rows whose backing file is missing}', function () {
+    $missingOnly = (bool) $this->option('missing-only');
+
+    $rows = FormalPhoto::query()
+        ->with('user:id,email')
+        ->orderBy('id')
+        ->get()
+        ->map(function (FormalPhoto $photo): array {
+            $disk = $photo->disk ?: 'local';
+            $exists = $photo->file_path
+                ? Storage::disk($disk)->exists($photo->file_path)
+                : false;
+
+            return [
+                'id' => $photo->id,
+                'user_id' => $photo->user_id,
+                'email' => $photo->user?->email ?? 'unknown',
+                'disk' => $disk,
+                'exists' => $exists ? 'yes' : 'no',
+                'updated_at' => optional($photo->updated_at)?->toDateTimeString() ?? 'n/a',
+                'file_path' => (string) $photo->file_path,
+            ];
+        });
+
+    if ($missingOnly) {
+        $rows = $rows->filter(fn (array $row): bool => $row['exists'] === 'no')->values();
+    }
+
+    if ($rows->isEmpty()) {
+        $this->info($missingOnly ? 'No missing formal-photo files found.' : 'No formal-photo records found.');
+        return 0;
+    }
+
+    $this->table(
+        ['ID', 'User ID', 'Email', 'Disk', 'Exists', 'Updated At', 'File Path'],
+        $rows->map(fn (array $row): array => [
+            $row['id'],
+            $row['user_id'],
+            $row['email'],
+            $row['disk'],
+            $row['exists'],
+            $row['updated_at'],
+            $row['file_path'],
+        ])->all()
+    );
+
+    $missingCount = $rows->where('exists', 'no')->count();
+    $this->line("Total rows: {$rows->count()}");
+    $this->line("Missing files: {$missingCount}");
+
+    return $missingCount > 0 ? 1 : 0;
+})->purpose('Audit formal-photo records against host storage');

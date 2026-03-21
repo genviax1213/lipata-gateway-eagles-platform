@@ -77,11 +77,11 @@ export default function MemberDetailModal({ member, onClose, showAccountDetails 
           <div className="grid gap-6 lg:grid-cols-[220px_1fr]">
             <div className="space-y-4">
               <div className="rounded-xl border border-white/15 bg-white/5 p-4">
-                {member.formal_photo?.image_url ? (
+                {member.formal_photo?.image_url && member.formal_photo.status !== "missing_file" ? (
                   <img src={member.formal_photo.image_url} alt={`${fullName} formal photo`} className="aspect-[4/5] w-full rounded-lg object-cover" />
                 ) : (
                   <div className="flex aspect-[4/5] w-full items-center justify-center rounded-lg border border-dashed border-white/15 text-sm text-mist/70">
-                    No formal photo
+                    {member.formal_photo?.status === "missing_file" ? "Photo file missing" : "No formal photo"}
                   </div>
                 )}
               </div>

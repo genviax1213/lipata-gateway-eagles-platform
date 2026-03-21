@@ -219,6 +219,46 @@ class FormalPhotoFeatureTest extends TestCase
             ->assertJsonPath('formal_photo', null);
     }
 
+    public function test_formal_photo_payload_reports_missing_file_status_when_row_exists_but_file_is_gone(): void
+    {
+        $owner = $this->memberUser('formal-missing@example.com');
+        $member = $this->memberProfile($owner, 'M-FORMAL-005');
+        $photo = FormalPhoto::query()->create([
+            'user_id' => $owner->id,
+            'disk' => 'local',
+            'file_path' => 'formal-photos/' . $owner->id . '/missing.webp',
+            'mime_type' => 'image/webp',
+            'file_size' => 1024,
+            'width' => 480,
+            'height' => 640,
+            'template_key' => 'missing-template',
+        ]);
+
+        Sanctum::actingAs($owner);
+
+        $this->getJson('/api/v1/formal-photos/me')
+            ->assertOk()
+            ->assertJsonPath('formal_photo.id', $photo->id)
+            ->assertJsonPath('formal_photo.status', 'missing_file')
+            ->assertJsonPath('formal_photo.file_exists', false);
+
+        $this->getJson('/api/v1/dashboard/me')
+            ->assertOk()
+            ->assertJsonPath('formal_photo.id', $photo->id)
+            ->assertJsonPath('formal_photo.status', 'missing_file')
+            ->assertJsonPath('formal_photo.file_exists', false);
+
+        $secretaryRole = Role::query()->where('name', 'secretary')->firstOrFail();
+        $secretary = User::factory()->create(['role_id' => $secretaryRole->id]);
+        Sanctum::actingAs($secretary);
+
+        $this->getJson("/api/v1/members/{$member->id}/formal-photo")
+            ->assertOk()
+            ->assertJsonPath('formal_photo.id', $photo->id)
+            ->assertJsonPath('formal_photo.status', 'missing_file')
+            ->assertJsonPath('formal_photo.file_exists', false);
+    }
+
     private function memberUser(string $email): User
     {
         $memberRole = Role::query()->where('name', 'member')->firstOrFail();

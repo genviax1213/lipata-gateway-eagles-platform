@@ -46,6 +46,11 @@ class FormalPhoto extends Model
 
     public function toMetadataArray(bool $includeOwnerRoute = false): array
     {
+        $disk = $this->disk ?: 'local';
+        $fileExists = $this->file_path
+            ? Storage::disk($disk)->exists($this->file_path)
+            : false;
+
         $payload = [
             'id' => $this->id,
             'mime_type' => $this->mime_type,
@@ -53,7 +58,8 @@ class FormalPhoto extends Model
             'width' => $this->width,
             'height' => $this->height,
             'template_key' => $this->template_key,
-            'status' => 'saved',
+            'status' => $fileExists ? 'saved' : 'missing_file',
+            'file_exists' => $fileExists,
             'created_at' => optional($this->created_at)?->toJSON(),
             'updated_at' => optional($this->updated_at)?->toJSON(),
             'image_url' => route('formal-photos.show-image', ['formalPhoto' => $this->id], false),

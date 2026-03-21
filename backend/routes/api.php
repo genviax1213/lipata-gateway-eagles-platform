@@ -87,6 +87,7 @@ Route::prefix('v1')->group(function () {
         });
         Route::post('/logout', [AuthController::class, 'logout']);
         Route::post('/auth/data-privacy/acknowledge', [DataPrivacyNoticeController::class, 'acknowledge']);
+        Route::post('/auth/activity', [AuthController::class, 'activity']);
         Route::post('/auth/change-password', [AuthController::class, 'changePassword']);
         Route::get('/auth/sessions', [AuthController::class, 'sessions']);
         Route::delete('/auth/sessions/{tokenId}', [AuthController::class, 'revokeSession']);

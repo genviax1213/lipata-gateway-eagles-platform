@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import axios from "axios";
 import api, { ensureCsrfCookie, shouldUseLegacyTokenMode } from "../services/api";
@@ -10,6 +10,7 @@ const AUTH_USER_CACHE_KEY = "auth_user_cache";
 const AUTH_NOTICE_KEY = "portal_auth_notice";
 const SESSION_HEARTBEAT_MS = 45_000;
 const PRIVILEGED_IDLE_TIMEOUT_MS = 10 * 60 * 1000;
+const SERVER_ACTIVITY_SYNC_THROTTLE_MS = 60_000;
 const ACTIVITY_EVENTS: Array<keyof WindowEventMap> = [
   "pointerdown",
   "pointermove",
@@ -17,6 +18,14 @@ const ACTIVITY_EVENTS: Array<keyof WindowEventMap> = [
   "scroll",
   "touchstart",
 ];
+
+function shouldEnforceServerActivityTracking(user: Record<string, unknown> | null): boolean {
+  if (!user) return false;
+  if (isAdminUser(user)) return true;
+
+  const financeRole = (user as { finance_role?: unknown }).finance_role;
+  return financeRole === "treasurer" || financeRole === "auditor";
+}
 
 function normalizeEmail(value: string): string {
   return value.trim().toLowerCase();
@@ -40,10 +49,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   });
   const [loading, setLoading] = useState(() => !legacyTokenMode || localStorage.getItem("auth_token") !== null);
   const [lastActivityAt, setLastActivityAt] = useState(() => Date.now());
+  const lastServerActivitySyncAtRef = useRef(0);
 
   const clearStoredAuthState = useCallback(() => {
     localStorage.removeItem("auth_token");
     localStorage.removeItem(AUTH_USER_CACHE_KEY);
+    lastServerActivitySyncAtRef.current = 0;
   }, []);
 
   const syncUserSession = useCallback(async (clearOnAuthFailure = true) => {
@@ -57,6 +68,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const res = await api.get("/user");
       setUser(res.data);
+      if (shouldEnforceServerActivityTracking(res.data)) {
+        lastServerActivitySyncAtRef.current = Date.now();
+      }
       if (legacyTokenMode) {
         localStorage.setItem(AUTH_USER_CACHE_KEY, JSON.stringify(res.data));
       } else {
@@ -137,7 +151,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!user) return;
 
     const markActivity = () => {
-      setLastActivityAt(Date.now());
+      const now = Date.now();
+      setLastActivityAt(now);
+
+      if (!shouldEnforceServerActivityTracking(user)) {
+        return;
+      }
+
+      if (now - lastServerActivitySyncAtRef.current < SERVER_ACTIVITY_SYNC_THROTTLE_MS) {
+        return;
+      }
+
+      lastServerActivitySyncAtRef.current = now;
+      void api.post("/auth/activity").catch(() => {
+        // Let existing auth interceptors/session checks handle expiry or replacement.
+      });
     };
 
     for (const eventName of ACTIVITY_EVENTS) {
@@ -187,6 +215,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     setUser(res.data.user);
     await syncUserSession(false);
+    lastServerActivitySyncAtRef.current = Date.now();
     setLastActivityAt(Date.now());
   };
 

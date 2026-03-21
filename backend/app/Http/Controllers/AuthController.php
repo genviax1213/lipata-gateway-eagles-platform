@@ -354,6 +354,16 @@ class AuthController extends Controller
         ]);
     }
 
+    public function activity(Request $request)
+    {
+        /** @var User $user */
+        $user = $request->user();
+
+        return response()->json([
+            'last_activity_at' => optional($user->last_activity_at)->toISOString(),
+        ]);
+    }
+
     public function revokeSession(Request $request, int $tokenId)
     {
         /** @var User $user */

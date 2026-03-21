@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import axios from "axios";
 import api from "../services/api";
 import FileSelectionPreview from "./FileSelectionPreview";
 import {
@@ -130,7 +131,17 @@ export default function FormalPhotoCard({
       onNotice(response.data.message ?? "Formal photo saved to your private profile.");
       setSourceFile(null);
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Unable to save the formal photo.";
+      let message = error instanceof Error ? error.message : "Unable to save the formal photo.";
+      if (axios.isAxiosError(error)) {
+        const status = error.response?.status;
+        const requestUrl = error.config?.url ?? resolveFormalPhotoUploadUrl(formalPhoto);
+        const serverMessage = typeof error.response?.data?.message === "string"
+          ? error.response?.data?.message
+          : "";
+        message = serverMessage
+          ? `${serverMessage} (${status ?? "request error"} · ${requestUrl})`
+          : `Formal photo save failed (${status ?? "request error"} · ${requestUrl})`;
+      }
       onError(message);
     } finally {
       setSaving(false);

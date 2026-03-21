@@ -10,6 +10,8 @@ use Database\Seeders\RoleSeeder;
 use Illuminate\Support\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Http\Request;
+use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
 class AuthSessionTest extends TestCase
@@ -238,6 +240,36 @@ class AuthSessionTest extends TestCase
         $this->assertFalse($user->fresh()->tokens()->whereKey($token->accessToken->id)->exists());
     }
 
+    public function test_superadmin_activity_heartbeat_extends_session_before_timeout_cutoff(): void
+    {
+        Carbon::setTestNow('2026-03-21 10:00:00');
+
+        try {
+            $user = User::factory()->create([
+                'role_id' => $this->roleId(RoleHierarchy::SUPERADMIN),
+            ]);
+            $token = $user->createToken('auth_token');
+
+            $user->forceFill([
+                'active_token_id' => $token->accessToken->id,
+                'last_activity_at' => Carbon::now()->subMinutes(9),
+            ])->save();
+
+            $this->withToken($token->plainTextToken)
+                ->postJson('/api/v1/auth/activity')
+                ->assertOk();
+
+            Carbon::setTestNow('2026-03-21 10:02:00');
+
+            $this->withToken($token->plainTextToken)
+                ->getJson('/api/v1/user')
+                ->assertOk()
+                ->assertJsonPath('id', $user->id);
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
     public function test_inactive_token_does_not_force_logout_for_applicant_accounts(): void
     {
         $user = User::factory()->create([
@@ -377,5 +409,22 @@ class AuthSessionTest extends TestCase
         $response->assertJsonPath('tokens.0.is_current', true);
         $response->assertJsonPath('tokens.0.id', null);
         $response->assertJsonPath('tokens.0.session_id', 'browser-session-123');
+    }
+
+    public function test_terminate_current_session_does_not_call_delete_on_transient_token(): void
+    {
+        $user = User::factory()->create();
+        Sanctum::actingAs($user);
+
+        $middleware = new \App\Http\Middleware\EnforceSingleActiveSession();
+        $request = Request::create('/api/v1/user', 'GET');
+        $request->setUserResolver(fn () => $user);
+
+        $method = new \ReflectionMethod($middleware, 'terminateCurrentSession');
+        $method->setAccessible(true);
+
+        $method->invoke($middleware, $request, $user, false);
+
+        $this->assertTrue(true);
     }
 }

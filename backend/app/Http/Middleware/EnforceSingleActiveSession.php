@@ -121,7 +121,7 @@ class EnforceSingleActiveSession
     private function terminateCurrentSession(Request $request, User $user, bool $clearAllTokens): void
     {
         $token = $user->currentAccessToken();
-        if ($token) {
+        if ($token && !$token instanceof TransientToken) {
             $token->delete();
         } elseif ($clearAllTokens) {
             $user->tokens()->delete();
