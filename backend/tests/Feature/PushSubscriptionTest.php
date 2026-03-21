@@ -3,12 +3,22 @@
 namespace Tests\Feature;
 
 use App\Models\PushSubscription;
+use App\Models\Role;
+use App\Models\User;
+use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
 class PushSubscriptionTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->seed(RoleSeeder::class);
+    }
 
     public function test_push_config_is_disabled_without_vapid_keys(): void
     {
@@ -43,6 +53,7 @@ class PushSubscriptionTest extends TestCase
 
         $subscription = PushSubscription::query()->firstOrFail();
         $this->assertSame($payload['endpoint'], $subscription->endpoint);
+        $this->assertNull($subscription->user_id);
 
         $this->deleteJson('/api/v1/notifications/push/subscriptions', [
             'endpoint' => $payload['endpoint'],
@@ -50,5 +61,32 @@ class PushSubscriptionTest extends TestCase
             ->assertJsonPath('message', 'Browser alerts disabled for this device.');
 
         $this->assertDatabaseCount('push_subscriptions', 0);
+    }
+
+    public function test_authenticated_member_subscription_is_linked_to_the_user(): void
+    {
+        $memberRole = Role::query()->where('name', 'member')->firstOrFail();
+        $user = User::factory()->create([
+            'role_id' => $memberRole->id,
+            'email' => 'push-member@example.com',
+        ]);
+        Sanctum::actingAs($user);
+
+        $payload = [
+            'endpoint' => 'https://updates.push.services.mozilla.com/wpush/v2/member-subscription',
+            'expirationTime' => null,
+            'keys' => [
+                'p256dh' => 'BI0_2A3vMlQW0U14nq6Oa_BmM0G4-y1xKQ0l5g-9sI0nZ5tI9lO6n7vR0vV9xY8O9nB6iD4dRjR4t6hQ2xLJZ2A',
+                'auth' => 'A1b2C3d4E5f6G7h8',
+            ],
+        ];
+
+        $this->postJson('/api/v1/notifications/push/subscriptions', $payload)
+            ->assertCreated();
+
+        $this->assertDatabaseHas('push_subscriptions', [
+            'endpoint_hash' => hash('sha256', $payload['endpoint']),
+            'user_id' => $user->id,
+        ]);
     }
 }

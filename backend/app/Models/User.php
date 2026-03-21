@@ -31,6 +31,8 @@ class User extends Authenticatable
         'role_id',
         'finance_role',
         'forum_role',
+        'data_privacy_notice_acknowledged_at',
+        'data_privacy_notice_acknowledged_version',
     ];
 
     /**
@@ -53,6 +55,7 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'last_activity_at' => 'datetime',
+            'data_privacy_notice_acknowledged_at' => 'datetime',
             'password' => 'hashed',
         ];
     }
@@ -105,6 +108,16 @@ class User extends Authenticatable
     public function formalPhoto()
     {
         return $this->hasOne(FormalPhoto::class);
+    }
+
+    public function pushSubscriptions()
+    {
+        return $this->hasMany(PushSubscription::class);
+    }
+
+    public function postAcknowledgements()
+    {
+        return $this->hasMany(PostAcknowledgement::class);
     }
 
     public function hasPermission(string $permission): bool

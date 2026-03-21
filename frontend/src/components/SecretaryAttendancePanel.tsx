@@ -4,6 +4,7 @@ import jsQR from "jsqr";
 import api from "../services/api";
 import { useAuth } from "../contexts/useAuth";
 import { isAdminUser } from "../utils/auth";
+import { buildCsvContent } from "../utils/csv";
 
 interface EventRecord {
   id: number;
@@ -59,15 +60,8 @@ export default function SecretaryAttendancePanel({ onNotice, onError }: Secretar
   const visibleRoster = selectedEventId ? roster : [];
   const canDeleteAttendanceLists = isAdminUser(user);
 
-  const sanitizeCsvValue = (value: string | number | null | undefined) => {
-    const text = String(value ?? "").replace(/"/g, '""');
-    return `"${text}"`;
-  };
-
   const triggerCsvDownload = (filename: string, headers: string[], rows: Array<Array<string | number | null | undefined>>) => {
-    const csvContent = [headers, ...rows]
-      .map((row) => row.map((value) => sanitizeCsvValue(value)).join(","))
-      .join("\n");
+    const csvContent = buildCsvContent([headers, ...rows]);
 
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const url = window.URL.createObjectURL(blob);

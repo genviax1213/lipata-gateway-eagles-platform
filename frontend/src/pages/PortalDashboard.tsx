@@ -33,6 +33,38 @@ interface DashboardPayload {
   formal_photo?: FormalPhotoRecord | null;
 }
 
+interface MemberRegistrationAccessActor {
+  actor_key: string;
+  display_name: string;
+  email: string | null;
+  current_status: string;
+  latest_event_type: string;
+  latest_message: string | null;
+  last_accessed_at: string | null;
+  route_path: string;
+  tab: string | null;
+  event_count: number;
+  registration?: {
+    id: number;
+    status: string;
+    completed_at: string | null;
+    email_verified_at: string | null;
+  } | null;
+}
+
+interface MemberRegistrationAccessOverview {
+  summary: {
+    total_access_records: number;
+    unique_actors: number;
+    completed: number;
+    pending_verification: number;
+    not_verified: number;
+    error: number;
+    viewed: number;
+  };
+  actors: MemberRegistrationAccessActor[];
+}
+
 interface SelfMemberProfile {
   id: number;
   portal_subject?: "member" | "applicant";
@@ -773,6 +805,7 @@ export default function PortalDashboard() {
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileSection, setProfileSection] = useState<ProfileSection>("identity");
   const [profileForm, setProfileForm] = useState(EMPTY_SELF_PROFILE_FORM);
+  const [memberRegistrationAudit, setMemberRegistrationAudit] = useState<MemberRegistrationAccessOverview | null>(null);
   const canBatchTreasurerManagePayments = Boolean(dashboard?.can_manage_batch_applicant_contributions);
   const canViewOwnContributions = !isAdmin && (dashboard?.view === "member" || dashboard?.view === "applicant");
   const canSelfEditProfile = !isAdmin && (dashboard?.view === "member" || dashboard?.view === "applicant");
@@ -882,12 +915,25 @@ export default function PortalDashboard() {
         setProfileForm(EMPTY_SELF_PROFILE_FORM);
       }
 
+      if (userRoleName === "superadmin") {
+        try {
+          const auditRes = await api.get<MemberRegistrationAccessOverview>("/admin/member-registration-accesses", {
+            params: { limit: 50 },
+          });
+          setMemberRegistrationAudit(auditRes.data);
+        } catch {
+          setMemberRegistrationAudit(null);
+        }
+      } else {
+        setMemberRegistrationAudit(null);
+      }
+
     } catch (err) {
       setError(parseError(err, "Unable to load dashboard."));
     } finally {
       setLoading(false);
     }
-  }, [canViewApplicantDashboard, isAdmin, parseError]);
+  }, [canViewApplicantDashboard, isAdmin, parseError, userRoleName]);
 
   useEffect(() => {
     void loadDashboard();
@@ -1251,6 +1297,47 @@ export default function PortalDashboard() {
       await loadDashboard();
     } catch (err) {
       setError(parseError(err, "Failed to withdraw application."));
+    }
+  };
+
+  const deleteApplicantDocument = async (documentId: number) => {
+    if (!window.confirm("Delete this uploaded document? This cannot be undone.")) {
+      return;
+    }
+
+    setError("");
+    setNotice("");
+
+    try {
+      const res = await api.delete<{ message?: string }>(`/applicants/me/documents/${documentId}`);
+      setNotice(res.data?.message ?? "Document deleted.");
+      await loadDashboard();
+    } catch (err) {
+      setError(parseError(err, "Failed to delete document."));
+    }
+  };
+
+  const deleteOwnPortalData = async () => {
+    const isApplicant = dashboard?.view === "applicant";
+    const confirmMessage = isApplicant
+      ? "Delete your applicant data, uploaded documents, formal photo, and linked applicant access for this account? This cannot be undone."
+      : "Delete your member data, linked portal account, formal photo, and linked applicant history for this account? This cannot be undone.";
+
+    if (!window.confirm(confirmMessage)) {
+      return;
+    }
+
+    setError("");
+    setNotice("");
+
+    try {
+      const endpoint = isApplicant ? "/applicants/me" : "/members/me";
+      await api.delete<{ message?: string }>(endpoint);
+      localStorage.removeItem("auth_token");
+      localStorage.removeItem("auth_user_cache");
+      window.location.assign("/");
+    } catch (err) {
+      setError(parseError(err, "Failed to delete account data."));
     }
   };
 
@@ -1690,6 +1777,69 @@ export default function PortalDashboard() {
             <TaskHierarchyCard status={statusSummary} actions={availableActionsSummary} nextStep={nextStepSummary} />
           </div>
 
+          {userRoleName === "superadmin" && memberRegistrationAudit && (
+            <div className="mt-4 rounded-xl border border-white/20 bg-white/10 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h2 className="font-heading text-xl text-offwhite">Member Registration Access</h2>
+                  <p className="mt-1 text-sm text-mist/80">Superadmin-only view of everyone who reached `/member-registration`, including pending, completed, not verified, and error outcomes.</p>
+                </div>
+                <button type="button" className="btn-secondary" onClick={() => void loadDashboard()}>Refresh</button>
+              </div>
+
+              <div className="mt-4 grid gap-3 md:grid-cols-3 xl:grid-cols-6">
+                {[
+                  ["Unique Actors", memberRegistrationAudit.summary.unique_actors],
+                  ["Completed", memberRegistrationAudit.summary.completed],
+                  ["Pending", memberRegistrationAudit.summary.pending_verification],
+                  ["Not Verified", memberRegistrationAudit.summary.not_verified],
+                  ["Errors", memberRegistrationAudit.summary.error],
+                  ["Viewed", memberRegistrationAudit.summary.viewed],
+                ].map(([label, value]) => (
+                  <div key={label} className="rounded-lg border border-white/15 bg-white/5 px-3 py-3">
+                    <p className="text-xs uppercase tracking-[0.18em] text-gold-soft">{label}</p>
+                    <p className="mt-2 font-heading text-2xl text-offwhite">{value}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-4 overflow-x-auto rounded-lg border border-white/15">
+                <table className="min-w-[900px] text-sm text-offwhite">
+                  <thead className="bg-navy/70 text-gold-soft">
+                    <tr>
+                      <th className="px-3 py-2 text-left">Person</th>
+                      <th className="px-3 py-2 text-left">Status</th>
+                      <th className="px-3 py-2 text-left">Latest Event</th>
+                      <th className="px-3 py-2 text-left">Tab</th>
+                      <th className="px-3 py-2 text-left">Events</th>
+                      <th className="px-3 py-2 text-left">Last Access</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {memberRegistrationAudit.actors.slice(0, 15).map((actor) => (
+                      <tr key={actor.actor_key} className="border-t border-white/10">
+                        <td className="px-3 py-3 align-top">
+                          <p className="font-semibold text-offwhite">{actor.display_name}</p>
+                          <p className="text-xs text-mist/70">{actor.email ?? actor.actor_key}</p>
+                          {actor.latest_message ? <p className="mt-1 text-xs text-mist/75">{actor.latest_message}</p> : null}
+                        </td>
+                        <td className="px-3 py-3 align-top">
+                          <span className={`rounded-full border px-2 py-1 text-[11px] font-semibold ${statusBadgeClasses(actor.current_status)}`}>
+                            {statusLabel(actor.current_status)}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3 align-top text-mist/80">{actor.latest_event_type}</td>
+                        <td className="px-3 py-3 align-top text-mist/80">{actor.tab ?? "—"}</td>
+                        <td className="px-3 py-3 align-top text-mist/80">{actor.event_count}</td>
+                        <td className="px-3 py-3 align-top text-mist/80">{formatTimestamp(actor.last_accessed_at)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
           {isCurrentApplicantBatchTreasurer && applicantDetails?.batch && (
             <div className="mt-4 rounded-xl border border-gold/30 bg-gold/10 p-4">
               <p className="text-xs uppercase tracking-[0.18em] text-gold-soft">Batch Treasurer Assignment</p>
@@ -1945,6 +2095,15 @@ export default function PortalDashboard() {
                 key={doc.id}
                 document={doc}
                 onView={(documentUrl, originalName) => viewDocument(documentUrl, originalName)}
+                actions={(
+                  <button
+                    type="button"
+                    className="rounded border border-red-300/40 px-2 py-1 text-xs text-red-200"
+                    onClick={() => void deleteApplicantDocument(doc.id)}
+                  >
+                    Delete
+                  </button>
+                )}
               />
             ))}
             {applicantDetails.documents.length === 0 && <p className="text-sm text-mist/70">No documents uploaded yet.</p>}
@@ -2585,6 +2744,22 @@ export default function PortalDashboard() {
               <div className="mt-4 flex justify-end">
                 <button type="button" onClick={() => void saveOwnProfile()} disabled={savingProfile} className="btn-primary disabled:opacity-50">
                   {savingProfile ? "Saving..." : "Save Profile"}
+                </button>
+              </div>
+
+              <div className="mt-8 rounded-xl border border-red-400/35 bg-red-500/10 p-4">
+                <h3 className="font-heading text-xl text-offwhite">Delete My Data</h3>
+                <p className="mt-2 text-sm text-red-100/90">
+                  {dashboard?.view === "applicant"
+                    ? "This removes your applicant profile, uploaded applicant documents, linked formal photo, and applicant access for this account."
+                    : "This removes your member profile, linked portal account, formal photo, and linked applicant history associated with this account."}
+                </p>
+                <button
+                  type="button"
+                  className="mt-4 rounded-md border border-red-300/45 px-4 py-2 text-sm text-red-100 transition hover:bg-red-500/10"
+                  onClick={() => void deleteOwnPortalData()}
+                >
+                  {dashboard?.view === "applicant" ? "Delete Applicant Data" : "Delete Member Data"}
                 </button>
               </div>
             </>

@@ -60,6 +60,38 @@ class AuthSessionTest extends TestCase
         $this->assertNotEmpty($token);
     }
 
+    public function test_user_payload_exposes_data_privacy_notice_status_and_can_be_acknowledged(): void
+    {
+        $password = 'Password123';
+        $user = User::factory()->create([
+            'password' => $password,
+        ]);
+
+        $this->postJson('/api/v1/login', [
+            'email' => $user->email,
+            'password' => $password,
+        ])->assertOk();
+
+        $userResponse = $this->getJson('/api/v1/user')
+            ->assertOk()
+            ->assertJsonPath('data_privacy_notice_acknowledged_at', null)
+            ->assertJsonPath('data_privacy_notice_acknowledged_version', null)
+            ->assertJsonPath('data_privacy_notice_version_required', '2026-03-21');
+
+        $this->assertSame('2026-03-21', $userResponse->json('data_privacy_notice_version_required'));
+
+        $this->postJson('/api/v1/auth/data-privacy/acknowledge', [
+            'acknowledged' => true,
+        ])->assertOk()
+            ->assertJsonPath('data_privacy_notice_acknowledged_version', '2026-03-21')
+            ->assertJsonPath('data_privacy_notice_version_required', '2026-03-21');
+
+        $this->assertDatabaseHas('users', [
+            'id' => $user->id,
+            'data_privacy_notice_acknowledged_version' => '2026-03-21',
+        ]);
+    }
+
     public function test_withdrawn_application_blocks_login(): void
     {
         $password = 'Password123';

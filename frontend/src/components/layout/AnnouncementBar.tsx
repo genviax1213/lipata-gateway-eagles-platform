@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../contexts/useAuth";
 import api from "../../services/api";
 import type { CmsPost } from "../../types/cms";
@@ -13,6 +13,7 @@ type AnnouncementItem = {
   excerpt: string;
   to: string;
   meta: string;
+  acknowledgedAt: string | null;
 };
 
 type PushConfig = {
@@ -32,12 +33,14 @@ function formatAnnouncementDate(value: string | null): string {
 
 export default function AnnouncementBar() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const hasMemberProfile = Boolean((user as { has_member_profile?: unknown } | null)?.has_member_profile);
   const [announcements, setAnnouncements] = useState<CmsPost[]>([]);
   const [pushConfig, setPushConfig] = useState<PushConfig | null>(null);
   const [pushEnabled, setPushEnabled] = useState(false);
   const [pushPending, setPushPending] = useState(false);
   const [pushError, setPushError] = useState("");
+  const [dismissPending, setDismissPending] = useState(false);
   const [toastVisible, setToastVisible] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
 
@@ -103,10 +106,13 @@ export default function AnnouncementBar() {
       excerpt: post.excerpt?.trim() || "Read the latest club notice and schedule details.",
       to: `/news/${post.slug}`,
       meta: post.published_at ? `Posted ${formatAnnouncementDate(post.published_at)}` : "Active announcement",
+      acknowledgedAt: post.acknowledged_at,
     }))
   ), [announcements]);
 
-  const featuredAnnouncement = items[0] ?? null;
+  const featuredAnnouncement = hasMemberProfile
+    ? items.find((item) => !item.acknowledgedAt) ?? null
+    : items[0] ?? null;
 
   useEffect(() => {
     if (!featuredAnnouncement) {
@@ -115,9 +121,14 @@ export default function AnnouncementBar() {
       return;
     }
 
+    if (hasMemberProfile) {
+      setToastVisible(true);
+      return;
+    }
+
     const dismissed = localStorage.getItem(`lgec-announcement-dismissed:${featuredAnnouncement.version}`) === "1";
     setToastVisible(!dismissed);
-  }, [featuredAnnouncement]);
+  }, [featuredAnnouncement, hasMemberProfile]);
 
   async function enableBrowserAlerts() {
     if (!supportsBrowserPush || !pushConfig?.enabled || !pushConfig.public_key) {
@@ -177,13 +188,47 @@ export default function AnnouncementBar() {
     }
   }
 
-  function dismissFeaturedAnnouncement() {
-    if (featuredAnnouncement) {
+  async function acknowledgeFeaturedAnnouncement() {
+    if (!featuredAnnouncement) return;
+
+    if (!hasMemberProfile) {
       localStorage.setItem(`lgec-announcement-dismissed:${featuredAnnouncement.version}`, "1");
+      setToastVisible(false);
+      setModalOpen(false);
+      return;
     }
 
-    setToastVisible(false);
-    setModalOpen(false);
+    setDismissPending(true);
+
+    try {
+      const response = await api.post<{ acknowledged_at?: string | null }>(
+        `/member-content/announcements/${featuredAnnouncement.id}/acknowledge`,
+      );
+      const acknowledgedAt = response.data?.acknowledged_at ?? new Date().toISOString();
+
+      setAnnouncements((current) => current.map((post) => (
+        post.id === featuredAnnouncement.id
+          ? { ...post, acknowledged_at: acknowledgedAt }
+          : post
+      )));
+      setToastVisible(false);
+      setModalOpen(false);
+    } catch {
+      setPushError("Unable to save this notice as seen right now.");
+    } finally {
+      setDismissPending(false);
+    }
+  }
+
+  async function openAnnouncementArticle() {
+    if (!featuredAnnouncement) return;
+
+    await acknowledgeFeaturedAnnouncement();
+    navigate(featuredAnnouncement.to);
+  }
+
+  async function dismissFeaturedAnnouncement() {
+    await acknowledgeFeaturedAnnouncement();
   }
 
   if (items.length === 0) {
@@ -263,32 +308,34 @@ export default function AnnouncementBar() {
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <p className="text-base font-semibold text-offwhite">
-                  <Link
-                    to={featuredAnnouncement.to}
+                  <button
+                    type="button"
+                    onClick={() => void openAnnouncementArticle()}
                     className="text-gold-soft decoration-gold/0 underline-offset-4 transition hover:text-gold hover:decoration-gold hover:underline"
                   >
                     {featuredAnnouncement.headline}
-                  </Link>
+                  </button>
                 </p>
                 <p className="mt-2 text-sm text-mist/85">{featuredAnnouncement.excerpt}</p>
                 <p className="mt-2 text-xs text-mist/70">{featuredAnnouncement.meta}</p>
               </div>
               <button
                 type="button"
-                onClick={dismissFeaturedAnnouncement}
+                onClick={() => void dismissFeaturedAnnouncement()}
+                disabled={dismissPending}
                 className="rounded-full border border-white/15 px-2 py-1 text-xs text-mist/80 transition hover:border-white/30 hover:text-offwhite"
                 aria-label="Dismiss announcement notice"
               >
-                Close
+                {dismissPending ? "Saving..." : "Close"}
               </button>
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
               <button type="button" onClick={() => setModalOpen(true)} className="btn-primary">
                 Read Notice
               </button>
-              <Link to={featuredAnnouncement.to} className="btn-secondary">
+              <button type="button" onClick={() => void openAnnouncementArticle()} className="btn-secondary">
                 Open Article
-              </Link>
+              </button>
             </div>
           </div>
         </div>
@@ -309,13 +356,13 @@ export default function AnnouncementBar() {
             className="relative z-10 w-full max-w-2xl rounded-[1.75rem] border border-gold/25 bg-[linear-gradient(180deg,rgba(12,22,38,0.98),rgba(7,12,24,0.98))] p-6 shadow-[0_30px_60px_rgba(2,6,23,0.58)]"
           >
             <h2 id="announcement-modal-title" className="mt-3 font-heading text-3xl text-offwhite md:text-4xl">
-              <Link
-                to={featuredAnnouncement.to}
+              <button
+                type="button"
+                onClick={() => void openAnnouncementArticle()}
                 className="text-gold-soft decoration-gold/0 underline-offset-4 transition hover:text-gold hover:decoration-gold hover:underline"
-                onClick={() => setModalOpen(false)}
               >
                 {featuredAnnouncement.headline}
-              </Link>
+              </button>
             </h2>
             <p className="mt-4 text-base leading-7 text-mist/88">{featuredAnnouncement.excerpt}</p>
             <p className="mt-4 text-sm text-mist/72">
@@ -323,14 +370,19 @@ export default function AnnouncementBar() {
               {" · Browser alerts will only fire when you enable them on this device."}
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
-              <Link to={featuredAnnouncement.to} className="btn-primary" onClick={() => setModalOpen(false)}>
+              <button type="button" className="btn-primary" onClick={() => void openAnnouncementArticle()}>
                 Open Full Article
-              </Link>
+              </button>
               <button type="button" onClick={() => setModalOpen(false)} className="btn-secondary">
                 Back
               </button>
-              <button type="button" onClick={dismissFeaturedAnnouncement} className="btn-secondary">
-                Dismiss Notice
+              <button
+                type="button"
+                onClick={() => void dismissFeaturedAnnouncement()}
+                className="btn-secondary"
+                disabled={dismissPending}
+              >
+                {dismissPending ? "Saving..." : "Dismiss Notice"}
               </button>
             </div>
           </div>

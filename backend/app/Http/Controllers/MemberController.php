@@ -22,6 +22,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class MemberController extends Controller
@@ -520,11 +521,49 @@ class MemberController extends Controller
             ], 422);
         }
 
+        $this->purgeMemberRecord($member, $linkedUser);
+
+        return response()->json(['message' => 'Member deleted']);
+    }
+
+    public function destroyMine(Request $request)
+    {
+        /** @var User $actor */
+        $actor = $request->user()->loadMissing('role:id,name');
+
+        if (in_array(optional($actor->role)->name, [RoleHierarchy::SUPERADMIN, RoleHierarchy::ADMIN], true)) {
+            return response()->json([
+                'message' => 'Protected administrative accounts cannot be removed through self-service deletion.',
+            ], 422);
+        }
+
+        $member = $this->resolveActorMember($actor);
+        if (!$member) {
+            return response()->json([
+                'message' => 'No member record is linked to this account.',
+            ], 404);
+        }
+
+        $this->purgeMemberRecord($member, $actor);
+
+        return response()->json([
+            'message' => 'Member account data deleted.',
+        ]);
+    }
+
+    private function formalPhotoPayload(?FormalPhoto $formalPhoto, bool $includeOwnerRoute = false): ?array
+    {
+        return $formalPhoto?->toMetadataArray($includeOwnerRoute);
+    }
+
+    private function purgeMemberRecord(Member $member, ?User $linkedUser): void
+    {
         DB::transaction(function () use ($member, $linkedUser): void {
             $memberEmail = strtolower(trim((string) $member->email));
             $linkedUserId = $linkedUser?->id;
 
-            Applicant::query()
+            $applicants = Applicant::query()
+                ->with(['documents', 'feeRequirements.payments'])
                 ->where(function ($query) use ($member, $linkedUserId, $memberEmail): void {
                     $query->where('member_id', $member->id);
 
@@ -536,7 +575,23 @@ class MemberController extends Controller
                         $query->orWhereRaw('LOWER(TRIM(email)) = ?', [$memberEmail]);
                     }
                 })
-                ->delete();
+                ->get();
+
+            foreach ($applicants as $applicant) {
+                foreach ($applicant->documents as $document) {
+                    if (Storage::disk('local')->exists($document->file_path)) {
+                        Storage::disk('local')->delete($document->file_path);
+                    }
+                }
+
+                $applicant->notices()->delete();
+                $applicant->documents()->delete();
+                foreach ($applicant->feeRequirements as $requirement) {
+                    $requirement->payments()->delete();
+                }
+                $applicant->feeRequirements()->delete();
+                $applicant->delete();
+            }
 
             MemberRegistration::query()
                 ->where(function ($query) use ($member, $linkedUserId, $memberEmail): void {
@@ -558,13 +613,6 @@ class MemberController extends Controller
 
             $member->delete();
         });
-
-        return response()->json(['message' => 'Member deleted']);
-    }
-
-    private function formalPhotoPayload(?FormalPhoto $formalPhoto, bool $includeOwnerRoute = false): ?array
-    {
-        return $formalPhoto?->toMetadataArray($includeOwnerRoute);
     }
 
     private function syncEmployments(Member $member, ?array $items): void

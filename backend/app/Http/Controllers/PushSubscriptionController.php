@@ -33,6 +33,7 @@ class PushSubscriptionController extends Controller
         $subscription = PushSubscription::query()->updateOrCreate(
             ['endpoint_hash' => hash('sha256', $endpoint)],
             [
+                'user_id' => $request->user()?->id,
                 'endpoint' => $endpoint,
                 'public_key' => (string) data_get($validated, 'keys.p256dh'),
                 'auth_token' => (string) data_get($validated, 'keys.auth'),

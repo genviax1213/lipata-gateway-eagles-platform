@@ -5,7 +5,10 @@ import axios from "axios";
 import { useAuth } from "../../contexts/useAuth";
 import { hasPermission, isAdminUser } from "../../utils/auth";
 import { applyPortalTheme, readStoredPortalTheme, resolvePortalTheme } from "../../utils/portalTheme";
+import api from "../../services/api";
 import RouteErrorBoundary from "../RouteErrorBoundary";
+import DataPrivacyNoticeBlock from "../DataPrivacyNoticeBlock";
+import { dataPrivacyNoticeCopy } from "../../content/dataPrivacyNotice";
 
 function getPortalTitle(user: Record<string, unknown> | null): string {
   const roleName = (user?.role as { name?: unknown } | undefined)?.name;
@@ -73,10 +76,13 @@ function hasGlobalCmsAccess(user: Record<string, unknown> | null): boolean {
 }
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
-  const { user, logout } = useAuth();
+  const { user, logout, refreshUser } = useAuth();
   const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [privacyChecked, setPrivacyChecked] = useState(false);
+  const [privacySubmitting, setPrivacySubmitting] = useState(false);
+  const [privacyError, setPrivacyError] = useState("");
   const roleName = (user?.role as { name?: unknown } | undefined)?.name;
   const isApplicant = roleName === "applicant";
   const showRoleDelegation = isAdminUser(user) || hasPermission(user, "roles.delegate");
@@ -90,6 +96,21 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const canViewFinance = hasPermission(user, "finance.view");
   const canViewForum = !isApplicant;
   const portalTitle = getPortalTitle(user);
+  const privacyState = user as {
+    data_privacy_notice_version_required?: unknown;
+    data_privacy_notice_acknowledged_version?: unknown;
+  } | null;
+  const requiredPrivacyVersion = typeof privacyState?.data_privacy_notice_version_required === "string"
+    ? privacyState.data_privacy_notice_version_required
+    : null;
+  const acknowledgedPrivacyVersion = typeof privacyState?.data_privacy_notice_acknowledged_version === "string"
+    ? privacyState.data_privacy_notice_acknowledged_version
+    : null;
+  const requiresDataPrivacyAcknowledgement = Boolean(
+    user
+    && requiredPrivacyVersion
+    && acknowledgedPrivacyVersion !== requiredPrivacyVersion,
+  );
 
   useEffect(() => {
     const applySavedTheme = () => {
@@ -119,6 +140,21 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       document.body.style.overflow = previousOverflow;
     };
   }, [mobileOpen]);
+
+  useEffect(() => {
+    if (!requiresDataPrivacyAcknowledgement) {
+      setPrivacyChecked(false);
+      setPrivacyError("");
+      return;
+    }
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [requiresDataPrivacyAcknowledgement]);
 
   const navItems = useMemo(
     () => [
@@ -191,6 +227,31 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         ? ((error.response?.data as { message?: string } | undefined)?.message ?? "Unable to log out right now. Please try again.")
         : "Unable to log out right now. Please try again.";
       window.alert(message);
+    }
+  };
+
+  const acknowledgeDataPrivacy = async () => {
+    if (!privacyChecked) {
+      setPrivacyError("You must tick the checkbox before continuing.");
+      return;
+    }
+
+    setPrivacySubmitting(true);
+    setPrivacyError("");
+
+    try {
+      await api.post("/auth/data-privacy/acknowledge", {
+        acknowledged: true,
+      });
+      await refreshUser();
+      setPrivacyChecked(false);
+    } catch (error) {
+      const message = axios.isAxiosError(error)
+        ? ((error.response?.data as { message?: string } | undefined)?.message ?? "Unable to save the data privacy acknowledgement right now.")
+        : "Unable to save the data privacy acknowledgement right now.";
+      setPrivacyError(message);
+    } finally {
+      setPrivacySubmitting(false);
     }
   };
 
@@ -346,6 +407,51 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           </div>
         </main>
       </div>
+
+      {requiresDataPrivacyAcknowledgement && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-ink/85 px-4 py-6 backdrop-blur-sm">
+          <div className="w-full max-w-3xl rounded-2xl border border-gold/30 bg-[#091729] p-5 text-offwhite shadow-[0_24px_80px_rgba(2,6,23,0.65)] md:p-7">
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-gold-soft">Required Before Continuing</p>
+            <h2 className="mt-2 font-heading text-3xl text-offwhite">{dataPrivacyNoticeCopy.title}</h2>
+            <p className="mt-2 text-sm text-mist/80">
+              This acknowledgement is required once for every existing or newly activated portal user who has not yet confirmed the current notice version.
+            </p>
+
+            <div className="mt-5">
+              <DataPrivacyNoticeBlock
+                checked={privacyChecked}
+                onChange={setPrivacyChecked}
+                disabled={privacySubmitting}
+              />
+            </div>
+
+            {privacyError ? (
+              <p className="mt-4 rounded-md border border-red-300/30 bg-red-400/10 px-4 py-2 text-sm text-red-200">
+                {privacyError}
+              </p>
+            ) : null}
+
+            <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                className="rounded-lg border border-white/20 px-4 py-2 text-sm text-mist/85 transition hover:bg-white/10"
+                onClick={() => void handleLogout()}
+                disabled={privacySubmitting}
+              >
+                Logout
+              </button>
+              <button
+                type="button"
+                className="btn-primary disabled:opacity-60"
+                onClick={() => void acknowledgeDataPrivacy()}
+                disabled={privacySubmitting || !privacyChecked}
+              >
+                {privacySubmitting ? "Saving..." : dataPrivacyNoticeCopy.submitLabel}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -5,6 +5,7 @@ import TaskHierarchyCard from "../components/TaskHierarchyCard";
 import { useSearchParams } from "react-router-dom";
 import { notifyPortalDataRefresh } from "../utils/portalRefresh";
 import PasswordField from "../components/PasswordField";
+import DataPrivacyNoticeBlock from "../components/DataPrivacyNoticeBlock";
 
 interface RegistrationForm {
   first_name: string;
@@ -34,6 +35,26 @@ function normalizeVerificationToken(value: string): string {
   return value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10);
 }
 
+const VISITOR_ID_KEY = "lgec.visitor.id.v1";
+const SESSION_ID_KEY = "lgec.visitor.session.v1";
+
+function createClientId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function getOrCreateClientToken(storage: Storage, key: string): string {
+  const existing = storage.getItem(key);
+  if (existing) return existing;
+
+  const next = createClientId();
+  storage.setItem(key, next);
+  return next;
+}
+
 export default function MemberRegistration() {
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<MemberRegistrationTab>("register");
@@ -44,7 +65,10 @@ export default function MemberRegistration() {
   const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState(false);
   const [googleClaimLoaded, setGoogleClaimLoaded] = useState(false);
+  const [privacyChecked, setPrivacyChecked] = useState(false);
   const googleClaimToken = searchParams.get("google_claim") ?? "";
+  const [visitorToken] = useState(() => getOrCreateClientToken(localStorage, VISITOR_ID_KEY));
+  const [sessionToken] = useState(() => getOrCreateClientToken(sessionStorage, SESSION_ID_KEY));
 
   const parseError = (err: unknown, fallback: string) => {
     if (!axios.isAxiosError(err)) return fallback;
@@ -58,11 +82,34 @@ export default function MemberRegistration() {
     return fallback;
   };
 
+  const trackAccessEvent = async (
+    eventType: string,
+    status: "viewed" | "pending_verification" | "completed" | "not_verified" | "error",
+    overrides?: { email?: string; message?: string; tab?: MemberRegistrationTab },
+  ) => {
+    try {
+      await api.post("/member-registrations/access-events", {
+        visitor_token: visitorToken,
+        session_token: sessionToken,
+        route_path: "/member-registration",
+        email: overrides?.email ? normalizeEmail(overrides.email) : undefined,
+        event_type: eventType,
+        status,
+        tab: overrides?.tab ?? activeTab,
+        message: overrides?.message,
+        occurred_at: new Date().toISOString(),
+      });
+    } catch {
+      // Tracking stays silent.
+    }
+  };
+
   useEffect(() => {
     const oauthError = searchParams.get("oauth_error");
     if (oauthError) {
       setError(oauthError);
       setNotice("");
+      void trackAccessEvent("oauth_error", "error", { message: oauthError });
     }
   }, [searchParams]);
 
@@ -81,11 +128,21 @@ export default function MemberRegistration() {
         setNotice("Google verified your email. Complete the remaining fields and register to activate your member account.");
         setError("");
         setActiveTab("register");
+        void trackAccessEvent("google_claim_loaded", "viewed", {
+          email: res.data.email,
+          message: "Google claim loaded.",
+          tab: "register",
+        });
       })
       .catch(() => {
         setGoogleClaimLoaded(false);
+        void trackAccessEvent("google_claim_error", "error", { message: "Google claim lookup failed." });
       });
   }, [googleClaimToken, searchParams]);
+
+  useEffect(() => {
+    void trackAccessEvent("page_view", "viewed");
+  }, [activeTab]);
 
   const validateRegistration = (): string | null => {
     const firstName = form.first_name.trim();
@@ -125,6 +182,12 @@ export default function MemberRegistration() {
       return;
     }
 
+    if (!privacyChecked) {
+      setError("You must read and acknowledge the Data Privacy Notice before registering.");
+      setNotice("");
+      return;
+    }
+
     setSaving(true);
     setError("");
     setNotice("");
@@ -140,6 +203,17 @@ export default function MemberRegistration() {
         oauth_claim_token: googleClaimLoaded ? googleClaimToken : undefined,
       };
       await api.post("/member-registrations", payload);
+      await trackAccessEvent(
+        "register_success",
+        googleClaimLoaded ? "completed" : "pending_verification",
+        {
+          email: payload.email,
+          message: googleClaimLoaded
+            ? "Google member registration completed."
+            : "Member registration submitted and waiting for email verification.",
+          tab: "register",
+        },
+      );
       notifyPortalDataRefresh("members");
       setVerificationEmail(payload.email);
       setNotice(googleClaimLoaded
@@ -147,9 +221,16 @@ export default function MemberRegistration() {
         : "Member registration submitted. Continue with email verification.");
       setForm(initialForm);
       setGoogleClaimLoaded(false);
+      setPrivacyChecked(false);
       setActiveTab(googleClaimLoaded ? "register" : "verify");
     } catch (err: unknown) {
-      setError(parseError(err, "Failed to submit member registration."));
+      const message = parseError(err, "Failed to submit member registration.");
+      setError(message);
+      await trackAccessEvent("register_error", "error", {
+        email: form.email,
+        message,
+        tab: "register",
+      });
     } finally {
       setSaving(false);
     }
@@ -171,10 +252,21 @@ export default function MemberRegistration() {
         email: normalizeEmail(verificationEmail),
         verification_token: normalizeVerificationToken(verificationToken),
       });
+      await trackAccessEvent("verify_success", "completed", {
+        email: verificationEmail,
+        message: "Member registration email verified.",
+        tab: "verify",
+      });
       setNotice("Verification successful. Your member account is now active.");
       setVerificationToken("");
     } catch (err: unknown) {
-      setError(parseError(err, "Failed to verify member registration."));
+      const message = parseError(err, "Failed to verify member registration.");
+      setError(message);
+      await trackAccessEvent("verify_error", "not_verified", {
+        email: verificationEmail,
+        message,
+        tab: "verify",
+      });
     } finally {
       setSaving(false);
     }
@@ -227,6 +319,9 @@ export default function MemberRegistration() {
             <p className="md:col-span-2 rounded-md border border-white/20 bg-white/10 px-3 py-2 text-xs text-mist/85">
               This registration path is for existing club members who are not yet in the portal system. It is not the outsider application flow.
             </p>
+            <div className="md:col-span-2">
+              <DataPrivacyNoticeBlock checked={privacyChecked} onChange={setPrivacyChecked} compact />
+            </div>
             <div className="md:col-span-2">
               <button onClick={() => void submitRegistration()} disabled={saving} className="btn-primary">
                 {saving ? "Registering..." : "Register"}

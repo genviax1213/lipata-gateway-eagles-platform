@@ -193,7 +193,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   if (loading) return <AuthLoadingScreen />;
 
   return (
-    <AuthContext.Provider value={{ user, login, logout }}>
+    <AuthContext.Provider value={{ user, login, logout, refreshUser: syncUserSession }}>
       {children}
     </AuthContext.Provider>
   );

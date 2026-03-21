@@ -20,6 +20,7 @@ import {
   parsePortalDataRefresh,
 } from "../utils/portalRefresh";
 import { useSearchParams } from "react-router-dom";
+import { buildCsvContent } from "../utils/csv";
 
 type MembersTab = "members" | "applications" | "batch-workflow";
 type MemberListGrouping = "flat" | "batch";
@@ -411,7 +412,7 @@ export default function Members() {
         ];
       });
 
-      const csvContent = [
+      const csvContent = buildCsvContent([
         [
           "Member Number",
           "Last Name",
@@ -430,9 +431,7 @@ export default function Members() {
           "ID Card Missing Fields",
         ],
         ...rows,
-      ]
-        .map((row) => row.map((value) => `"${String(value ?? "").replace(/"/g, '""')}"`).join(","))
-        .join("\n");
+      ]);
 
       const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
       const url = window.URL.createObjectURL(blob);

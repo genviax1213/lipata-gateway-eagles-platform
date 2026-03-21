@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class PushSubscription extends Model
 {
     protected $fillable = [
+        'user_id',
         'endpoint_hash',
         'endpoint',
         'public_key',
@@ -21,4 +22,9 @@ class PushSubscription extends Model
         'subscribed_at' => 'datetime',
         'last_notified_at' => 'datetime',
     ];
+
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
 }

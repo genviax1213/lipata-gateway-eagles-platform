@@ -6,6 +6,7 @@ import TaskHierarchyCard from "../components/TaskHierarchyCard";
 import { notifyPortalDataRefresh } from "../utils/portalRefresh";
 import { useSearchParams } from "react-router-dom";
 import PasswordField from "../components/PasswordField";
+import DataPrivacyNoticeBlock from "../components/DataPrivacyNoticeBlock";
 
 interface ApplicationForm {
   first_name: string;
@@ -48,6 +49,7 @@ export default function ApplicantRegistration() {
   const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState(false);
   const [googleClaimLoaded, setGoogleClaimLoaded] = useState(false);
+  const [privacyChecked, setPrivacyChecked] = useState(false);
   const googleClaimToken = searchParams.get("google_claim") ?? "";
 
   const parseError = (err: unknown, fallback: string) => {
@@ -129,6 +131,12 @@ export default function ApplicantRegistration() {
       return;
     }
 
+    if (!privacyChecked) {
+      setError("You must read and acknowledge the Data Privacy Notice before submitting.");
+      setNotice("");
+      return;
+    }
+
     setSaving(true);
     setError("");
     setNotice("");
@@ -149,6 +157,7 @@ export default function ApplicantRegistration() {
       setNotice(googleClaimLoaded ? "Google verified your email. Your application is now under review." : microcopy.success.applicationSubmitted);
       setForm(initialForm);
       setGoogleClaimLoaded(false);
+      setPrivacyChecked(false);
     } catch (err: unknown) {
       setError(parseError(err, "Failed to submit application."));
     } finally {
@@ -200,6 +209,12 @@ export default function ApplicantRegistration() {
       return;
     }
 
+    if (!privacyChecked) {
+      setError("You must read and acknowledge the Data Privacy Notice before reapplying.");
+      setNotice("");
+      return;
+    }
+
     setSaving(true);
     setError("");
     setNotice("");
@@ -216,6 +231,7 @@ export default function ApplicantRegistration() {
       setNotice(microcopy.success.applicationReapplied);
       setReapplyPassword("");
       setReapplyPasswordConfirmation("");
+      setPrivacyChecked(false);
     } catch (err: unknown) {
       setError(parseError(err, "Failed to start reapplication."));
     } finally {
@@ -339,6 +355,9 @@ export default function ApplicantRegistration() {
             Applicant: a non-member seeking to join the fraternity. Once approved, your account remains in the official applicant workflow until committee requirements are fully completed.
           </p>
           <div className="md:col-span-2">
+            <DataPrivacyNoticeBlock checked={privacyChecked} onChange={setPrivacyChecked} compact />
+          </div>
+          <div className="md:col-span-2">
             <button onClick={() => void submitApplication()} disabled={saving} className="btn-primary">
               {saving ? "Submitting..." : "Submit Application"}
             </button>
@@ -379,6 +398,9 @@ export default function ApplicantRegistration() {
               onChange={setReapplyPasswordConfirmation}
               className="rounded-md border border-white/25 bg-white/10 px-4 py-2 pr-12 text-offwhite"
             />
+            <div className="md:col-span-2">
+              <DataPrivacyNoticeBlock checked={privacyChecked} onChange={setPrivacyChecked} compact />
+            </div>
             <div className="md:col-span-2">
               <button onClick={() => void startReapplication()} disabled={saving} className="btn-secondary">
                 {saving ? "Starting..." : "Start Reapplication"}

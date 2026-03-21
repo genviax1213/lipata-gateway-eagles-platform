@@ -116,6 +116,24 @@ class FormalPhotoController extends Controller
         return $this->streamPhoto($formalPhoto);
     }
 
+    public function destroyMine(Request $request)
+    {
+        $user = $this->authenticatedUser($request);
+        $formalPhoto = $user->formalPhoto()->first();
+
+        if (!$formalPhoto) {
+            return response()->json([
+                'message' => 'No formal photo is saved for this account.',
+            ], 404);
+        }
+
+        $formalPhoto->delete();
+
+        return response()->json([
+            'message' => 'Formal photo deleted.',
+        ]);
+    }
+
     public function showImage(Request $request, FormalPhoto $formalPhoto)
     {
         $this->authorize('view', $formalPhoto);

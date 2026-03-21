@@ -36,6 +36,7 @@ export default function FormalPhotoCard({
 }: FormalPhotoCardProps) {
   const [sourceFile, setSourceFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [securePreviewUrl, setSecurePreviewUrl] = useState<string | null>(null);
   const [previewFailed, setPreviewFailed] = useState(false);
   const [optimisticPreviewUrl, setOptimisticPreviewUrl] = useState<string | null>(null);
@@ -125,6 +126,32 @@ export default function FormalPhotoCard({
     }
   };
 
+  const deletePhoto = async () => {
+    if (!savedPhotoUrl) return;
+    if (!window.confirm("Delete your saved formal photo? This cannot be undone.")) {
+      return;
+    }
+
+    setDeleting(true);
+    onError("");
+
+    try {
+      const response = await api.delete<FormalPhotoUploadResponse>("/formal-photos/me");
+      setOptimisticPreviewUrl((current) => {
+        if (current) URL.revokeObjectURL(current);
+        return null;
+      });
+      onSaved(null);
+      onNotice(response.data.message ?? "Formal photo deleted.");
+      setSourceFile(null);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Unable to delete the formal photo.";
+      onError(message);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <div className="mb-6 grid gap-5 lg:grid-cols-[minmax(0,1fr)_220px] lg:items-start">
       <div className="order-2 space-y-4 lg:order-1">
@@ -163,6 +190,16 @@ export default function FormalPhotoCard({
           >
             {saving ? "Saving..." : "Save Formal Photo"}
           </button>
+          {savedPhotoUrl ? (
+            <button
+              type="button"
+              className="btn-secondary disabled:opacity-50"
+              onClick={() => void deletePhoto()}
+              disabled={saving || deleting}
+            >
+              {deleting ? "Deleting..." : "Delete Saved Photo"}
+            </button>
+          ) : null}
           <p className="text-xs text-mist/70">
             Saving uploads the selected image only. No outfit overlay or template is applied. This photo stays separate from CMS media and applicant documents.
           </p>

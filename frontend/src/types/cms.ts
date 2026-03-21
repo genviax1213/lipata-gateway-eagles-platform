@@ -18,6 +18,7 @@ export interface CmsPost {
   announcement_text: string | null;
   announcement_audience: "public" | "members";
   announcement_expires_at: string | null;
+  acknowledged_at: string | null;
   send_push_notification: boolean;
   push_notification_sent_at: string | null;
   status: "draft" | "published";

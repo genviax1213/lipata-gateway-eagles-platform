@@ -26,6 +26,8 @@ use App\Http\Controllers\HomepageVideoController;
 use App\Http\Controllers\ContactInquiryController;
 use App\Http\Controllers\PushSubscriptionController;
 use App\Http\Controllers\VisitorAnalyticsController;
+use App\Http\Controllers\MemberRegistrationAccessController;
+use App\Http\Controllers\DataPrivacyNoticeController;
 use App\Models\Post;
 
 Route::prefix('v1')->group(function () {
@@ -53,6 +55,8 @@ Route::prefix('v1')->group(function () {
         ->middleware('throttle:application-submit');
     Route::post('/member-registrations/verify', [MemberRegistrationController::class, 'verify'])
         ->middleware('throttle:application-verify');
+    Route::post('/member-registrations/access-events', [MemberRegistrationAccessController::class, 'track'])
+        ->middleware('throttle:120,1');
     Route::get('/oauth/google/status', [GoogleOAuthController::class, 'status']);
     Route::get('/oauth/google/claim', [GoogleOAuthController::class, 'claim']);
     Route::post('/rll', [BootstrapRecoveryController::class, 'request'])
@@ -78,9 +82,11 @@ Route::prefix('v1')->group(function () {
             return response()->json(array_merge($user->toArray(), [
                 'has_authored_posts' => Post::query()->where('author_id', $user->id)->exists(),
                 'has_member_profile' => $user->memberProfile !== null,
+                'data_privacy_notice_version_required' => DataPrivacyNoticeController::CURRENT_NOTICE_VERSION,
             ]));
         });
         Route::post('/logout', [AuthController::class, 'logout']);
+        Route::post('/auth/data-privacy/acknowledge', [DataPrivacyNoticeController::class, 'acknowledge']);
         Route::post('/auth/change-password', [AuthController::class, 'changePassword']);
         Route::get('/auth/sessions', [AuthController::class, 'sessions']);
         Route::delete('/auth/sessions/{tokenId}', [AuthController::class, 'revokeSession']);
@@ -93,6 +99,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/admin/logs/archives/{archive}/download', [LogManagementController::class, 'downloadArchive'])->middleware('portal.permission:users.view');
         Route::delete('/admin/logs/archives/{archive}', [LogManagementController::class, 'deleteArchive'])->middleware('portal.permission:users.manage');
         Route::get('/admin/visitors/overview', [VisitorAnalyticsController::class, 'overview'])->middleware('portal.permission:users.view');
+        Route::get('/admin/member-registration-accesses', [MemberRegistrationAccessController::class, 'index'])->middleware('portal.permission:users.view');
         Route::get('/dashboard/me', [DashboardController::class, 'me']);
         Route::get('/identity/my-qr', [IdentityQrController::class, 'showMine'])->middleware('portal.permission:identity.qr.view');
         Route::get('/calendar/events', [CalendarEventController::class, 'index'])->middleware('portal.permission:calendar.view');
@@ -109,10 +116,12 @@ Route::prefix('v1')->group(function () {
         Route::get('/directory/exports/member-photos', [DirectoryExportController::class, 'exportMemberPhotosZip'])->middleware('portal.permission:photos.export');
         Route::get('/formal-photos/me', [FormalPhotoController::class, 'showMine'])->name('formal-photos.my');
         Route::post('/formal-photos/me', [FormalPhotoController::class, 'storeMine'])->middleware('throttle:members-write')->name('formal-photos.store');
+        Route::delete('/formal-photos/me', [FormalPhotoController::class, 'destroyMine'])->middleware('throttle:members-write');
         Route::get('/formal-photos/me/image', [FormalPhotoController::class, 'showMineImage'])->name('formal-photos.my-image');
         Route::get('/formal-photos/directory', [FormalPhotoController::class, 'indexDirectory'])->name('formal-photos.directory');
         Route::get('/formal-photos/{formalPhoto}/image', [FormalPhotoController::class, 'showImage'])->name('formal-photos.show-image');
         Route::get('/member-content/announcements', [PostController::class, 'memberAnnouncements']);
+        Route::post('/member-content/announcements/{post}/acknowledge', [PostController::class, 'acknowledgeMemberAnnouncement']);
         Route::get('/member-content/post/{slug}', [PostController::class, 'memberBySlug']);
         Route::get('/member-content/resolutions', [PostController::class, 'memberResolutions']);
         Route::get('/member-content/{section}', [PostController::class, 'memberBySection']);
@@ -133,6 +142,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/members/{member}/formal-photo', [FormalPhotoController::class, 'showForMember'])->name('formal-photos.members.show');
         Route::post('/members/{member}/assign-applicant-batch', [MemberController::class, 'assignApplicantBatch'])->middleware('throttle:members-write', 'portal.permission:applications.review');
         Route::put('/members/me/profile', [MemberController::class, 'updateMyProfile']);
+        Route::delete('/members/me', [MemberController::class, 'destroyMine'])->middleware('throttle:members-write');
         Route::put('/members/{member}', [MemberController::class, 'update'])->middleware('throttle:members-write', 'portal.permission:members.update');
         Route::delete('/members/{member}', [MemberController::class, 'destroy'])->middleware('throttle:members-write', 'portal.permission:users.manage');
         Route::get('/applicants', [ApplicantController::class, 'index']);
@@ -140,6 +150,8 @@ Route::prefix('v1')->group(function () {
         Route::get('/applicants/me/profile', [ApplicantController::class, 'myProfile'])->middleware('portal.permission:applications.dashboard.view');
         Route::put('/applicants/me/profile', [ApplicantController::class, 'updateMyProfile'])->middleware('portal.permission:applications.dashboard.view');
         Route::post('/applicants/me/withdraw', [ApplicantController::class, 'withdraw']);
+        Route::delete('/applicants/me', [ApplicantController::class, 'destroyMine']);
+        Route::delete('/applicants/me/documents/{document}', [ApplicantController::class, 'deleteMyDocument']);
         Route::get('/applicants/archive/me', [ApplicantController::class, 'myArchive']);
         Route::get('/applicants/{applicant}/formal-photo', [FormalPhotoController::class, 'showForApplicant'])->name('formal-photos.applicants.show');
         Route::get('/applicants/{applicant}', [ApplicantController::class, 'show']);

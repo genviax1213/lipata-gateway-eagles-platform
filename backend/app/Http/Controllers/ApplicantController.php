@@ -1588,6 +1588,76 @@ class ApplicantController extends Controller
         ]);
     }
 
+    public function deleteMyDocument(Request $request, ApplicantDocument $document)
+    {
+        /** @var User $user */
+        $user = $request->user();
+        $applicant = $this->resolveOwnedApplication($user);
+
+        if (!$applicant || $document->applicant_id !== $applicant->id) {
+            abort(404);
+        }
+
+        if ($applicant->status === Applicant::STATUS_ACTIVATED || $applicant->member_id) {
+            return response()->json([
+                'message' => 'Activated applicants must manage records through the member workflow.',
+            ], 422);
+        }
+
+        $disk = $this->resolveDocumentDisk($document);
+        if (Storage::disk($disk)->exists($document->file_path)) {
+            Storage::disk($disk)->delete($document->file_path);
+        }
+
+        $document->delete();
+
+        Log::info('application.document_deleted_by_owner', [
+            'actor_user_id' => $user->id,
+            'application_id' => $applicant->id,
+            'document_id' => $document->id,
+            'ip' => $request->ip(),
+        ]);
+
+        return response()->json([
+            'message' => 'Document deleted.',
+        ]);
+    }
+
+    public function destroyMine(Request $request)
+    {
+        /** @var User $user */
+        $user = $request->user();
+        $applicant = $this->resolveOwnedApplication($user);
+
+        if (!$applicant) {
+            return response()->json([
+                'message' => 'No applicant record is linked to this account.',
+            ], 404);
+        }
+
+        if ($applicant->status === Applicant::STATUS_ACTIVATED || $applicant->member_id) {
+            return response()->json([
+                'message' => 'Activated applicants must be managed through the member workflow and cannot be deleted from applicant self-service.',
+            ], 422);
+        }
+
+        $applicationId = $applicant->id;
+        $applicationEmail = $applicant->email;
+
+        $this->purgeApplicantRecord($applicant);
+
+        Log::info('application.deleted_by_owner', [
+            'actor_user_id' => $user->id,
+            'application_id' => $applicationId,
+            'email' => $applicationEmail,
+            'ip' => $request->ip(),
+        ]);
+
+        return response()->json([
+            'message' => 'Applicant account data deleted.',
+        ]);
+    }
+
     public function rejoin(Request $request, Applicant $applicant)
     {
         $this->authorize('rejoin', $applicant);

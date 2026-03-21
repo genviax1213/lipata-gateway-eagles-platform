@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Post;
 use App\Models\PushSubscription;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Log;
 use Minishlink\WebPush\Subscription;
 use Minishlink\WebPush\WebPush;
@@ -24,7 +25,7 @@ class WebPushAnnouncementService
             return 0;
         }
 
-        $subscriptions = PushSubscription::query()->get();
+        $subscriptions = $this->eligibleSubscriptions($post)->get();
         if ($subscriptions->isEmpty()) {
             return 0;
         }
@@ -93,6 +94,33 @@ class WebPushAnnouncementService
         }
 
         return $sent;
+    }
+
+    private function eligibleSubscriptions(Post $post): Builder
+    {
+        $query = PushSubscription::query();
+
+        if (($post->announcement_audience ?? 'public') !== 'members') {
+            return $query;
+        }
+
+        return $query
+            ->whereNotNull('user_id')
+            ->whereHas('user', function (Builder $userQuery): void {
+                $userQuery->where(function (Builder $memberQuery): void {
+                    $memberQuery
+                        ->whereHas('memberProfile')
+                        ->orWhereExists(function ($subQuery): void {
+                            $subQuery
+                                ->selectRaw('1')
+                                ->from('members')
+                                ->whereRaw('LOWER(TRIM(members.email)) = LOWER(TRIM(users.email))');
+                        });
+                });
+            })
+            ->whereDoesntHave('user.postAcknowledgements', function (Builder $ackQuery) use ($post): void {
+                $ackQuery->where('post_id', $post->id);
+            });
     }
 
     private function vapidSubject(): string

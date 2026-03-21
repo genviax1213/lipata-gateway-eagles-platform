@@ -16,6 +16,13 @@ use Laravel\Sanctum\TransientToken;
 
 class AuthController extends Controller
 {
+    private function userPayload(User $user): array
+    {
+        return array_merge($user->toArray(), [
+            'data_privacy_notice_version_required' => DataPrivacyNoticeController::CURRENT_NOTICE_VERSION,
+        ]);
+    }
+
     private function normalizeEmail(string $value): string
     {
         return Str::of($value)->lower()->trim()->value();
@@ -105,7 +112,7 @@ class AuthController extends Controller
         ]);
 
         $payload = [
-            'user' => $user,
+            'user' => $this->userPayload($user),
         ];
         if ($token) {
             $payload['token'] = $token;

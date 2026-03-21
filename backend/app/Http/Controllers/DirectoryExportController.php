@@ -106,7 +106,7 @@ class DirectoryExportController extends Controller
                     $missingFields[] = 'emergency_contact_number';
                 }
 
-                fputcsv($handle, [
+                fputcsv($handle, $this->sanitizeCsvRow([
                     $row->member_number,
                     $row->first_name,
                     $row->middle_name,
@@ -142,7 +142,7 @@ class DirectoryExportController extends Controller
                     $row->password_set ? 'Yes' : 'No',
                     $missingFields === [] ? 'Yes' : 'No',
                     implode('; ', $missingFields),
-                ]);
+                ]));
             }
             fclose($handle);
         }, $filename, ['Content-Type' => 'text/csv; charset=UTF-8']);
@@ -163,7 +163,7 @@ class DirectoryExportController extends Controller
             $handle = fopen('php://output', 'wb');
             fputcsv($handle, ['First Name', 'Middle Name', 'Last Name', 'Email', 'Batch', 'Current Stage', 'Status', 'Decision Status', 'Email Verified At', 'Reviewed At', 'Created At']);
             foreach ($rows as $row) {
-                fputcsv($handle, [
+                fputcsv($handle, $this->sanitizeCsvRow([
                     $row->first_name,
                     $row->middle_name,
                     $row->last_name,
@@ -175,7 +175,7 @@ class DirectoryExportController extends Controller
                     optional($row->email_verified_at)?->toDateTimeString(),
                     optional($row->reviewed_at)?->toDateTimeString(),
                     optional($row->created_at)?->toDateTimeString(),
-                ]);
+                ]));
             }
             fclose($handle);
         }, $filename, ['Content-Type' => 'text/csv; charset=UTF-8']);
@@ -246,5 +246,22 @@ class DirectoryExportController extends Controller
         }
 
         return $cache[$table];
+    }
+
+    private function sanitizeCsvRow(array $row): array
+    {
+        return array_map(fn ($value) => $this->sanitizeCsvCell($value), $row);
+    }
+
+    private function sanitizeCsvCell(mixed $value): string
+    {
+        $text = (string) ($value ?? '');
+        $trimmed = ltrim($text);
+
+        if ($trimmed !== '' && in_array($trimmed[0], ['=', '+', '-', '@'], true)) {
+            return "'" . $text;
+        }
+
+        return $text;
     }
 }

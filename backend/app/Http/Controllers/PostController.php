@@ -18,6 +18,7 @@ use Illuminate\Validation\ValidationException;
 use Throwable;
 use App\Models\User;
 use App\Models\Member;
+use App\Models\PostAcknowledgement;
 
 class PostController extends Controller
 {
@@ -97,10 +98,50 @@ class PostController extends Controller
 
     public function memberAnnouncements()
     {
-        $this->ensureAnnouncementMemberAccess(request());
+        $request = request();
+        $this->ensureAnnouncementMemberAccess($request);
         $posts = $this->announcementQuery(['public', 'members'])->get();
+        $acknowledgedAt = $this->announcementAcknowledgementsForUser($request->user(), $posts->pluck('id')->all());
 
-        return response()->json($posts->map(fn (Post $post) => $this->transform($post)));
+        return response()->json($posts->map(
+            fn (Post $post) => $this->transform($post, false, $acknowledgedAt[$post->id] ?? null)
+        ));
+    }
+
+    public function acknowledgeMemberAnnouncement(Request $request, Post $post)
+    {
+        $this->ensureAnnouncementMemberAccess($request);
+
+        $isEligibleAnnouncement = Post::query()
+            ->whereKey($post->id)
+            ->where('section', 'activities')
+            ->where('show_on_announcement_bar', true)
+            ->whereIn('announcement_audience', ['public', 'members'])
+            ->where('status', 'published')
+            ->where(function ($q) {
+                $q->whereNull('published_at')->orWhere('published_at', '<=', now());
+            })
+            ->where(function ($q) {
+                $q->whereNull('announcement_expires_at')->orWhere('announcement_expires_at', '>', now());
+            })
+            ->exists();
+
+        abort_unless($isEligibleAnnouncement, 404);
+
+        $acknowledgement = PostAcknowledgement::query()->updateOrCreate(
+            [
+                'post_id' => $post->id,
+                'user_id' => $request->user()->id,
+            ],
+            [
+                'acknowledged_at' => now(),
+            ]
+        );
+
+        return response()->json([
+            'message' => 'Announcement acknowledged.',
+            'acknowledged_at' => optional($acknowledgement->acknowledged_at)?->toISOString(),
+        ]);
     }
 
     public function publicBySlug(string $slug)
@@ -541,7 +582,7 @@ class PostController extends Controller
         return $candidate;
     }
 
-    private function transform(Post $post, bool $withAuthor = false): array
+    private function transform(Post $post, bool $withAuthor = false, ?string $acknowledgedAt = null): array
     {
         $viewer = request()->user();
         $isOwned = $viewer ? (int) $post->author_id === (int) $viewer->id : false;
@@ -568,6 +609,7 @@ class PostController extends Controller
             'announcement_text' => $post->announcement_text,
             'announcement_audience' => $post->announcement_audience ?: 'public',
             'announcement_expires_at' => optional($post->announcement_expires_at)?->toISOString(),
+            'acknowledged_at' => $acknowledgedAt,
             'send_push_notification' => (bool) $post->send_push_notification,
             'push_notification_sent_at' => optional($post->push_notification_sent_at)?->toISOString(),
             'status' => $post->status,
@@ -1180,6 +1222,20 @@ class PostController extends Controller
             ->latest('published_at')
             ->latest('id')
             ->limit($limit);
+    }
+
+    private function announcementAcknowledgementsForUser(?User $user, array $postIds): array
+    {
+        if (!$user || $postIds === []) {
+            return [];
+        }
+
+        return PostAcknowledgement::query()
+            ->where('user_id', $user->id)
+            ->whereIn('post_id', $postIds)
+            ->pluck('acknowledged_at', 'post_id')
+            ->map(fn ($value) => optional($value)?->toISOString())
+            ->all();
     }
 
     private function canUpdatePost(Request $request, Post $post): bool
