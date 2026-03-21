@@ -19,6 +19,10 @@ const sectionOptions = [
   "contact",
 ];
 
+function usesDocumentStyleInlineImages(section: string): boolean {
+  return section === "resolutions";
+}
+
 const PAGE_SIZES = [
   { label: "Readable", value: 18 },
   { label: "Comfortable", value: 20 },
@@ -1325,6 +1329,7 @@ export default function CmsPosts() {
                 onUploadImage={uploadInlineImage}
                 onPickExistingImage={pickExistingInlineImage}
                 disabled={saving || processingImage}
+                preserveInlineImageAspectRatio={usesDocumentStyleInlineImages(form.section)}
               />
               <p className="md:col-span-2 -mt-2 text-right text-xs text-mist/75">
                 Content: {contentWords.toLocaleString()} words · {contentChars.toLocaleString()} text characters

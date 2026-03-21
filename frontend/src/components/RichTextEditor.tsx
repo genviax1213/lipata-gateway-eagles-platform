@@ -14,6 +14,7 @@ type RichTextEditorProps = {
   onUploadImage: (file: File) => Promise<string>;
   onPickExistingImage?: () => Promise<string | null>;
   disabled?: boolean;
+  preserveInlineImageAspectRatio?: boolean;
 };
 
 type RichTextEditorBoundaryProps = {
@@ -104,12 +105,14 @@ function canvasToBlob(canvas: HTMLCanvasElement, mimeType: string, quality: numb
   });
 }
 
-async function cropAndResizeEditorImage(file: File): Promise<File | null> {
+async function cropAndResizeEditorImage(file: File, preserveAspectRatio = false): Promise<File | null> {
   const image = await loadImage(file);
   const sourceWidth = image.naturalWidth || image.width;
   const sourceHeight = image.naturalHeight || image.height;
 
-  const shouldCrop169 = window.confirm("Crop this image to 16:9 center before upload?");
+  const shouldCrop169 = preserveAspectRatio
+    ? false
+    : window.confirm("Crop this image to 16:9 center before upload?");
   const widthInput = window.prompt("Max output width in px (e.g. 1400). Leave blank to keep original.", "1400");
   if (widthInput === null) return null;
 
@@ -195,6 +198,7 @@ function RichTextEditorImpl({
   onUploadImage,
   onPickExistingImage,
   disabled = false,
+  preserveInlineImageAspectRatio = false,
 }: RichTextEditorProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const editorContainerRef = useRef<HTMLDivElement | null>(null);
@@ -280,7 +284,7 @@ function RichTextEditorImpl({
     if (!editor) return;
     setUploadingImage(true);
     try {
-      const editedFile = await cropAndResizeEditorImage(file);
+      const editedFile = await cropAndResizeEditorImage(file, preserveInlineImageAspectRatio);
       if (!editedFile) return;
       const imageUrl = await onUploadImage(editedFile);
       const labelInput = window.prompt("Enter image label (Cancel to skip):", "");
