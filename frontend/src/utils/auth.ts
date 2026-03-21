@@ -9,11 +9,19 @@ function extractRoleName(user: AuthUser): string | null {
   return typeof maybeName === "string" ? maybeName : null;
 }
 
+export function getRoleName(user: AuthUser): string | null {
+  return extractRoleName(user);
+}
+
 export function isAdminUser(user: AuthUser): boolean {
   if (!user) return false;
 
   const roleName = extractRoleName(user);
   return roleName === "superadmin" || roleName === "admin";
+}
+
+export function isApplicantUser(user: AuthUser): boolean {
+  return extractRoleName(user) === "applicant";
 }
 
 export function hasPermission(user: AuthUser, permissionName: string): boolean {

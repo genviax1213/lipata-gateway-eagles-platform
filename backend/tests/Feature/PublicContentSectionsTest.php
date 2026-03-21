@@ -394,6 +394,7 @@ class PublicContentSectionsTest extends TestCase
         $this->getJson('/api/v1/member-content/announcements')->assertForbidden();
         $this->getJson('/api/v1/member-content/activities')->assertForbidden();
         $this->getJson('/api/v1/member-content/post/anything')->assertForbidden();
+        $this->getJson('/api/v1/member-content/resolutions')->assertForbidden();
     }
 
     public function test_public_schedules_endpoint_returns_upcoming_calendar_entries(): void
@@ -528,6 +529,14 @@ class PublicContentSectionsTest extends TestCase
         $member = User::factory()->create([
             'role_id' => $memberRole->id,
             'email' => 'member-resolution-reader@example.test',
+        ]);
+        Member::query()->create([
+            'user_id' => $member->id,
+            'member_number' => 'M-RES-001',
+            'first_name' => 'Resolution',
+            'last_name' => 'Reader',
+            'email' => 'member-resolution-reader@example.test',
+            'membership_status' => 'active',
         ]);
 
         $resolution = Post::query()->create([

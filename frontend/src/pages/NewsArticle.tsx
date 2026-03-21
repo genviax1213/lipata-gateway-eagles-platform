@@ -6,7 +6,17 @@ import type { CmsPost } from "../types/cms";
 import { htmlToPlainText, sanitizeRichHtml } from "../utils/richText";
 import { buildVideoThumbnailCandidates } from "../utils/video";
 
-export default function NewsArticle() {
+type NewsArticleProps = {
+  forceMemberAccess?: boolean;
+  backToOverride?: string;
+  backLabelOverride?: string;
+};
+
+export default function NewsArticle({
+  forceMemberAccess = false,
+  backToOverride,
+  backLabelOverride,
+}: NewsArticleProps) {
   const { slug } = useParams();
   const { user } = useAuth();
   const hasMemberProfile = Boolean((user as { has_member_profile?: unknown } | null)?.has_member_profile);
@@ -33,7 +43,9 @@ export default function NewsArticle() {
       }
 
       try {
-        const endpoint = hasMemberProfile ? `/member-content/post/${slug}` : `/content/post/${slug}`;
+        const endpoint = forceMemberAccess || hasMemberProfile
+          ? `/member-content/post/${slug}`
+          : `/content/post/${slug}`;
         const res = await api.get(endpoint);
         if (!mounted) return;
         setPost(res.data as CmsPost);
@@ -50,10 +62,22 @@ export default function NewsArticle() {
     return () => {
       mounted = false;
     };
-  }, [hasMemberProfile, slug]);
+  }, [forceMemberAccess, hasMemberProfile, slug]);
 
-  const backTo = post?.section === "history" ? "/history" : post?.section === "news" || post?.section === "activities" ? "/activities" : "/";
-  const backLabel = post?.section === "history" ? "Back to History" : post?.section === "news" || post?.section === "activities" ? "Back to Activities" : "Back to Homepage";
+  const backTo = backToOverride ?? (post?.section === "history"
+    ? "/history"
+    : post?.section === "resolutions"
+      ? "/resolutions"
+      : post?.section === "news" || post?.section === "activities"
+        ? "/activities"
+        : "/");
+  const backLabel = backLabelOverride ?? (post?.section === "history"
+    ? "Back to History"
+    : post?.section === "resolutions"
+      ? "Back to Resolutions"
+      : post?.section === "news" || post?.section === "activities"
+        ? "Back to Activities"
+        : "Back to Homepage");
   const renderedHtml = useMemo(() => sanitizeRichHtml(post?.content ?? ""), [post?.content]);
   const estimatedWords = useMemo(
     () => htmlToPlainText(post?.content ?? "").split(/\s+/).filter(Boolean).length,
@@ -115,8 +139,8 @@ export default function NewsArticle() {
       {!loading && error && (
         <div className="surface-card p-8 text-mist/90">
           <p>{error}</p>
-          <Link to="/" className="mt-4 inline-block text-gold-soft hover:text-gold">
-            Back to homepage
+          <Link to={backTo} className="mt-4 inline-block text-gold-soft hover:text-gold">
+            {backLabel}
           </Link>
         </div>
       )}
@@ -125,8 +149,8 @@ export default function NewsArticle() {
         <article className="article-shell overflow-hidden">
           <div className="article-shell__inner p-4 md:p-6 lg:p-8">
             <div className="mb-4">
-              <Link to="/" className="btn-secondary">
-                Back to Homepage
+              <Link to={backTo} className="btn-secondary">
+                {backLabel}
               </Link>
             </div>
 

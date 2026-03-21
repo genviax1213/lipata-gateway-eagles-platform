@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "../../contexts/useAuth";
+import { isApplicantUser } from "../../utils/auth";
 
 type NavLeaf = {
   label: string;
@@ -44,6 +45,7 @@ export default function Navbar() {
   const location = useLocation();
   const desktopNavRef = useRef<HTMLDivElement | null>(null);
   const isLoggedIn = Boolean(user);
+  const canSeeMemberOnlyNav = isLoggedIn && !isApplicantUser(user);
 
   const activeGroup = useMemo(() => (
     navGroups.find((group) => group.items.some((item) => location.pathname === item.to))?.label ?? null
@@ -188,8 +190,8 @@ export default function Navbar() {
               </div>
             </div>
           ))}
-          <NavLink to="/resolutions" className={navItem}>Resolutions</NavLink>
-          <NavLink to="/gmm" className={navItem}>GMM</NavLink>
+          {canSeeMemberOnlyNav && <NavLink to="/resolutions" className={navItem}>Resolutions</NavLink>}
+          {canSeeMemberOnlyNav && <NavLink to="/gmm" className={navItem}>GMM</NavLink>}
         </div>
 
         {mobileOpen && (
@@ -215,12 +217,16 @@ export default function Navbar() {
                   </div>
                 </div>
               ))}
-              <NavLink to="/resolutions" onClick={() => setMobileOpen(false)} className={navItem}>
-                Resolutions
-              </NavLink>
-              <NavLink to="/gmm" onClick={() => setMobileOpen(false)} className={navItem}>
-                GMM
-              </NavLink>
+              {canSeeMemberOnlyNav && (
+                <NavLink to="/resolutions" onClick={() => setMobileOpen(false)} className={navItem}>
+                  Resolutions
+                </NavLink>
+              )}
+              {canSeeMemberOnlyNav && (
+                <NavLink to="/gmm" onClick={() => setMobileOpen(false)} className={navItem}>
+                  GMM
+                </NavLink>
+              )}
             </div>
           </div>
         )}

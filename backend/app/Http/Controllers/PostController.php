@@ -179,15 +179,13 @@ class PostController extends Controller
             })
             ->firstOrFail();
 
-        if ($this->isMemberOnlySection($post->section)) {
-            abort(404);
-        }
-
         return response()->json($this->transform($post));
     }
 
     public function memberResolutions(Request $request)
     {
+        $this->ensureAnnouncementMemberAccess($request);
+
         $query = Post::query()
             ->where('section', self::MEMBER_ONLY_SECTION)
             ->where('status', 'published')

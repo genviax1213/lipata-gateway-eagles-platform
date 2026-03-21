@@ -2,6 +2,7 @@ import { Suspense, lazy } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "../contexts/AuthContext";
 import ProtectedRoute from "./ProtectedRoute";
+import MemberContentRoute from "./MemberContentRoute";
 import GuestRoute from "./GuestRoute";
 import VisitorTracker from "../components/VisitorTracker";
 
@@ -54,17 +55,27 @@ export default function AppRoutes() {
           <Route
             path="/resolutions"
             element={
-              <ProtectedRoute>
+              <MemberContentRoute>
                 <Layout><Resolutions /></Layout>
-              </ProtectedRoute>
+              </MemberContentRoute>
+            }
+          />
+          <Route
+            path="/resolutions/:slug"
+            element={
+              <MemberContentRoute>
+                <Layout>
+                  <NewsArticle forceMemberAccess backToOverride="/resolutions" backLabelOverride="Back to Resolutions" />
+                </Layout>
+              </MemberContentRoute>
             }
           />
           <Route
             path="/gmm"
             element={
-              <ProtectedRoute>
+              <MemberContentRoute>
                 <Layout><Gmm /></Layout>
-              </ProtectedRoute>
+              </MemberContentRoute>
             }
           />
           <Route path="/activities" element={<Layout><Activities /></Layout>} />

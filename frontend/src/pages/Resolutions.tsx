@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
+import PublicPostCard from "../components/cms/PublicPostCard";
 import api from "../services/api";
 import type { CmsPost } from "../types/cms";
-import { htmlToPlainText, sanitizeRichHtml } from "../utils/richText";
 
 type PaginatedResolutionResponse = {
   data?: CmsPost[];
@@ -14,7 +14,6 @@ export default function Resolutions() {
   const [page, setPage] = useState(1);
   const [lastPage, setLastPage] = useState(1);
   const [loading, setLoading] = useState(true);
-  const [expandedPostId, setExpandedPostId] = useState<number | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -32,12 +31,10 @@ export default function Resolutions() {
 
         setPosts(Array.isArray(res.data?.data) ? res.data.data : []);
         setLastPage(Number(res.data?.last_page ?? 1));
-        setExpandedPostId(null);
       } catch {
         if (!mounted) return;
         setPosts([]);
         setLastPage(1);
-        setExpandedPostId(null);
       } finally {
         if (mounted) setLoading(false);
       }
@@ -76,59 +73,12 @@ export default function Resolutions() {
         <>
           <div className="grid gap-6 md:grid-cols-3">
             {posts.map((post) => (
-              <article key={post.id} className="article-shell reveal h-full overflow-hidden">
-                <div className="article-shell__inner p-6 md:p-8">
-                  <header className="article-hero">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <p className="text-xs uppercase tracking-[0.22em] text-gold-soft">Resolution</p>
-                        <h2 className="mt-2 font-heading text-2xl text-offwhite md:text-3xl">{post.title}</h2>
-                        {post.published_at && (
-                          <p className="mt-3 text-sm text-mist/75">
-                            Published {new Date(post.published_at).toLocaleString()}
-                          </p>
-                        )}
-                      </div>
-                      <span className="rounded-full border border-gold/35 bg-gold/10 px-3 py-1 text-xs uppercase tracking-[0.18em] text-gold-soft">
-                        Members Only
-                      </span>
-                    </div>
-                  </header>
-
-                  <div className="article-reading-frame mt-6">
-                    {post.image_url && (
-                      <img
-                        src={post.image_url}
-                        alt={post.title}
-                        className="mb-5 max-h-72 w-full rounded-md object-cover"
-                      />
-                    )}
-
-                    <p className="text-base text-mist/90">
-                      {post.excerpt?.trim() || `${htmlToPlainText(post.content).replace(/\s+/g, " ").trim().slice(0, 220).trim()}...`}
-                    </p>
-
-                    <div className="mt-5">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setExpandedPostId((current) => (current === post.id ? null : post.id));
-                        }}
-                        className="btn-secondary"
-                      >
-                        {expandedPostId === post.id ? "Hide Article" : "Read Article"}
-                      </button>
-                    </div>
-
-                    {expandedPostId === post.id && (
-                      <div
-                        className="rich-content mt-6 border-t border-white/10 pt-6 text-mist/90"
-                        dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(post.content) }}
-                      />
-                    )}
-                  </div>
-                </div>
-              </article>
+              <PublicPostCard
+                key={post.id}
+                post={post}
+                readLabel="Read Article"
+                articlePath={post.slug ? `/resolutions/${post.slug}` : undefined}
+              />
             ))}
           </div>
 

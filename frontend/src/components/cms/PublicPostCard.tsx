@@ -8,6 +8,7 @@ type PublicPostCardProps = {
   post: CmsPost;
   readLabel?: string;
   emptyLabel?: string;
+  articlePath?: string;
 };
 
 function contentSnippet(value: string, max = 180): string {
@@ -70,6 +71,7 @@ export default function PublicPostCard({
   post,
   readLabel = "Read Article",
   emptyLabel = "No cover image",
+  articlePath,
 }: PublicPostCardProps) {
   const description = post.post_type === "video"
     ? (post.excerpt ?? post.video_thumbnail_text ?? "Watch the LGEC video post.")
@@ -105,7 +107,7 @@ export default function PublicPostCard({
       <p className="mt-2 text-sm text-mist/85">{description}</p>
       {post.slug && (
         <div className="mt-4">
-          <Link to={`/news/${post.slug}`} className="btn-secondary">
+          <Link to={articlePath ?? `/news/${post.slug}`} className="btn-secondary">
             {post.post_type === "video" ? "Watch Video" : readLabel}
           </Link>
         </div>
