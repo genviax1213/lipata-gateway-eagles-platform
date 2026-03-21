@@ -98,16 +98,18 @@ export default function AnnouncementBar() {
   }, [hasMemberProfile, supportsBrowserPush]);
 
   const items = useMemo<AnnouncementItem[]>(() => (
-    announcements.map((post) => ({
-      id: post.id,
-      version: `${post.id}:${post.updated_at ?? post.published_at ?? post.created_at ?? "latest"}`,
-      title: post.title,
-      headline: post.announcement_text?.trim() || "Club announcement",
-      excerpt: post.excerpt?.trim() || "Read the latest club notice and schedule details.",
-      to: `/news/${post.slug}`,
-      meta: post.published_at ? `Posted ${formatAnnouncementDate(post.published_at)}` : "Active announcement",
-      acknowledgedAt: post.acknowledged_at,
-    }))
+    announcements
+      .filter((post) => typeof post.announcement_text === "string" && post.announcement_text.trim() !== "")
+      .map((post) => ({
+        id: post.id,
+        version: `${post.id}:${post.updated_at ?? post.published_at ?? post.created_at ?? "latest"}`,
+        title: post.title,
+        headline: post.announcement_text!.trim(),
+        excerpt: post.excerpt?.trim() || "Read the latest club notice and schedule details.",
+        to: `/news/${post.slug}`,
+        meta: post.published_at ? `Posted ${formatAnnouncementDate(post.published_at)}` : "Active announcement",
+        acknowledgedAt: post.acknowledged_at,
+      }))
   ), [announcements]);
 
   const featuredAnnouncement = hasMemberProfile
@@ -232,33 +234,7 @@ export default function AnnouncementBar() {
   }
 
   if (items.length === 0) {
-    return (
-      <section className="relative z-10 border-b border-white/10 bg-[linear-gradient(90deg,rgba(216,179,95,0.14),rgba(12,22,38,0.92),rgba(216,179,95,0.1))]">
-        <div className="section-wrap flex flex-col gap-3 py-2 text-xs text-mist/85 md:flex-row md:items-center md:justify-between md:text-sm">
-          <div className="flex items-center gap-3">
-            <span className="rounded-full border border-gold/35 bg-gold/10 px-2.5 py-1 font-semibold uppercase tracking-[0.18em] text-gold-soft">
-              Announcements
-            </span>
-            <span>No announcement</span>
-          </div>
-          {supportsBrowserPush && pushConfig?.enabled && (
-            <button
-              type="button"
-              onClick={pushEnabled ? () => void disableBrowserAlerts() : () => void enableBrowserAlerts()}
-              disabled={pushPending}
-              className="w-fit rounded-full border border-white/20 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-offwhite transition hover:border-gold/40 hover:text-gold disabled:opacity-60"
-            >
-              {pushPending ? "Updating Alerts..." : pushEnabled ? "Disable Browser Alerts" : "Enable Browser Alerts"}
-            </button>
-          )}
-        </div>
-        {pushError && (
-          <div className="section-wrap pb-2 text-[11px] text-amber-200/90 md:text-xs">
-            {pushError}
-          </div>
-        )}
-      </section>
-    );
+    return null;
   }
 
   return (

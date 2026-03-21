@@ -57,6 +57,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     lastServerActivitySyncAtRef.current = 0;
   }, []);
 
+  const clearAuthNotice = useCallback(() => {
+    localStorage.removeItem(AUTH_NOTICE_KEY);
+  }, []);
+
   const syncUserSession = useCallback(async (clearOnAuthFailure = true) => {
     const token = legacyTokenMode ? localStorage.getItem("auth_token") : null;
     if (legacyTokenMode && !token) {
@@ -194,6 +198,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [legacyTokenMode, syncUserSession]);
 
   const login = async (email: string, password: string) => {
+    clearAuthNotice();
+
     try {
       await ensureCsrfCookie();
     } catch {
@@ -214,9 +220,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.removeItem(AUTH_USER_CACHE_KEY);
     }
     setUser(res.data.user);
-    await syncUserSession(false);
     lastServerActivitySyncAtRef.current = Date.now();
     setLastActivityAt(Date.now());
+    clearAuthNotice();
+    void syncUserSession(false);
   };
 
   if (loading) return <AuthLoadingScreen />;

@@ -85,6 +85,7 @@ export default function Login() {
     e.preventDefault();
     setError("");
     setNotice("");
+    localStorage.removeItem("portal_auth_notice");
     setSaving(true);
 
     try {

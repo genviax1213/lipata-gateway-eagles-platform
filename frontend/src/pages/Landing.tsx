@@ -323,11 +323,13 @@ export default function Landing() {
             </Link>
           </div>
           <p className="reveal reveal-delay-2 mt-5 text-sm text-mist/80">
-            Already a member?{" "}
-            <Link to={canonicalRoutes.login} className="font-semibold text-gold-soft hover:text-gold">
-              Sign in here
-            </Link>
-            .
+            <span className="inline-flex flex-wrap items-baseline gap-x-1 lg:flex-nowrap lg:whitespace-nowrap">
+              <span>Already a member?</span>
+              <Link to={canonicalRoutes.login} className="font-semibold text-gold-soft hover:text-gold">
+                Sign in here
+              </Link>
+              <span>.</span>
+            </span>
           </p>
 
           <div className="mt-6 lg:hidden">
