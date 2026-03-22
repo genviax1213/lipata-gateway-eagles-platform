@@ -46,10 +46,13 @@ export default function PasswordField({
       />
       <button
         type="button"
+        onMouseDown={(event) => event.preventDefault()}
+        onTouchStart={(event) => event.preventDefault()}
         onClick={() => setVisible((current) => !current)}
-        className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-mist/80 transition hover:text-offwhite"
+        className="absolute right-3 top-1/2 z-10 -translate-y-1/2 rounded p-1 text-sm text-mist/80 transition hover:text-offwhite"
         aria-label={visible ? "Hide password" : "Show password"}
         title={visible ? "Hide password" : "Show password"}
+        style={{ touchAction: "manipulation" }}
       >
         {visible ? (
           <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5 fill-none stroke-current stroke-2">

@@ -357,7 +357,7 @@ export default function Landing() {
       </div>
 
       {homepageVideos.length > 0 ? (
-        <div className="section-wrap relative z-10 pb-8">
+        <div className="section-wrap relative z-10 pb-12 lg:pb-16">
           <div
             className={`homepage-video-stack reveal reveal-delay-2 ${
               homepageVideos.length === 1 ? "homepage-video-stack-single" : "homepage-video-stack-multi"
@@ -374,7 +374,7 @@ export default function Landing() {
         </div>
       ) : null}
 
-      <div className="section-wrap relative z-10 pb-16">
+      <div className="section-wrap relative z-10 pt-6 pb-16 lg:pt-10">
         <h2 className="mb-4 font-heading text-3xl text-offwhite">Community In Action</h2>
 
         {communityPosts.length > 0 ? (

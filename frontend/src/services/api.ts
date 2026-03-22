@@ -14,6 +14,9 @@ function resolveApiOrigin(url: string): string {
 
 const apiOrigin = resolveApiOrigin(apiBaseUrl);
 let csrfCookieLoaded = false;
+type RetryableRequestConfig = {
+  _csrfRetry?: boolean;
+} & Record<string, unknown>;
 
 const api = axios.create({
   baseURL: apiBaseUrl,
@@ -27,6 +30,9 @@ const AUTH_NOTICE_KEY = "portal_auth_notice";
 export type GoogleOAuthIntent = "login" | "member_registration" | "applicant_registration";
 
 export async function ensureCsrfCookie(force = false): Promise<void> {
+  if (force) {
+    csrfCookieLoaded = false;
+  }
   if (csrfCookieLoaded && !force) return;
   const candidates = [
     `${apiOrigin}/sanctum/csrf-cookie`,
@@ -42,6 +48,11 @@ export async function ensureCsrfCookie(force = false): Promise<void> {
         withXSRFToken: true,
         xsrfCookieName: "XSRF-TOKEN",
         xsrfHeaderName: "X-XSRF-TOKEN",
+        params: { _ts: Date.now() },
+        headers: {
+          "Cache-Control": "no-cache",
+          Pragma: "no-cache",
+        },
       });
       csrfCookieLoaded = true;
       if (i > 0) {
@@ -90,12 +101,30 @@ api.interceptors.request.use((config) => {
 
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
     if (!axios.isAxiosError(error)) {
       return Promise.reject(error);
     }
 
     const status = error.response?.status;
+    const config = (error.config ?? null) as (RetryableRequestConfig & {
+      method?: string;
+      url?: string;
+    }) | null;
+    const method = (config?.method ?? "get").toLowerCase();
+    const isMutatingRequest = ["post", "put", "patch", "delete"].includes(method);
+    const isCsrfBootstrapRequest = (config?.url ?? "").includes("sanctum/csrf-cookie");
+
+    if (status === 419) {
+      csrfCookieLoaded = false;
+
+      if (!legacyTokenMode && config && !config._csrfRetry && isMutatingRequest && !isCsrfBootstrapRequest) {
+        config._csrfRetry = true;
+        await ensureCsrfCookie(true);
+        return api.request(config);
+      }
+    }
+
     const payload = (error.response?.data as { code?: string; message?: string } | undefined) ?? {};
     if (status === 401 && (payload.code === "session_inactive" || payload.code === "session_replaced")) {
       localStorage.setItem(AUTH_NOTICE_KEY, payload.message ?? "Your portal session ended. Please log in again.");
