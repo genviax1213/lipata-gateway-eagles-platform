@@ -18,6 +18,8 @@ const ACTIVITY_EVENTS: Array<keyof WindowEventMap> = [
   "scroll",
   "touchstart",
 ];
+const POST_LOGIN_GRACE_MS = 12_000;
+const POST_LOGIN_SESSION_BOOTSTRAP_ATTEMPTS = 4;
 
 function shouldEnforceServerActivityTracking(user: Record<string, unknown> | null): boolean {
   if (!user) return false;
@@ -29,6 +31,22 @@ function shouldEnforceServerActivityTracking(user: Record<string, unknown> | nul
 
 function normalizeEmail(value: string): string {
   return value.trim().toLowerCase();
+}
+
+async function waitForSessionBootstrap(): Promise<void> {
+  for (let attempt = 0; attempt < POST_LOGIN_SESSION_BOOTSTRAP_ATTEMPTS; attempt += 1) {
+    try {
+      await api.get("/user");
+      return;
+    } catch (error) {
+      const status = axios.isAxiosError(error) ? error.response?.status : null;
+      if (status !== 401 && status !== 419) {
+        throw error;
+      }
+
+      await new Promise((resolve) => window.setTimeout(resolve, 300 * (attempt + 1)));
+    }
+  }
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -50,11 +68,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(() => !legacyTokenMode || localStorage.getItem("auth_token") !== null);
   const [lastActivityAt, setLastActivityAt] = useState(() => Date.now());
   const lastServerActivitySyncAtRef = useRef(0);
+  const authStateVersionRef = useRef(0);
+  const postLoginGraceUntilRef = useRef(0);
 
   const clearStoredAuthState = useCallback(() => {
     localStorage.removeItem("auth_token");
     localStorage.removeItem(AUTH_USER_CACHE_KEY);
     lastServerActivitySyncAtRef.current = 0;
+    postLoginGraceUntilRef.current = 0;
+    authStateVersionRef.current += 1;
   }, []);
 
   const clearAuthNotice = useCallback(() => {
@@ -62,6 +84,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const syncUserSession = useCallback(async (clearOnAuthFailure = true) => {
+    const requestVersion = authStateVersionRef.current;
     const token = legacyTokenMode ? localStorage.getItem("auth_token") : null;
     if (legacyTokenMode && !token) {
       clearStoredAuthState();
@@ -83,8 +106,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       const status = axios.isAxiosError(error) ? error.response?.status : null;
       const isAuthFailure = status === 401 || status === 419;
+      const withinPostLoginGrace = Date.now() < postLoginGraceUntilRef.current;
 
-      if (isAuthFailure && clearOnAuthFailure) {
+      if (isAuthFailure && withinPostLoginGrace) {
+        try {
+          await new Promise((resolve) => window.setTimeout(resolve, 350));
+          const retryRes = await api.get("/user");
+          setUser(retryRes.data);
+          if (shouldEnforceServerActivityTracking(retryRes.data)) {
+            lastServerActivitySyncAtRef.current = Date.now();
+          }
+          if (legacyTokenMode) {
+            localStorage.setItem(AUTH_USER_CACHE_KEY, JSON.stringify(retryRes.data));
+          } else {
+            localStorage.removeItem(AUTH_USER_CACHE_KEY);
+          }
+          return;
+        } catch {
+          // Fall through to normal auth-failure handling after grace retry.
+        }
+      }
+
+      if (isAuthFailure && clearOnAuthFailure && requestVersion === authStateVersionRef.current) {
         clearStoredAuthState();
         setUser(null);
       }
@@ -142,7 +185,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (!requiresPrivilegedIdleTimeout || idleForMs < PRIVILEGED_IDLE_TIMEOUT_MS) {
-        void syncUserSession();
+        void syncUserSession(false);
       }
     }, SESSION_HEARTBEAT_MS);
 
@@ -199,6 +242,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, password: string) => {
     clearAuthNotice();
+    authStateVersionRef.current += 1;
 
     try {
       await ensureCsrfCookie();
@@ -219,11 +263,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } else {
       localStorage.removeItem(AUTH_USER_CACHE_KEY);
     }
+    authStateVersionRef.current += 1;
+    postLoginGraceUntilRef.current = Date.now() + POST_LOGIN_GRACE_MS;
     setUser(res.data.user);
     lastServerActivitySyncAtRef.current = Date.now();
     setLastActivityAt(Date.now());
     clearAuthNotice();
-    void syncUserSession(false);
+
+    if (!legacyTokenMode) {
+      try {
+        await waitForSessionBootstrap();
+      } catch {
+        // Allow the portal to continue; interceptor/grace handling will take over.
+      }
+    }
   };
 
   if (loading) return <AuthLoadingScreen />;

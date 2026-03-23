@@ -8,6 +8,8 @@ use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Laravel\Sanctum\TransientToken;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -26,6 +28,13 @@ class EnforceSingleActiveSession
 
         if ($this->isInactive($user)) {
             $minutes = $this->inactivityTimeoutMinutes($user);
+            Log::warning('auth.session_inactive', [
+                'user_id' => $user->id,
+                'path' => $request->path(),
+                'minutes' => $minutes,
+                'last_activity_at' => optional($user->last_activity_at)->toISOString(),
+                'has_session' => $request->hasSession(),
+            ]);
             $this->terminateCurrentSession($request, $user, true);
 
             return response()->json([
@@ -35,6 +44,14 @@ class EnforceSingleActiveSession
         }
 
         if ($this->wasReplacedByAnotherLogin($request, $user)) {
+            Log::warning('auth.session_replaced', [
+                'user_id' => $user->id,
+                'path' => $request->path(),
+                'active_session_id' => (string) ($user->active_session_id ?? ''),
+                'current_session_id' => $request->hasSession() ? (string) $request->session()->getId() : '',
+                'active_token_id' => (int) ($user->active_token_id ?? 0),
+                'has_session' => $request->hasSession(),
+            ]);
             $this->terminateCurrentSession($request, $user, false);
 
             return response()->json([
@@ -115,7 +132,37 @@ class EnforceSingleActiveSession
             return false;
         }
 
+        if (!hash_equals($activeSessionId, $currentSessionId) && $this->shouldHealBrowserSessionId($activeSessionId, $currentSessionId)) {
+            Log::info('auth.session_id_healed', [
+                'active_session_id' => $activeSessionId,
+                'current_session_id' => $currentSessionId,
+            ]);
+            User::query()->whereKey($user->id)->update([
+                'active_session_id' => $currentSessionId,
+            ]);
+            $user->setAttribute('active_session_id', $currentSessionId);
+
+            return false;
+        }
+
         return !hash_equals($activeSessionId, $currentSessionId);
+    }
+
+    private function shouldHealBrowserSessionId(string $activeSessionId, string $currentSessionId): bool
+    {
+        $sessionTable = (string) config('session.table', 'sessions');
+
+        $activeSessionExists = DB::table($sessionTable)
+            ->where('id', $activeSessionId)
+            ->exists();
+
+        if ($activeSessionExists) {
+            return false;
+        }
+
+        return DB::table($sessionTable)
+            ->where('id', $currentSessionId)
+            ->exists();
     }
 
     private function terminateCurrentSession(Request $request, User $user, bool $clearAllTokens): void

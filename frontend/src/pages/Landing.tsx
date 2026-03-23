@@ -286,7 +286,7 @@ export default function Landing() {
     return () => clearInterval(timer);
   }, [communitySlideCount]);
 
-  const heroGridClassName = "section-wrap grid min-h-[calc(100vh-148px)] items-center gap-8 py-16 lg:h-[calc(100vh-148px)] lg:grid-cols-[1.1fr_0.9fr] lg:overflow-hidden";
+  const heroGridClassName = "section-wrap grid min-h-[calc(100vh-148px)] items-center gap-8 py-16 lg:grid-cols-[1.1fr_0.9fr]";
 
   return (
     <section className="hero-gradient relative overflow-hidden">

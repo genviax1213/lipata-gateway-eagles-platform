@@ -16,6 +16,8 @@ const apiOrigin = resolveApiOrigin(apiBaseUrl);
 let csrfCookieLoaded = false;
 type RetryableRequestConfig = {
   _csrfRetry?: boolean;
+  _authRetry?: boolean;
+  _authRetryCount?: number;
 } & Record<string, unknown>;
 
 const api = axios.create({
@@ -114,6 +116,8 @@ api.interceptors.response.use(
     const method = (config?.method ?? "get").toLowerCase();
     const isMutatingRequest = ["post", "put", "patch", "delete"].includes(method);
     const isCsrfBootstrapRequest = (config?.url ?? "").includes("sanctum/csrf-cookie");
+    const payload = (error.response?.data as { code?: string; message?: string } | undefined) ?? {};
+    const isPlainUnauthenticated = status === 401 && payload.message?.toLowerCase().includes("unauthenticated");
 
     if (status === 419) {
       csrfCookieLoaded = false;
@@ -125,7 +129,22 @@ api.interceptors.response.use(
       }
     }
 
-    const payload = (error.response?.data as { code?: string; message?: string } | undefined) ?? {};
+    if (!legacyTokenMode && isPlainUnauthenticated && config && method === "get" && !isCsrfBootstrapRequest) {
+      const retryCount = Number(config._authRetryCount ?? 0);
+      if (retryCount < 3) {
+        config._authRetry = true;
+        config._authRetryCount = retryCount + 1;
+        await new Promise((resolve) => window.setTimeout(resolve, 350 * (retryCount + 1)));
+        return api.request(config);
+      }
+    }
+
+    if (!legacyTokenMode && isPlainUnauthenticated && config && method !== "get" && !isCsrfBootstrapRequest && !config._authRetry) {
+      config._authRetry = true;
+      await new Promise((resolve) => window.setTimeout(resolve, 500));
+      return api.request(config);
+    }
+
     if (status === 401 && (payload.code === "session_inactive" || payload.code === "session_replaced")) {
       localStorage.setItem(AUTH_NOTICE_KEY, payload.message ?? "Your portal session ended. Please log in again.");
       localStorage.removeItem("auth_token");

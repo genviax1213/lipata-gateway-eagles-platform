@@ -59,9 +59,6 @@ class AuthController extends Controller
 
         // Enforce single active login across devices/browsers.
         $user->tokens()->delete();
-        if ($request->hasSession()) {
-            $request->session()->regenerate();
-        }
 
         $application = Applicant::query()
             ->whereRaw('LOWER(TRIM(email)) = ?', [strtolower(trim((string) $user->email))])

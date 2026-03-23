@@ -304,6 +304,8 @@ type ContributionsTab =
   | "expense-audit"
   | "expense-report";
 
+type FinanceSection = "treasury-summary" | "mine" | "members" | "expenses";
+
 const PAGE_SIZE = 10;
 
 const CATEGORY_OPTIONS = [
@@ -377,6 +379,27 @@ function matchesDateRange(date: string, from: string, to: string): boolean {
   return true;
 }
 
+async function getWithAuthRecovery<T>(url: string, params?: Record<string, unknown>): Promise<T> {
+  let lastError: unknown = null;
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const response = await api.get<T>(url, params ? { params } : undefined);
+      return response.data;
+    } catch (error) {
+      lastError = error;
+      const status = axios.isAxiosError(error) ? error.response?.status : null;
+      if (status !== 401 && status !== 419) {
+        throw error;
+      }
+
+      await new Promise((resolve) => window.setTimeout(resolve, 350 * (attempt + 1)));
+    }
+  }
+
+  throw lastError;
+}
+
 interface ChartItem {
   label: string;
   color: string;
@@ -433,6 +456,7 @@ export default function Contributions() {
   const canRecordAuditNotes = financeRole === "auditor" || roleName === "auditor";
 
   const [activeTab, setActiveTab] = useState<ContributionsTab>("mine");
+  const [activeSection, setActiveSection] = useState<FinanceSection>(() => (canViewFinance ? "treasury-summary" : "mine"));
   const [myData, setMyData] = useState<ContributionPayload | null>(null);
   const [myDataNotice, setMyDataNotice] = useState("");
   const [search, setSearch] = useState("");
@@ -450,6 +474,7 @@ export default function Contributions() {
   const [openingBalanceEffectiveDate, setOpeningBalanceEffectiveDate] = useState("");
   const [openingBalanceAmount, setOpeningBalanceAmount] = useState("");
   const [openingBalanceNote, setOpeningBalanceNote] = useState("");
+  const [showOpeningBalanceForm, setShowOpeningBalanceForm] = useState(false);
   const [reverseOpeningBalanceId, setReverseOpeningBalanceId] = useState<number | null>(null);
   const [reverseOpeningBalanceDate, setReverseOpeningBalanceDate] = useState("");
   const [reverseOpeningBalanceRemarks, setReverseOpeningBalanceRemarks] = useState("");
@@ -663,20 +688,18 @@ export default function Contributions() {
     if (!canViewFinance) return;
 
     try {
-      const [accountsRes, balancesRes, openingBalancesRes] = await Promise.all([
-        api.get<{ data?: FinanceAccountOption[] } | FinanceAccountOption[]>("/finance/accounts"),
-        api.get<FinanceAccountBalancesPayload>("/finance/account-balances"),
-        api.get<{ data: OpeningBalanceRow[] }>("/finance/opening-balances"),
-      ]);
+      const accountsDataResponse = await getWithAuthRecovery<{ data?: FinanceAccountOption[] } | FinanceAccountOption[]>("/finance/accounts");
+      const balancesData = await getWithAuthRecovery<FinanceAccountBalancesPayload>("/finance/account-balances");
+      const openingBalancesData = await getWithAuthRecovery<{ data: OpeningBalanceRow[] }>("/finance/opening-balances");
 
-      const accountsData = Array.isArray(accountsRes.data)
-        ? accountsRes.data
-        : accountsRes.data.data ?? [];
+      const accountsData = Array.isArray(accountsDataResponse)
+        ? accountsDataResponse
+        : accountsDataResponse.data ?? [];
 
       setFinanceAccounts(accountsData);
-      setAccountBalances(balancesRes.data.data ?? []);
-      setOpeningBalances(openingBalancesRes.data.data ?? []);
-      setUnassignedContributionTotal(Number(balancesRes.data.unassigned_contribution_total ?? 0));
+      setAccountBalances(balancesData.data ?? []);
+      setOpeningBalances(openingBalancesData.data ?? []);
+      setUnassignedContributionTotal(Number(balancesData.unassigned_contribution_total ?? 0));
     } catch (err) {
       setScopedError(parseError(err, "Unable to load finance accounts."), "global");
     }
@@ -958,7 +981,7 @@ export default function Contributions() {
         recipient_name: recipientIndicatorInput || null,
         finance_account_id: contributionAccountId || null,
       });
-      setNotice("Contribution saved. This record is immutable. Use a reversal entry if you need to offset it later.");
+      setNotice("Contribution saved. If this was entered incorrectly, add a reversal entry later instead of editing this saved record.");
       setAmountInput("");
       setNoteInput("");
       setRecipientIndicatorInput("");
@@ -985,7 +1008,7 @@ export default function Contributions() {
         contribution_date: reverseDate || null,
         finance_account_id: contributionRows.find((row) => row.id === reverseContributionId)?.finance_account?.id ?? null,
       });
-      setNotice("Reversal entry recorded. The original value is preserved, but the net total is now offset.");
+      setNotice("Reversal entry saved. The original record stays visible, and the total is now balanced by the reversal.");
       setReverseContributionId(null);
       setReverseRemarks("");
       setReverseDate("");
@@ -1016,7 +1039,7 @@ export default function Contributions() {
         approval_reference: expenseApprovalReferenceInput || null,
         beneficiary_member_id: expenseBeneficiaryMemberId || null,
       });
-      setNotice("Expense recorded. The ledger stays immutable; use an expense reversal to offset mistakes.");
+      setNotice("Expense saved. If this was entered incorrectly, add an expense reversal instead of editing the saved record.");
       setExpenseCategoryInput("administrative_expense");
       setExpenseDateInput("");
       setExpenseAmountInput("");
@@ -1046,7 +1069,7 @@ export default function Contributions() {
         expense_date: reverseExpenseDate || null,
         finance_account_id: expenseRows.find((row) => row.id === reverseExpenseId)?.finance_account?.id ?? null,
       });
-      setNotice("Expense reversal recorded. The original expense remains visible and the net total is offset.");
+      setNotice("Expense reversal saved. The original expense stays visible, and the total is now balanced by the reversal.");
       setReverseExpenseId(null);
       setReverseExpenseRemarks("");
       setReverseExpenseDate("");
@@ -1076,6 +1099,7 @@ export default function Contributions() {
       setOpeningBalanceEffectiveDate("");
       setOpeningBalanceAmount("");
       setOpeningBalanceNote("");
+      setShowOpeningBalanceForm(false);
       await fetchFinanceAccounts();
     } catch (err) {
       setScopedError(parseError(err, "Failed to save opening balance."), "global");
@@ -1095,7 +1119,7 @@ export default function Contributions() {
         effective_date: reverseOpeningBalanceDate || null,
         finance_account_id: openingBalances.find((row) => row.id === reverseOpeningBalanceId)?.finance_account?.id ?? null,
       });
-      setNotice("Opening balance reversal recorded. The baseline remains visible and the net account value is offset.");
+      setNotice("Starting balance reversal saved. The original starting balance stays visible, and the account total is now balanced by the reversal.");
       setReverseOpeningBalanceId(null);
       setReverseOpeningBalanceDate("");
       setReverseOpeningBalanceRemarks("");
@@ -1358,10 +1382,10 @@ export default function Contributions() {
 
   const contributionRemarksLabel = categoryInput === "project_contribution" ? "Project Name and Remarks" : "Remarks";
   const contributionRemarksHint = categoryInput === "project_contribution"
-    ? "Use remarks to capture the project name. Repeated project names can be filtered later by date."
+    ? "Enter the project name here, plus any short note that will help you recognize this entry later."
       : categoryInput === "alalayang_agila_contribution"
-        ? "Remarks are required. Add context for the recipient or source of support."
-        : "Remarks are required for every contribution entry.";
+        ? "Add a short note explaining the support given, the reason, or any helpful context."
+        : "Add a short note so this contribution will still be clear when someone reviews it later.";
   const financeSummaryGraph = useMemo(() => {
     return accountBalances.map((row) => ({
       label: financeAccountLabel(row.account),
@@ -1414,22 +1438,85 @@ export default function Contributions() {
       .slice(0, 8);
   }, [expenseReportRows]);
 
+  const openSection = (section: FinanceSection) => {
+    setActiveSection(section);
+
+    if (section === "mine") {
+      setActiveTab("mine");
+      return;
+    }
+
+    if (section === "members") {
+      setActiveTab((current) => (
+        current === "member-search" || current === "selected-member" || current === "compliance" || current === "audit-findings" || current === "report-preview"
+          ? current
+          : "member-search"
+      ));
+      return;
+    }
+
+    if (section === "expenses") {
+      setActiveTab((current) => (
+        current === "expense-ledger" || current === "expense-audit" || current === "expense-report"
+          ? current
+          : "expense-ledger"
+      ));
+    }
+  };
+
   return (
     <section>
       <h1 className="mb-2 font-heading text-4xl text-offwhite">Finance</h1>
       <p className="mb-6 text-sm text-mist/85">
-        Members can view personal contribution history by month, year, and category. Treasurer and auditor can review account balances, contribution and expense ledgers, and note-based findings without mutating saved history.
+        Members can review their own contribution history by month, year, and type. Treasurer and auditor can review account balances, contribution records, expense records, and audit notes without changing saved history.
       </p>
 
       {error && errorContext === "global" && <p className="mb-4 rounded-md border border-red-300/30 bg-red-400/10 px-4 py-2 text-sm text-red-200">{error}</p>}
       {notice && <p className="mb-4 rounded-md border border-gold/30 bg-gold/10 px-4 py-2 text-sm text-gold-soft">{notice}</p>}
 
-      {canViewFinance && (
+      <div className="mb-6 flex flex-wrap gap-2">
+        {canViewFinance && (
+          <button
+            type="button"
+            onClick={() => openSection("treasury-summary")}
+            className={`rounded-md border px-4 py-2 text-sm ${activeSection === "treasury-summary" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}
+          >
+            Treasury Summary
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => openSection("mine")}
+          className={`rounded-md border px-4 py-2 text-sm ${activeSection === "mine" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}
+        >
+          My Contributions
+        </button>
+        {canViewFinance && (
+          <button
+            type="button"
+            onClick={() => openSection("members")}
+            className={`rounded-md border px-4 py-2 text-sm ${activeSection === "members" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}
+          >
+            Member Records
+          </button>
+        )}
+        {canViewFinance && (
+          <button
+            type="button"
+            onClick={() => openSection("expenses")}
+            className={`rounded-md border px-4 py-2 text-sm ${activeSection === "expenses" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}
+          >
+            Expenses
+          </button>
+        )}
+      </div>
+
+      {canViewFinance && activeSection === "treasury-summary" && (
         <div className="mb-6 rounded-xl border border-white/20 bg-white/10 p-4">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="font-heading text-2xl text-offwhite">Treasury Accounts</h2>
-              <p className="text-sm text-mist/80">Live balances across bank, GCash, and cash on hand based on the recorded finance ledger.</p>
+              <p className="text-sm text-mist/80">Live balances for bank, GCash, and cash on hand based on the saved finance records.</p>
             </div>
             <button type="button" onClick={() => void fetchFinanceAccounts()} className="btn-secondary">Refresh Accounts</button>
           </div>
@@ -1451,7 +1538,7 @@ export default function Contributions() {
           </div>
           {unassignedContributionTotal !== 0 && (
             <p className="text-xs text-amber-200">
-              Legacy contribution rows without an assigned treasury account: {money(unassignedContributionTotal)}
+              Older contribution records without an assigned treasury account: {money(unassignedContributionTotal)}
             </p>
           )}
           <div className="mt-5">
@@ -1459,15 +1546,27 @@ export default function Contributions() {
             <VerticalBarChart items={financeSummaryGraph} valueFormatter={(value) => money(value)} emptyText="No account balances to graph." />
           </div>
           <div className="mt-6">
-            <h3 className="font-heading text-xl text-offwhite">Opening Balances</h3>
+            <h3 className="font-heading text-xl text-offwhite">Starting Balances</h3>
             <p className="mt-1 text-sm text-mist/80">
-              Use this only for starting bank, GCash, or cash-on-hand values that existed before ledger tracking. These entries are immutable after save and must be corrected through reversal or offset.
+              Use this only for bank, GCash, or cash-on-hand amounts that already existed before regular recording started. After saving, these values should be corrected through a reversal entry instead of editing the original record.
             </p>
 
-            {canInputFinance && (
+            {canInputFinance && !showOpeningBalanceForm && openingBalances.length > 0 && (
+              <div className="mt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowOpeningBalanceForm(true)}
+                  className="btn-secondary"
+                >
+                  Add Starting Balance
+                </button>
+              </div>
+            )}
+
+            {canInputFinance && (showOpeningBalanceForm || openingBalances.length === 0) && (
               <div className="mt-4 grid gap-3 md:grid-cols-4">
                 <select
-                  aria-label="Opening balance account"
+                  aria-label="Starting balance account"
                   value={openingBalanceAccountId}
                   onChange={(e) => setOpeningBalanceAccountId(e.target.value)}
                   className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
@@ -1480,31 +1579,31 @@ export default function Contributions() {
                   ))}
                 </select>
                 <input
-                  aria-label="Opening balance effective date"
+                  aria-label="Starting balance date"
                   type="date"
                   value={openingBalanceEffectiveDate}
                   onChange={(e) => setOpeningBalanceEffectiveDate(e.target.value)}
                   className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
                 />
                 <input
-                  aria-label="Opening balance amount"
+                  aria-label="Starting balance amount"
                   type="number"
                   min="0"
                   step="0.01"
                   value={openingBalanceAmount}
                   onChange={(e) => setOpeningBalanceAmount(e.target.value)}
-                  placeholder="Opening amount"
+                  placeholder="Starting amount"
                   className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
                 />
                 <input
-                  aria-label="Opening balance note"
+                  aria-label="Starting balance note"
                   value={openingBalanceNote}
                   onChange={(e) => setOpeningBalanceNote(e.target.value)}
-                  placeholder="Basis or remarks"
+                  placeholder="Reason or short note"
                   className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
                 />
                 <div className="md:col-span-4 flex gap-2">
-                  <button type="button" onClick={() => void createOpeningBalance()} className="btn-primary">Save Opening Balance</button>
+                  <button type="button" onClick={() => void createOpeningBalance()} className="btn-primary">Save Starting Balance</button>
                   <button
                     type="button"
                     onClick={() => {
@@ -1512,10 +1611,11 @@ export default function Contributions() {
                       setOpeningBalanceEffectiveDate("");
                       setOpeningBalanceAmount("");
                       setOpeningBalanceNote("");
+                      setShowOpeningBalanceForm(false);
                     }}
                     className="rounded-md border border-white/30 px-3 py-2 text-sm text-offwhite/90 transition hover:bg-white/10"
                   >
-                    Clear
+                    Cancel
                   </button>
                 </div>
               </div>
@@ -1529,7 +1629,7 @@ export default function Contributions() {
                     <th className="px-4 py-3 text-left">Account</th>
                     <th className="px-4 py-3 text-left">Amount</th>
                     <th className="px-4 py-3 text-left">Remarks</th>
-                    <th className="px-4 py-3 text-left">Encoded By</th>
+                    <th className="px-4 py-3 text-left">Recorded By</th>
                     {canInputFinance && <th className="px-4 py-3 text-left">Action</th>}
                   </tr>
                 </thead>
@@ -1552,7 +1652,7 @@ export default function Contributions() {
                           {row.is_reversal ? (
                             <span className="text-xs text-mist/70">Locked reversal</span>
                           ) : row.reversed_by_entry_id ? (
-                            <span className="text-xs text-mist/70">Already offset</span>
+                            <span className="text-xs text-mist/70">Already balanced by reversal</span>
                           ) : (
                             <button
                               type="button"
@@ -1571,7 +1671,7 @@ export default function Contributions() {
                     </tr>
                   ))}
                   {openingBalances.length === 0 && (
-                    <tr><td colSpan={canInputFinance ? 6 : 5} className="px-4 py-6 text-center text-mist/80">No opening balances recorded yet.</td></tr>
+                    <tr><td colSpan={canInputFinance ? 6 : 5} className="px-4 py-6 text-center text-mist/80">No starting balances recorded yet.</td></tr>
                   )}
                 </tbody>
               </table>
@@ -1580,17 +1680,17 @@ export default function Contributions() {
             {canInputFinance && reverseOpeningBalanceId && (
               <div className="mt-4 grid gap-3 rounded-lg border border-white/20 bg-white/10 p-4 md:grid-cols-[220px_1fr_auto]">
                 <input
-                  aria-label="Opening balance reversal date"
+                  aria-label="Starting balance reversal date"
                   type="date"
                   value={reverseOpeningBalanceDate}
                   onChange={(e) => setReverseOpeningBalanceDate(e.target.value)}
                   className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
                 />
                 <input
-                  aria-label="Opening balance reversal remarks"
+                  aria-label="Starting balance reversal note"
                   value={reverseOpeningBalanceRemarks}
                   onChange={(e) => setReverseOpeningBalanceRemarks(e.target.value)}
-                  placeholder="Required remarks for the opening balance reversal"
+                  placeholder="Required note for the starting balance reversal"
                   className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
                 />
                 <div className="flex gap-2">
@@ -1613,19 +1713,25 @@ export default function Contributions() {
         </div>
       )}
 
-      <div className="mb-6 flex flex-wrap gap-2">
-        <button type="button" onClick={() => setActiveTab("mine")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "mine" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>My Contributions</button>
-        {canViewFinance && <button type="button" onClick={() => setActiveTab("member-search")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "member-search" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Member Search</button>}
-        {canViewFinance && <button type="button" onClick={() => setActiveTab("selected-member")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "selected-member" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Selected Member</button>}
-        {canViewFinance && <button type="button" onClick={() => setActiveTab("expense-ledger")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "expense-ledger" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Expense Ledger</button>}
-        {canViewFinance && <button type="button" onClick={() => setActiveTab("compliance")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "compliance" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Compliance</button>}
-        {canViewFinance && <button type="button" onClick={() => setActiveTab("audit-findings")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "audit-findings" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Audit Findings</button>}
-        {canViewFinance && <button type="button" onClick={() => setActiveTab("expense-audit")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "expense-audit" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Expense Audit</button>}
-        {canInputFinance && <button type="button" onClick={() => setActiveTab("report-preview")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "report-preview" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Contribution Report View</button>}
-        {canInputFinance && <button type="button" onClick={() => setActiveTab("expense-report")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "expense-report" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Expense Report View</button>}
-      </div>
+      {canViewFinance && activeSection === "members" && (
+        <div className="mb-6 flex flex-wrap gap-2">
+          <button type="button" onClick={() => setActiveTab("member-search")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "member-search" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Find Member</button>
+          <button type="button" onClick={() => setActiveTab("selected-member")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "selected-member" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Member Ledger</button>
+          <button type="button" onClick={() => setActiveTab("compliance")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "compliance" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Compliance Check</button>
+          <button type="button" onClick={() => setActiveTab("audit-findings")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "audit-findings" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Contribution Audit</button>
+          {canInputFinance && <button type="button" onClick={() => setActiveTab("report-preview")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "report-preview" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Contribution Reports</button>}
+        </div>
+      )}
 
-      {activeTab === "mine" && (
+      {canViewFinance && activeSection === "expenses" && (
+        <div className="mb-6 flex flex-wrap gap-2">
+          <button type="button" onClick={() => setActiveTab("expense-ledger")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "expense-ledger" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Expense Ledger</button>
+          <button type="button" onClick={() => setActiveTab("expense-audit")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "expense-audit" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Expense Audit</button>
+          {canInputFinance && <button type="button" onClick={() => setActiveTab("expense-report")} className={`rounded-md border px-4 py-2 text-sm ${activeTab === "expense-report" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}>Expense Reports</button>}
+        </div>
+      )}
+
+      {activeSection === "mine" && activeTab === "mine" && (
       <div className="mb-6 rounded-xl border border-white/20 bg-white/10 p-4">
         <h2 className="mb-2 font-heading text-2xl text-offwhite">My Contributions</h2>
         {myDataNotice && (
@@ -1688,7 +1794,7 @@ export default function Contributions() {
                 aria-label="Filter my alalayang contributions by recipient"
                 value={myRecipientFilter}
                 onChange={(e) => setMyRecipientFilter(e.target.value)}
-                placeholder="Alalayang recipient contains..."
+                placeholder="Recipient name contains..."
                 className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
               />
               <input
@@ -1727,7 +1833,7 @@ export default function Contributions() {
                       <th className="px-4 py-3 text-left">Category</th>
                       <th className="px-4 py-3 text-left">Amount</th>
                       <th className="px-4 py-3 text-left">Account</th>
-                      <th className="px-4 py-3 text-left">Recipient Indicator</th>
+                      <th className="px-4 py-3 text-left">Recipient</th>
                       <th className="px-4 py-3 text-left">Remarks</th>
                   </tr>
                 </thead>
@@ -1766,10 +1872,10 @@ export default function Contributions() {
       </div>
       )}
 
-      {activeTab === "member-search" && canViewFinance && (
+      {activeSection === "members" && activeTab === "member-search" && canViewFinance && (
         <div className="mb-6 rounded-xl border border-white/20 bg-white/10 p-4">
           <h2 className="mb-2 font-heading text-2xl text-offwhite">Find Member</h2>
-          <p className="mb-3 text-sm text-mist/85">Search first, then select a member to open the Selected Member tab.</p>
+          <p className="mb-3 text-sm text-mist/85">Search first, then open that member's ledger.</p>
 
           <div className="mb-4 rounded-md border border-white/20 bg-white/5 p-3">
             <div className="flex flex-wrap items-center gap-3">
@@ -1836,11 +1942,11 @@ export default function Contributions() {
         </div>
       )}
 
-      {activeTab === "compliance" && canViewFinance && (
+      {activeSection === "members" && activeTab === "compliance" && canViewFinance && (
         <div className="mb-6 rounded-xl border border-white/20 bg-white/10 p-4">
-          <h2 className="mb-2 font-heading text-2xl text-offwhite">Compliance Checker</h2>
+          <h2 className="mb-2 font-heading text-2xl text-offwhite">Compliance Check</h2>
           <p className="mb-3 text-sm text-mist/85">
-            Monthly contribution is mandatory. Filter non-compliance for a target month and selected project-contribution years.
+            Monthly contribution is required. Use this view to find members who are missing their monthly contribution for a chosen month and project-contribution years.
           </p>
           <div className="mb-3 grid gap-3 md:grid-cols-[180px_1fr_auto]">
             <input
@@ -1856,9 +1962,9 @@ export default function Contributions() {
                 checked={complianceNonCompliantOnly}
                 onChange={(e) => setComplianceNonCompliantOnly(e.target.checked)}
               />
-              Show Non-Compliant Only
+              Show only members with missing contributions
             </label>
-            <button onClick={() => void fetchCompliance()} className="btn-secondary">Run</button>
+            <button onClick={() => void fetchCompliance()} className="btn-secondary">Check Records</button>
           </div>
 
           <div className="mb-3 rounded-md border border-white/20 bg-white/5 p-3">
@@ -1906,7 +2012,7 @@ export default function Contributions() {
           </div>
 
           <div className="mb-3 rounded-lg border border-white/20 bg-white/5 p-4">
-            <p className="mb-3 text-xs uppercase tracking-[0.2em] text-gold-soft">Compliance Graph</p>
+            <p className="mb-3 text-xs uppercase tracking-[0.2em] text-gold-soft">Results Graph</p>
             <VerticalBarChart
               items={complianceGraph}
               valueFormatter={(value) => String(value)}
@@ -1915,7 +2021,7 @@ export default function Contributions() {
           </div>
           {!complianceLoaded ? (
             <div className="rounded-md border border-white/20 bg-white/5 px-4 py-8 text-center text-sm text-mist/80">
-              Click Run to load compliance results.
+              Click Check Records to load the results.
             </div>
           ) : (
           <div className="overflow-x-auto rounded-lg border border-white/20">
@@ -1974,11 +2080,11 @@ export default function Contributions() {
         </div>
       )}
 
-      {activeTab === "report-preview" && canInputFinance && (
+      {activeSection === "members" && activeTab === "report-preview" && canInputFinance && (
         <div className="mb-6 rounded-xl border border-white/20 bg-white/10 p-4">
           <h2 className="mb-2 font-heading text-2xl text-offwhite">Treasurer Report Preview</h2>
           <p className="mb-3 text-sm text-mist/85">
-            This is a live, unsaved reporting view from the ledger. Use filters, review the total, then share externally by screenshot if needed.
+            This is a live report view based on saved contribution records. Use the filters, review the totals, then export or screenshot if needed.
           </p>
 
           <div className="mb-4 grid gap-3 md:grid-cols-3">
@@ -2121,7 +2227,7 @@ export default function Contributions() {
                       <th className="px-4 py-3 text-left">Account</th>
                       <th className="px-4 py-3 text-left">Recipient</th>
                       <th className="px-4 py-3 text-left">Remarks</th>
-                      <th className="px-4 py-3 text-left">Encoded By</th>
+                      <th className="px-4 py-3 text-left">Recorded By</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -2144,7 +2250,7 @@ export default function Contributions() {
                       </tr>
                     ))}
                     {reportPreviewRows.length === 0 && (
-                      <tr><td colSpan={8} className="px-4 py-6 text-center text-mist/80">No ledger rows match the current report filters.</td></tr>
+                      <tr><td colSpan={8} className="px-4 py-6 text-center text-mist/80">No contribution records match the current report filters.</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -2162,11 +2268,11 @@ export default function Contributions() {
         </div>
       )}
 
-      {activeTab === "audit-findings" && canViewFinance && (
+      {activeSection === "members" && activeTab === "audit-findings" && canViewFinance && (
         <div className="mb-6 rounded-xl border border-white/20 bg-white/10 p-4">
-          <h2 className="mb-2 font-heading text-2xl text-offwhite">Audit Findings</h2>
+          <h2 className="mb-2 font-heading text-2xl text-offwhite">Contribution Audit</h2>
           <p className="mb-3 text-sm text-mist/85">
-            Auditor can record lightweight findings and statuses here. Treasurer can view the same findings for follow-up. Current monthly threshold: <span className="font-semibold text-gold-soft">{money(auditRequiredMonthlyAmount || 500)}</span>
+            Auditor can record review notes and statuses here. Treasurer can review the same notes for follow-up. Current monthly target: <span className="font-semibold text-gold-soft">{money(auditRequiredMonthlyAmount || 500)}</span>
           </p>
 
           <div className="mb-4 grid gap-3 md:grid-cols-3">
@@ -2373,90 +2479,116 @@ export default function Contributions() {
         </div>
       )}
 
-      {activeTab === "expense-ledger" && canViewFinance && (
+      {activeSection === "expenses" && activeTab === "expense-ledger" && canViewFinance && (
         <div className="mb-6 rounded-xl border border-white/20 bg-white/10 p-4">
           <h2 className="mb-2 font-heading text-2xl text-offwhite">Expense Ledger</h2>
           <p className="mb-3 text-sm text-mist/85">
-            Treasurer records immutable expense rows by treasury account. Auditor can review the same ledger without changing saved rows.
+            Treasurer records expenses under each treasury account. Auditor can review the same records without changing saved entries.
           </p>
 
-          <div className="mb-4 grid gap-3 md:grid-cols-3">
-            <select
-              aria-label="Expense category filter"
-              value={expenseCategoryFilter}
-              onChange={(e) => setExpenseCategoryFilter(e.target.value)}
-              className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
-            >
-              <option value="" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>All Expense Categories</option>
-              {EXPENSE_CATEGORY_OPTIONS.map((item) => (
-                <option key={`expense-filter-category-${item.value}`} value={item.value} style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
-            <select
-              aria-label="Expense account filter"
-              value={expenseAccountFilter}
-              onChange={(e) => setExpenseAccountFilter(e.target.value)}
-              className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
-            >
-              <option value="" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>All Accounts</option>
-              {financeAccounts.map((account) => (
-                <option key={`expense-filter-account-${account.id}`} value={String(account.id)} style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>
-                  {account.account_label}
-                </option>
-              ))}
-            </select>
-            <input
-              aria-label="Expense search"
-              value={expenseSearch}
-              onChange={(e) => setExpenseSearch(e.target.value)}
-              placeholder="Search remarks or references"
-              className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
-            />
-            <input
-              aria-label="Expense payee filter"
-              value={expensePayeeFilter}
-              onChange={(e) => setExpensePayeeFilter(e.target.value)}
-              placeholder="Payee contains..."
-              className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
-            />
-            <input
-              aria-label="Expense from date"
-              type="date"
-              value={expenseDateFrom}
-              onChange={(e) => setExpenseDateFrom(e.target.value)}
-              className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
-            />
-            <input
-              aria-label="Expense to date"
-              type="date"
-              value={expenseDateTo}
-              onChange={(e) => setExpenseDateTo(e.target.value)}
-              className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
-            />
-            <label className="flex items-center gap-2 rounded-md border border-white/20 bg-white/5 px-3 py-2 text-sm text-offwhite">
-              <input type="checkbox" checked={expenseSupportOnly} onChange={(e) => setExpenseSupportOnly(e.target.checked)} />
-              With support reference only
-            </label>
-            <div className="flex gap-2 md:col-span-2">
-              <button type="button" onClick={() => void fetchExpenseLedger(1)} className="btn-secondary">Load Expenses</button>
-              <button
-                type="button"
-                onClick={() => {
-                  setExpenseCategoryFilter("");
-                  setExpenseAccountFilter("");
-                  setExpenseSearch("");
-                  setExpensePayeeFilter("");
-                  setExpenseDateFrom("");
-                  setExpenseDateTo("");
-                  setExpenseSupportOnly(false);
-                  setExpenseLoaded(false);
-                }}
-                className="rounded-md border border-white/30 px-3 py-2 text-sm text-offwhite/90 transition hover:bg-white/10"
-              >
-                Clear
-              </button>
+          <div className="mb-5 rounded-lg border border-white/15 bg-ink/20 p-4">
+            <p className="text-xs uppercase tracking-[0.2em] text-gold-soft">Review And Filter Saved Expenses</p>
+            <p className="mt-2 text-sm text-mist/80">
+              These controls only change the expense list below. They do not save a new expense.
+            </p>
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.16em] text-mist/75">Expense Category Filter</label>
+                <select
+                  aria-label="Expense category filter"
+                  value={expenseCategoryFilter}
+                  onChange={(e) => setExpenseCategoryFilter(e.target.value)}
+                  className="w-full rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+                >
+                  <option value="" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>All Expense Categories</option>
+                  {EXPENSE_CATEGORY_OPTIONS.map((item) => (
+                    <option key={`expense-filter-category-${item.value}`} value={item.value} style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.16em] text-mist/75">Treasury Account Filter</label>
+                <select
+                  aria-label="Expense account filter"
+                  value={expenseAccountFilter}
+                  onChange={(e) => setExpenseAccountFilter(e.target.value)}
+                  className="w-full rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+                >
+                  <option value="" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>All Accounts</option>
+                  {financeAccounts.map((account) => (
+                    <option key={`expense-filter-account-${account.id}`} value={String(account.id)} style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>
+                      {account.account_label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.16em] text-mist/75">Remarks Or Reference Search</label>
+                <input
+                  aria-label="Expense search"
+                  value={expenseSearch}
+                  onChange={(e) => setExpenseSearch(e.target.value)}
+                  placeholder="Search remarks or references"
+                  className="w-full rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.16em] text-mist/75">Payee Filter</label>
+                <input
+                  aria-label="Expense payee filter"
+                  value={expensePayeeFilter}
+                  onChange={(e) => setExpensePayeeFilter(e.target.value)}
+                  placeholder="Payee contains..."
+                  className="w-full rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.16em] text-mist/75">From Date</label>
+                <input
+                  aria-label="Expense from date"
+                  type="date"
+                  value={expenseDateFrom}
+                  onChange={(e) => setExpenseDateFrom(e.target.value)}
+                  className="w-full rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.16em] text-mist/75">To Date</label>
+                <input
+                  aria-label="Expense to date"
+                  type="date"
+                  value={expenseDateTo}
+                  onChange={(e) => setExpenseDateTo(e.target.value)}
+                  className="w-full rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+                />
+              </div>
+              <div className="md:col-span-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <label className="flex items-center gap-2 rounded-md border border-white/20 bg-white/5 px-3 py-2 text-sm text-offwhite">
+                  <input type="checkbox" checked={expenseSupportOnly} onChange={(e) => setExpenseSupportOnly(e.target.checked)} />
+                  Show only rows with support reference
+                </label>
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => void fetchExpenseLedger(1)} className="btn-secondary">Apply Filters</button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setExpenseCategoryFilter("");
+                      setExpenseAccountFilter("");
+                      setExpenseSearch("");
+                      setExpensePayeeFilter("");
+                      setExpenseDateFrom("");
+                      setExpenseDateTo("");
+                      setExpenseSupportOnly(false);
+                      setExpenseLoaded(false);
+                    }}
+                    className="rounded-md border border-white/30 px-3 py-2 text-sm text-offwhite/90 transition hover:bg-white/10"
+                  >
+                    Clear Filters
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -2466,93 +2598,121 @@ export default function Contributions() {
 
           {canInputFinance && (
             <div className="mb-4 rounded-lg border border-gold/20 bg-gold/10 p-4">
+              <p className="text-xs uppercase tracking-[0.2em] text-gold-soft">Record New Expense</p>
               <p className="mb-3 text-sm text-mist/90">
-                Treasurer workflow: every expense must point to a treasury account. If an expense is encoded incorrectly, use an offsetting reversal row rather than editing the saved entry.
+                Treasurer guide: every expense should point to a treasury account. If an expense was entered incorrectly, add a reversal entry instead of editing the saved record.
               </p>
-              <div className="grid gap-3 md:grid-cols-2">
-                <select
-                  aria-label="Expense category"
-                  value={expenseCategoryInput}
-                  onChange={(e) => setExpenseCategoryInput(e.target.value)}
-                  className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
-                >
-                  {EXPENSE_CATEGORY_OPTIONS.map((item) => (
-                    <option key={`expense-category-${item.value}`} value={item.value} style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  aria-label="Expense date"
-                  type="date"
-                  value={expenseDateInput}
-                  onChange={(e) => setExpenseDateInput(e.target.value)}
-                  className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
-                />
-                <input
-                  aria-label="Expense amount"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={expenseAmountInput}
-                  onChange={(e) => setExpenseAmountInput(e.target.value)}
-                  placeholder="Amount"
-                  className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
-                />
-                <input
-                  aria-label="Expense payee name"
-                  value={expensePayeeInput}
-                  onChange={(e) => setExpensePayeeInput(e.target.value)}
-                  placeholder="Payee name"
-                  className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
-                />
-                <select
-                  aria-label="Expense treasury account"
-                  value={expenseAccountId}
-                  onChange={(e) => setExpenseAccountId(e.target.value)}
-                  className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
-                >
-                  <option value="" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Select Treasury Account</option>
-                  {financeAccounts.map((account) => (
-                    <option key={`expense-account-${account.id}`} value={String(account.id)} style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>
-                      {account.account_label}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  aria-label="Expense beneficiary member"
-                  value={expenseBeneficiaryMemberId}
-                  onChange={(e) => setExpenseBeneficiaryMemberId(e.target.value)}
-                  className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
-                >
-                  <option value="" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Optional beneficiary member</option>
-                  {members.map((member) => (
-                    <option key={`expense-beneficiary-${member.id}`} value={String(member.id)} style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>
-                      {member.member_number} - {nameOf(member)}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  aria-label="Expense support reference"
-                  value={expenseSupportReferenceInput}
-                  onChange={(e) => setExpenseSupportReferenceInput(e.target.value)}
-                  placeholder="Receipt, voucher, or support reference"
-                  className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
-                />
-                <input
-                  aria-label="Expense approval reference"
-                  value={expenseApprovalReferenceInput}
-                  onChange={(e) => setExpenseApprovalReferenceInput(e.target.value)}
-                  placeholder="Approval reference"
-                  className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
-                />
-                <input
-                  aria-label="Expense remarks"
-                  value={expenseNoteInput}
-                  onChange={(e) => setExpenseNoteInput(e.target.value)}
-                  placeholder="Purpose and remarks"
-                  className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite md:col-span-2"
-                />
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.16em] text-mist/75">Expense Category</label>
+                  <select
+                    aria-label="Expense category"
+                    value={expenseCategoryInput}
+                    onChange={(e) => setExpenseCategoryInput(e.target.value)}
+                    className="w-full rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+                  >
+                    {EXPENSE_CATEGORY_OPTIONS.map((item) => (
+                      <option key={`expense-category-${item.value}`} value={item.value} style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>
+                        {item.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.16em] text-mist/75">Expense Date</label>
+                  <input
+                    aria-label="Expense date"
+                    type="date"
+                    value={expenseDateInput}
+                    onChange={(e) => setExpenseDateInput(e.target.value)}
+                    className="w-full rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.16em] text-mist/75">Amount</label>
+                  <input
+                    aria-label="Expense amount"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={expenseAmountInput}
+                    onChange={(e) => setExpenseAmountInput(e.target.value)}
+                    placeholder="Amount"
+                    className="w-full rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.16em] text-mist/75">Payee Name</label>
+                  <input
+                    aria-label="Expense payee name"
+                    value={expensePayeeInput}
+                    onChange={(e) => setExpensePayeeInput(e.target.value)}
+                    placeholder="Payee name"
+                    className="w-full rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.16em] text-mist/75">Treasury Account</label>
+                  <select
+                    aria-label="Expense treasury account"
+                    value={expenseAccountId}
+                    onChange={(e) => setExpenseAccountId(e.target.value)}
+                    className="w-full rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+                  >
+                    <option value="" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Select Treasury Account</option>
+                    {financeAccounts.map((account) => (
+                      <option key={`expense-account-${account.id}`} value={String(account.id)} style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>
+                        {account.account_label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.16em] text-mist/75">Beneficiary Member</label>
+                  <select
+                    aria-label="Related member for this expense"
+                    value={expenseBeneficiaryMemberId}
+                    onChange={(e) => setExpenseBeneficiaryMemberId(e.target.value)}
+                    className="w-full rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+                  >
+                    <option value="" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Optional related member</option>
+                    {members.map((member) => (
+                      <option key={`expense-beneficiary-${member.id}`} value={String(member.id)} style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>
+                        {member.member_number} - {nameOf(member)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.16em] text-mist/75">Support Reference</label>
+                  <input
+                    aria-label="Expense support reference"
+                    value={expenseSupportReferenceInput}
+                    onChange={(e) => setExpenseSupportReferenceInput(e.target.value)}
+                    placeholder="Receipt, voucher, or support reference"
+                    className="w-full rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.16em] text-mist/75">Approval Reference</label>
+                  <input
+                    aria-label="Expense approval reference"
+                    value={expenseApprovalReferenceInput}
+                    onChange={(e) => setExpenseApprovalReferenceInput(e.target.value)}
+                    placeholder="Approval reference"
+                    className="w-full rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.16em] text-mist/75">Purpose And Remarks</label>
+                  <input
+                    aria-label="Expense remarks"
+                    value={expenseNoteInput}
+                    onChange={(e) => setExpenseNoteInput(e.target.value)}
+                    placeholder="Purpose and remarks"
+                    className="w-full rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+                  />
+                </div>
                 <div className="md:col-span-2 flex gap-2">
                   <button type="button" className="btn-primary" onClick={() => void createExpense()}>Save Expense</button>
                   <button
@@ -2569,7 +2729,7 @@ export default function Contributions() {
 
           {!expenseLoaded ? (
             <div className="rounded-md border border-white/20 bg-white/5 px-4 py-8 text-center text-sm text-mist/80">
-              Click Load Expenses to review the current expense ledger.
+              Click Load Expenses to review the current expense records.
             </div>
           ) : (
             <>
@@ -2592,7 +2752,7 @@ export default function Contributions() {
                       <th className="px-4 py-3 text-left">Support</th>
                       <th className="px-4 py-3 text-left">Approval</th>
                       <th className="px-4 py-3 text-left">Remarks</th>
-                      <th className="px-4 py-3 text-left">Encoded By</th>
+                      <th className="px-4 py-3 text-left">Recorded By</th>
                       {canInputFinance && <th className="px-4 py-3 text-left">Action</th>}
                     </tr>
                   </thead>
@@ -2619,7 +2779,7 @@ export default function Contributions() {
                             {row.is_reversal ? (
                               <span className="text-xs text-mist/70">Locked reversal</span>
                             ) : row.reversed_by_entry_id ? (
-                              <span className="text-xs text-mist/70">Already offset</span>
+                              <span className="text-xs text-mist/70">Already balanced by reversal</span>
                             ) : (
                               <button
                                 type="button"
@@ -2688,9 +2848,9 @@ export default function Contributions() {
         </div>
       )}
 
-      {activeTab === "expense-audit" && canViewFinance && (
+      {activeSection === "expenses" && activeTab === "expense-audit" && canViewFinance && (
         <div className="mb-6 rounded-xl border border-white/20 bg-white/10 p-4">
-          <h2 className="mb-2 font-heading text-2xl text-offwhite">Expense Audit Findings</h2>
+          <h2 className="mb-2 font-heading text-2xl text-offwhite">Expense Audit</h2>
           <p className="mb-3 text-sm text-mist/85">
             Auditor can record note-based findings for expense support, approval, duplicate, and reversal issues. Treasurer can review the same findings for follow-up.
           </p>
@@ -2903,7 +3063,7 @@ export default function Contributions() {
         </div>
       )}
 
-      {activeTab === "expense-report" && canInputFinance && (
+      {activeSection === "expenses" && activeTab === "expense-report" && canInputFinance && (
         <div className="mb-6 rounded-xl border border-white/20 bg-white/10 p-4">
           <h2 className="mb-2 font-heading text-2xl text-offwhite">Treasurer Expense Report Preview</h2>
           <p className="mb-3 text-sm text-mist/85">
@@ -3055,7 +3215,7 @@ export default function Contributions() {
         </div>
       )}
 
-      {activeTab === "selected-member" && canViewFinance && selectedMember && (
+      {activeSection === "members" && activeTab === "selected-member" && canViewFinance && selectedMember && (
         <div className="mb-6 rounded-xl border border-white/20 bg-white/10 p-4">
           <h2 className="mb-2 font-heading text-2xl text-offwhite">Selected: {nameOf(selectedMember)}</h2>
           <p className="mb-4 text-sm text-mist/85">
@@ -3063,77 +3223,104 @@ export default function Contributions() {
           </p>
           {canInputFinance && (
             <div className="mb-4 rounded-lg border border-gold/20 bg-gold/10 p-4 text-sm text-mist/90">
-              Treasurer cue: once saved, a contribution stays in the ledger. If a value was encoded incorrectly, use <span className="font-semibold text-gold-soft">Reverse Entry</span> with required remarks so the original row stays visible while the total is offset.
+              Treasurer guide: once saved, a contribution record should not be edited. If the amount or details were entered incorrectly, use <span className="font-semibold text-gold-soft">Reverse Entry</span> with a required note so the original record stays visible and the total is corrected.
             </div>
           )}
-          <div className="mb-4 grid gap-3 md:grid-cols-3">
-            <select
-              aria-label="Filter selected member contributions by type"
-              value={selectedCategoryFilter}
-              onChange={(e) => setSelectedCategoryFilter(e.target.value)}
-              className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
-            >
-              <option value="" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>All Types</option>
-              {CATEGORY_OPTIONS.map((item) => (
-                <option key={`sel-cat-${item.value}`} value={item.value} style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
-            <select
-              aria-label="Filter selected member contributions by year"
-              value={selectedYearFilter}
-              onChange={(e) => setSelectedYearFilter(e.target.value)}
-              className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
-            >
-              <option value="" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>All Years</option>
-              {selectedYearOptions.map((year) => (
-                <option key={`sel-year-${year}`} value={year} style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>
-                  {year}
-                </option>
-              ))}
-            </select>
-            <select
-              aria-label="Filter selected member contributions by month"
-              value={selectedMonthFilter}
-              onChange={(e) => setSelectedMonthFilter(e.target.value)}
-              className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
-            >
-              <option value="" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>All Months</option>
-              {MONTH_OPTIONS.map((month) => (
-                <option key={`sel-month-${month.value}`} value={month.value} style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>
-                {month.label}
-                </option>
-              ))}
-            </select>
-            <input
-              aria-label="Filter selected member project contributions by project name"
-              value={selectedProjectFilter}
-              onChange={(e) => setSelectedProjectFilter(e.target.value)}
-              placeholder="Project name contains..."
-              className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
-            />
-            <input
-              aria-label="Filter selected member alalayang contributions by recipient"
-              value={selectedRecipientFilter}
-              onChange={(e) => setSelectedRecipientFilter(e.target.value)}
-              placeholder="Alalayang recipient contains..."
-              className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
-            />
-            <input
-              aria-label="Filter selected member contributions from date"
-              type="date"
-              value={selectedDateFromFilter}
-              onChange={(e) => setSelectedDateFromFilter(e.target.value)}
-              className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
-            />
-            <input
-              aria-label="Filter selected member contributions to date"
-              type="date"
-              value={selectedDateToFilter}
-              onChange={(e) => setSelectedDateToFilter(e.target.value)}
-              className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
-            />
+          <div className="mb-5 rounded-lg border border-white/15 bg-ink/20 p-4">
+            <p className="text-xs uppercase tracking-[0.2em] text-gold-soft">Review And Filter Saved Contributions</p>
+            <p className="mt-2 text-sm text-mist/80">
+              These controls only change the contribution history and graph for the selected member.
+            </p>
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.16em] text-mist/75">Contribution Type Filter</label>
+                <select
+                  aria-label="Filter selected member contributions by type"
+                  value={selectedCategoryFilter}
+                  onChange={(e) => setSelectedCategoryFilter(e.target.value)}
+                  className="w-full rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+                >
+                  <option value="" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>All Types</option>
+                  {CATEGORY_OPTIONS.map((item) => (
+                    <option key={`sel-cat-${item.value}`} value={item.value} style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.16em] text-mist/75">Year Filter</label>
+                <select
+                  aria-label="Filter selected member contributions by year"
+                  value={selectedYearFilter}
+                  onChange={(e) => setSelectedYearFilter(e.target.value)}
+                  className="w-full rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+                >
+                  <option value="" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>All Years</option>
+                  {selectedYearOptions.map((year) => (
+                    <option key={`sel-year-${year}`} value={year} style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>
+                      {year}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.16em] text-mist/75">Month Filter</label>
+                <select
+                  aria-label="Filter selected member contributions by month"
+                  value={selectedMonthFilter}
+                  onChange={(e) => setSelectedMonthFilter(e.target.value)}
+                  className="w-full rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+                >
+                  <option value="" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>All Months</option>
+                  {MONTH_OPTIONS.map((month) => (
+                    <option key={`sel-month-${month.value}`} value={month.value} style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>
+                    {month.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.16em] text-mist/75">Project Name Filter</label>
+                <input
+                  aria-label="Filter selected member project contributions by project name"
+                  value={selectedProjectFilter}
+                  onChange={(e) => setSelectedProjectFilter(e.target.value)}
+                  placeholder="Project name contains..."
+                  className="w-full rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.16em] text-mist/75">Recipient Filter</label>
+                <input
+                  aria-label="Filter selected member alalayang contributions by recipient"
+                  value={selectedRecipientFilter}
+                  onChange={(e) => setSelectedRecipientFilter(e.target.value)}
+                  placeholder="Alalayang recipient contains..."
+                  className="w-full rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.16em] text-mist/75">From Date</label>
+                <input
+                  aria-label="Filter selected member contributions from date"
+                  type="date"
+                  value={selectedDateFromFilter}
+                  onChange={(e) => setSelectedDateFromFilter(e.target.value)}
+                  className="w-full rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.16em] text-mist/75">To Date</label>
+                <input
+                  aria-label="Filter selected member contributions to date"
+                  type="date"
+                  value={selectedDateToFilter}
+                  onChange={(e) => setSelectedDateToFilter(e.target.value)}
+                  className="w-full rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+                />
+              </div>
+            </div>
           </div>
           <p className="mb-4 text-sm text-mist/85">
             Filtered Total: <span className="font-semibold text-gold-soft">{money(filteredSelectedTotal)}</span>
@@ -3151,75 +3338,100 @@ export default function Contributions() {
           )}
 
           {canInputFinance && (
-            <div className="mb-4 grid gap-3 md:grid-cols-2">
-              <select
-                aria-label="Contribution category"
-                value={categoryInput}
-                onChange={(e) => setCategoryInput(e.target.value)}
-                className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
-              >
-                {CATEGORY_OPTIONS.map((item) => (
-                  <option key={item.value} value={item.value} style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>
-                    {item.label}
-                  </option>
-                ))}
-              </select>
-              <input
-                aria-label="Contribution date"
-                value={contributionDateInput}
-                onChange={(e) => setContributionDateInput(e.target.value)}
-                type="date"
-                className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
-              />
-              <input
-                aria-label="Contribution amount"
-                value={amountInput}
-                onChange={(e) => setAmountInput(e.target.value)}
-                placeholder="Amount"
-                type="number"
-                min="0"
-                step="0.01"
-                className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
-              />
-              <select
-                aria-label="Contribution account"
-                value={contributionAccountId}
-                onChange={(e) => setContributionAccountId(e.target.value)}
-                className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
-              >
-                <option value="" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Select Treasury Account</option>
-                {financeAccounts.map((account) => (
-                  <option key={`contribution-account-${account.id}`} value={String(account.id)} style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>
-                    {account.account_label}
-                  </option>
-                ))}
-              </select>
-              <input
-                aria-label="Contribution recipient indicator"
-                value={recipientIndicatorInput}
-                onChange={(e) => setRecipientIndicatorInput(e.target.value)}
-                placeholder="Recipient indicator (required for Alalayang Agila)"
-                className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
-              />
-              <div className="rounded-md border border-white/15 bg-white/5 px-3 py-2 text-xs text-mist/80">
-                {contributionRemarksHint}
-              </div>
-              <input
-                aria-label="Contribution remarks"
-                value={noteInput}
-                onChange={(e) => setNoteInput(e.target.value)}
-                placeholder={contributionRemarksLabel}
-                className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite md:col-span-2"
-              />
-              <div className="md:col-span-2 flex gap-2">
-                <button className="btn-primary" onClick={() => void createContribution()}>Save</button>
-                <button
-                  type="button"
+            <div className="mb-4 rounded-lg border border-gold/20 bg-gold/10 p-4">
+              <p className="text-xs uppercase tracking-[0.2em] text-gold-soft">Record New Contribution For Selected Member</p>
+              <p className="mt-2 text-sm text-mist/90">
+                Use this form to save a new contribution record for <span className="font-semibold text-offwhite">{nameOf(selectedMember)}</span>. This area adds data; it does not filter the history above.
+              </p>
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.16em] text-mist/75">Contribution Type</label>
+                  <select
+                    aria-label="Contribution category"
+                    value={categoryInput}
+                    onChange={(e) => setCategoryInput(e.target.value)}
+                    className="w-full rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+                  >
+                    {CATEGORY_OPTIONS.map((item) => (
+                      <option key={item.value} value={item.value} style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>
+                        {item.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.16em] text-mist/75">Contribution Date</label>
+                  <input
+                    aria-label="Contribution date"
+                    value={contributionDateInput}
+                    onChange={(e) => setContributionDateInput(e.target.value)}
+                    type="date"
+                    className="w-full rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.16em] text-mist/75">Amount</label>
+                  <input
+                    aria-label="Contribution amount"
+                    value={amountInput}
+                    onChange={(e) => setAmountInput(e.target.value)}
+                    placeholder="Amount"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    className="w-full rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.16em] text-mist/75">Treasury Account</label>
+                  <select
+                    aria-label="Contribution account"
+                    value={contributionAccountId}
+                    onChange={(e) => setContributionAccountId(e.target.value)}
+                    className="w-full rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+                  >
+                    <option value="" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Select Treasury Account</option>
+                    {financeAccounts.map((account) => (
+                      <option key={`contribution-account-${account.id}`} value={String(account.id)} style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>
+                        {account.account_label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.16em] text-mist/75">Recipient Name</label>
+                  <input
+                    aria-label="Contribution recipient name"
+                    value={recipientIndicatorInput}
+                    onChange={(e) => setRecipientIndicatorInput(e.target.value)}
+                    placeholder="Required for Alalayang Agila"
+                    className="w-full rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+                  />
+                </div>
+                <div className="rounded-md border border-white/15 bg-white/5 px-3 py-2 text-xs text-mist/80">
+                  <span className="block text-[10px] font-semibold uppercase tracking-[0.16em] text-gold-soft">What To Write In Notes</span>
+                  <span className="mt-1 block">{contributionRemarksHint}</span>
+                </div>
+                <div className="md:col-span-2">
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.16em] text-mist/75">Remarks</label>
+                  <input
+                    aria-label="Contribution remarks"
+                    value={noteInput}
+                    onChange={(e) => setNoteInput(e.target.value)}
+                    placeholder={contributionRemarksLabel}
+                    className="w-full rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+                  />
+                </div>
+                <div className="md:col-span-2 flex gap-2">
+                  <button className="btn-primary" onClick={() => void createContribution()}>Save</button>
+                  <button
+                    type="button"
                   onClick={resetContributionForm}
                   className="rounded-md border border-white/30 px-3 py-2 text-sm text-offwhite/90 transition hover:bg-white/10"
                 >
                   Cancel
                 </button>
+              </div>
               </div>
             </div>
           )}
@@ -3234,7 +3446,7 @@ export default function Contributions() {
                   <th className="px-4 py-3 text-left">Account</th>
                   <th className="px-4 py-3 text-left">Recipient</th>
                   <th className="px-4 py-3 text-left">Remarks</th>
-                  <th className="px-4 py-3 text-left">Encoded By</th>
+                  <th className="px-4 py-3 text-left">Recorded By</th>
                   {canInputFinance && <th className="px-4 py-3 text-left">Action</th>}
                 </tr>
               </thead>
@@ -3259,7 +3471,7 @@ export default function Contributions() {
                         {row.is_reversal ? (
                           <span className="text-xs text-mist/70">Locked reversal</span>
                         ) : row.reversed_by_entry_id ? (
-                          <span className="text-xs text-mist/70">Already offset</span>
+                          <span className="text-xs text-mist/70">Already balanced by reversal</span>
                         ) : (
                           <button
                             className="rounded-md border border-gold/50 px-3 py-1 text-xs text-gold hover:bg-gold/10"
@@ -3325,9 +3537,9 @@ export default function Contributions() {
         </div>
       )}
 
-      {activeTab === "selected-member" && canViewFinance && !selectedMember && (
+      {activeSection === "members" && activeTab === "selected-member" && canViewFinance && !selectedMember && (
         <div className="mb-6 rounded-xl border border-white/20 bg-white/10 px-4 py-8 text-center text-sm text-mist/80">
-          Select a member from the Member Search tab first.
+          Select a member from the Find Member tab first.
         </div>
       )}
     </section>
