@@ -42,7 +42,7 @@ class WebPushAnnouncementService
         $payload = json_encode([
             'title' => $post->title,
             'body' => $post->announcement_text ?: ($post->excerpt ?: 'New club announcement'),
-            'url' => rtrim((string) config('app.frontend_url'), '/') . '/news/' . $post->slug,
+            'url' => $this->frontendPostUrl($post),
             'tag' => 'announcement-' . $post->id,
             'icon' => rtrim((string) config('app.frontend_url'), '/') . '/images/tfoe-logo.png',
         ], JSON_UNESCAPED_SLASHES);
@@ -121,6 +121,22 @@ class WebPushAnnouncementService
             ->whereDoesntHave('user.postAcknowledgements', function (Builder $ackQuery) use ($post): void {
                 $ackQuery->where('post_id', $post->id);
             });
+    }
+
+    private function frontendPostUrl(Post $post): string
+    {
+        $baseUrl = rtrim((string) config('app.frontend_url'), '/');
+        $slug = ltrim((string) $post->slug, '/');
+
+        $path = match ((string) $post->section) {
+            'history' => '/history/' . $slug,
+            'resolutions' => '/resolutions/' . $slug,
+            'about' => '/about/' . $slug,
+            'activities', 'news', 'homepage_hero' => '/activities/' . $slug,
+            default => '/activities/' . $slug,
+        };
+
+        return $baseUrl . $path;
     }
 
     private function vapidSubject(): string

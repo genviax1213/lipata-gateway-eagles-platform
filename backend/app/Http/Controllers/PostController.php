@@ -108,6 +108,15 @@ class PostController extends Controller
         ));
     }
 
+    public function mobileAnnouncements(Request $request)
+    {
+        if ($response = $this->ensureMobileAnnouncementAccess($request)) {
+            return $response;
+        }
+
+        return $this->memberAnnouncements();
+    }
+
     public function acknowledgeMemberAnnouncement(Request $request, Post $post)
     {
         $this->ensureAnnouncementMemberAccess($request);
@@ -142,6 +151,15 @@ class PostController extends Controller
             'message' => 'Announcement acknowledged.',
             'acknowledged_at' => optional($acknowledgement->acknowledged_at)?->toISOString(),
         ]);
+    }
+
+    public function mobileAcknowledgeAnnouncement(Request $request, Post $post)
+    {
+        if ($response = $this->ensureMobileAnnouncementAccess($request)) {
+            return $response;
+        }
+
+        return $this->acknowledgeMemberAnnouncement($request, $post);
     }
 
     public function publicBySlug(string $slug)
@@ -180,6 +198,15 @@ class PostController extends Controller
             ->firstOrFail();
 
         return response()->json($this->transform($post));
+    }
+
+    public function mobileAnnouncementDetail(Request $request, string $slug)
+    {
+        if ($response = $this->ensureMobileAnnouncementAccess($request)) {
+            return $response;
+        }
+
+        return $this->memberBySlug($slug);
     }
 
     public function memberResolutions(Request $request)
@@ -1188,6 +1215,30 @@ class PostController extends Controller
         abort(403);
     }
 
+    private function ensureMobileAnnouncementAccess(Request $request)
+    {
+        $user = $request->user();
+        if (!$user || !$user->mobile_access_enabled) {
+            return response()->json([
+                'message' => 'Mobile access is not enabled for this account.',
+            ], 403);
+        }
+
+        if (Str::of((string) config('app.bootstrap_superadmin_email', 'admin@lipataeagles.ph'))->lower()->trim()->value() === Str::of((string) $user->email)->lower()->trim()->value()) {
+            return response()->json([
+                'message' => 'Bootstrap account is not available through the mobile app.',
+            ], 403);
+        }
+
+        if ($this->resolveMemberViewer($user) !== null) {
+            return null;
+        }
+
+        return response()->json([
+            'message' => 'Forbidden',
+        ], 403);
+    }
+
     private function resolveMemberViewer(?User $user): ?Member
     {
         if (!$user) {
@@ -1199,7 +1250,10 @@ class PostController extends Controller
             return $user->memberProfile;
         }
 
-        return Member::query()->where('email', $user->email)->first();
+        return Member::query()
+            ->whereNull('user_id')
+            ->where('email', $user->email)
+            ->first();
     }
 
     private function announcementQuery(array $audiences)

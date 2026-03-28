@@ -5,6 +5,7 @@ import api from "../services/api";
 import type { CmsPost } from "../types/cms";
 import { htmlToPlainText, sanitizeRichHtml } from "../utils/richText";
 import { buildVideoThumbnailCandidates } from "../utils/video";
+import { readInitialPublicPost } from "../utils/prerender";
 
 type NewsArticleProps = {
   forceMemberAccess?: boolean;
@@ -20,8 +21,15 @@ export default function NewsArticle({
   const { slug } = useParams();
   const { user } = useAuth();
   const hasMemberProfile = Boolean((user as { has_member_profile?: unknown } | null)?.has_member_profile);
-  const [post, setPost] = useState<CmsPost | null>(null);
-  const [loading, setLoading] = useState(true);
+  const initialPublicPost = useMemo(() => {
+    if (typeof window === "undefined" || forceMemberAccess || hasMemberProfile) {
+      return null;
+    }
+
+    return readInitialPublicPost(window.location.pathname, slug);
+  }, [forceMemberAccess, hasMemberProfile, slug]);
+  const [post, setPost] = useState<CmsPost | null>(initialPublicPost);
+  const [loading, setLoading] = useState(initialPublicPost === null);
   const [error, setError] = useState("");
   const [videoCoverIndex, setVideoCoverIndex] = useState(0);
   const [useVideoCoverFallback, setUseVideoCoverFallback] = useState(false);
@@ -68,15 +76,19 @@ export default function NewsArticle({
     ? "/history"
     : post?.section === "resolutions"
       ? "/resolutions"
-      : post?.section === "news" || post?.section === "activities"
-        ? "/activities"
+      : post?.section === "about"
+        ? "/about"
+      : post?.section === "news" || post?.section === "homepage_hero" || post?.section === "activities"
+          ? "/activities"
         : "/");
   const backLabel = backLabelOverride ?? (post?.section === "history"
     ? "Back to History"
     : post?.section === "resolutions"
       ? "Back to Resolutions"
-      : post?.section === "news" || post?.section === "activities"
-        ? "Back to Activities"
+      : post?.section === "about"
+        ? "Back to About"
+      : post?.section === "news" || post?.section === "homepage_hero" || post?.section === "activities"
+          ? "Back to Activities"
         : "Back to Homepage");
   const renderedHtml = useMemo(() => sanitizeRichHtml(post?.content ?? ""), [post?.content]);
   const estimatedWords = useMemo(

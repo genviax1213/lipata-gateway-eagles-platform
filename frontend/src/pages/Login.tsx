@@ -106,7 +106,7 @@ export default function Login() {
 
     try {
       await api.post("/forgot-password", { email: normalizeEmail(forgotEmail) });
-      setNotice("If your email exists in the system, a password reset link has been sent.");
+      setNotice("If an eligible account exists, recovery instructions were sent.");
     } catch (err) {
       setError(parseError(err, "Failed to send password reset link."));
     } finally {
@@ -164,9 +164,9 @@ export default function Login() {
             <div className="mt-5 rounded-md border border-white/20 bg-white/10 px-4 py-3 text-xs text-mist/85">
               <p className="font-semibold text-offwhite">Password reset procedure</p>
               <ol className="mt-2 space-y-1 pl-4">
-                <li>Use Forgot Password and submit your account email.</li>
-                <li>Open the reset email and follow the provided link.</li>
-                <li>Set a new password, then return to login.</li>
+                <li>Use Forgot Password and submit your login alias.</li>
+                <li>Check your recovery email and get the reset token.</li>
+                <li>Use the token to set a new password, then return to login.</li>
               </ol>
             </div>
           </aside>
@@ -196,7 +196,7 @@ export default function Login() {
             </div>
             <h1 className="mb-2 text-center font-heading text-3xl text-gold">Portal Login</h1>
             <p className="mb-5 text-center text-sm text-gray-300">
-              {mode === "login" ? "Shared access for applicants, members, and authorized administrators" : mode === "forgot" ? "Request password reset link" : "Reset your account password"}
+              {mode === "login" ? "Shared access for applicants, members, and authorized administrators" : mode === "forgot" ? "Request password recovery token" : "Reset your account password"}
             </p>
 
             {error && <p className="mb-3 text-center text-sm text-red-400" role="alert" aria-live="polite">{error}</p>}
@@ -212,11 +212,11 @@ export default function Login() {
             {mode === "login" && (
               <form onSubmit={handleLogin} className="space-y-4">
                 <div>
-                  <label htmlFor="login-email" className="mb-1 block text-xs font-semibold text-mist/85">Email Address</label>
+                  <label htmlFor="login-email" className="mb-1 block text-xs font-semibold text-mist/85">Login Alias</label>
                   <input
                     id="login-email"
                     type="email"
-                    placeholder="Email address"
+                    placeholder="firstname.lastname@lgec.org"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     autoComplete="email"
@@ -263,11 +263,11 @@ export default function Login() {
 
             {mode === "forgot" && (
               <form onSubmit={handleForgotPassword} className="space-y-5">
-                <label htmlFor="forgot-email" className="mb-1 block text-xs font-semibold text-mist/85">Account Email</label>
+                <label htmlFor="forgot-email" className="mb-1 block text-xs font-semibold text-mist/85">Login Alias</label>
                 <input
                   id="forgot-email"
                   type="email"
-                  placeholder="Account email"
+                  placeholder="firstname.lastname@lgec.org"
                   value={forgotEmail}
                   onChange={(e) => setForgotEmail(e.target.value)}
                   autoComplete="email"
@@ -278,7 +278,7 @@ export default function Login() {
                   disabled={saving}
                   className="w-full rounded-lg bg-gold py-3 font-semibold text-navy shadow transition hover:-translate-y-0.5 hover:bg-gold-soft disabled:opacity-60"
                 >
-                  {saving ? "Sending..." : "Send Reset Link"}
+                  {saving ? "Sending..." : "Send Recovery Token"}
                 </button>
                 <div className="flex items-center justify-between text-sm">
                   <button
@@ -310,11 +310,11 @@ export default function Login() {
 
             {mode === "reset" && (
               <form onSubmit={handleResetPassword} className="space-y-4">
-                <label htmlFor="reset-email" className="mb-1 block text-xs font-semibold text-mist/85">Account Email</label>
+                <label htmlFor="reset-email" className="mb-1 block text-xs font-semibold text-mist/85">Login Alias</label>
                 <input
                   id="reset-email"
                   type="email"
-                  placeholder="Account email"
+                  placeholder="firstname.lastname@lgec.org"
                   value={resetEmail}
                   onChange={(e) => setResetEmail(e.target.value)}
                   autoComplete="email"

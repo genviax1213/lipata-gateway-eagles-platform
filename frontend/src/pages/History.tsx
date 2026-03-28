@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import api from "../services/api";
 import type { CmsPost } from "../types/cms";
+import { cmsPostDetailPath } from "../utils/cmsPaths";
 import { htmlToPlainText } from "../utils/richText";
 
 function contentSnippet(value: string, max = 180): string {
@@ -82,7 +83,7 @@ export default function History() {
                 </p>
                 {post.slug && (
                   <div className="mt-4">
-                    <Link to={`/news/${post.slug}`} className="btn-secondary">
+                    <Link to={cmsPostDetailPath(post)} className="btn-secondary">
                       Read Full Article
                     </Link>
                   </div>

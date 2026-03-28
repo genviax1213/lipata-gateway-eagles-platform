@@ -5,7 +5,6 @@ namespace App\Http\Controllers;
 use App\Models\Contribution;
 use App\Models\FinanceAccount;
 use App\Models\Member;
-use App\Models\Post;
 use App\Models\User;
 use App\Support\BootstrapSuperadminPrivacy;
 use App\Support\RoleHierarchy;
@@ -15,6 +14,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use Symfony\Component\HttpFoundation\Response;
 
 class FinanceController extends Controller
 {
@@ -41,7 +41,10 @@ class FinanceController extends Controller
             return $user->memberProfile;
         }
 
-        return Member::query()->where('email', $user->email)->first();
+        return Member::query()
+            ->whereNull('user_id')
+            ->whereRaw('LOWER(TRIM(email)) = ?', [$this->normalizeEmail((string) ($user->recovery_email ?: $user->email))])
+            ->first();
     }
 
     private function normalizeEmail(string $value): string
@@ -101,6 +104,73 @@ class FinanceController extends Controller
     private function formatMemberName(Member $member): string
     {
         return trim($member->first_name . ' ' . ($member->middle_name ? $member->middle_name . ' ' : '') . $member->last_name);
+    }
+
+    private function ensureMobileFinanceAccess(Request $request): ?Response
+    {
+        /** @var User $user */
+        $user = $request->user();
+
+        if (!$user->mobile_access_enabled) {
+            return response()->json([
+                'message' => 'Mobile access is not enabled for this account.',
+            ], 403);
+        }
+
+        if ($this->normalizeEmail((string) $user->email) === $this->normalizeEmail((string) config('app.bootstrap_superadmin_email', 'admin@lipataeagles.ph'))) {
+            return response()->json([
+                'message' => 'Bootstrap account is not available through the mobile app.',
+            ], 403);
+        }
+
+        $user->loadMissing('role:id,name');
+        if ((string) ($user->role?->name ?? '') !== RoleHierarchy::MEMBER || !empty($user->finance_role)) {
+            return response()->json([
+                'message' => 'This mobile app is only available for personal member accounts.',
+            ], 403);
+        }
+
+        if (!$user->hasPermission('finance.view')) {
+            return response()->json([
+                'message' => 'Forbidden',
+            ], 403);
+        }
+
+        return null;
+    }
+
+    private function resolveEligiblePersonalMobileMember(Request $request): Member|Response
+    {
+        /** @var User $user */
+        $user = $request->user();
+        $user->loadMissing('role:id,name', 'memberProfile');
+
+        if (!$user->mobile_access_enabled) {
+            return response()->json([
+                'message' => 'Mobile access is not enabled for this account.',
+            ], 403);
+        }
+
+        if ($this->normalizeEmail((string) $user->email) === $this->normalizeEmail((string) config('app.bootstrap_superadmin_email', 'admin@lipataeagles.ph'))) {
+            return response()->json([
+                'message' => 'Bootstrap account is not available through the mobile app.',
+            ], 403);
+        }
+
+        if ((string) ($user->role?->name ?? '') !== RoleHierarchy::MEMBER || !empty($user->finance_role)) {
+            return response()->json([
+                'message' => 'This mobile app is only available for personal member accounts.',
+            ], 403);
+        }
+
+        $member = $this->resolveActorMember($user);
+        if (!$member) {
+            return response()->json([
+                'message' => 'This mobile app requires a linked member profile.',
+            ], 403);
+        }
+
+        return $member;
     }
 
     private function contributionDataForMember(Member $member): array
@@ -209,56 +279,6 @@ class FinanceController extends Controller
         ];
     }
 
-    private function uniquePostSlug(string $base): string
-    {
-        $slug = $base !== '' ? $base : Str::random(8);
-        $candidate = $slug;
-        $i = 2;
-
-        while (Post::query()->where('slug', $candidate)->exists()) {
-            $candidate = $slug . '-' . $i;
-            $i++;
-        }
-
-        return $candidate;
-    }
-
-    private function publishExtraContributionNews(Contribution $contribution, User $actor): void
-    {
-        $contribution->loadMissing('member:id,member_number,first_name,middle_name,last_name');
-        $member = $contribution->member;
-        if (!$member) {
-            return;
-        }
-
-        $memberName = $this->formatMemberName($member);
-        $title = sprintf(
-            'Extra Contribution Received: %s (%s)',
-            $memberName,
-            number_format((float) $contribution->amount, 2)
-        );
-
-        $content = sprintf(
-            "An extra contribution was recorded to support fraternity initiatives.\n\nMember: %s\nMember No.: %s\nAmount: PHP %s\nDate: %s\n\nThank you for supporting the projects and programs.",
-            $memberName,
-            $member->member_number,
-            number_format((float) $contribution->amount, 2),
-            optional($contribution->contribution_date)->toDateString() ?? now()->toDateString()
-        );
-
-        Post::query()->create([
-            'title' => $title,
-            'slug' => $this->uniquePostSlug(Str::slug($title)),
-            'section' => 'news',
-            'excerpt' => 'Extra contribution update to encourage member participation.',
-            'content' => $content,
-            'status' => 'published',
-            'published_at' => now(),
-            'author_id' => $actor->id,
-            'is_featured' => false,
-        ]);
-    }
-
     public function searchMembers(Request $request)
     {
         $this->authorize('viewFinanceDirectory', Member::class);
@@ -307,6 +327,7 @@ class FinanceController extends Controller
             ->unique()
             ->values()
             ->all();
+        $requiredMonthlyAmount = (float) config('finance.required_monthly_amount', 500);
         $nonCompliantOnly = isset($validated['non_compliant_only'])
             ? in_array((string) $validated['non_compliant_only'], ['1', 'true'], true)
             : true;
@@ -332,12 +353,6 @@ class FinanceController extends Controller
             }
         }
 
-        $monthlyCompliantMemberIds = Contribution::query()
-            ->where('category', 'monthly_contribution')
-            ->whereBetween('contribution_date', [$monthStart, $monthEnd])
-            ->pluck('member_id')
-            ->unique()
-            ->values();
         $monthlyStatsByMember = Contribution::query()
             ->selectRaw('member_id, COUNT(*) as monthly_entry_count, COALESCE(SUM(amount), 0) as monthly_total_amount')
             ->where('category', 'monthly_contribution')
@@ -379,9 +394,12 @@ class FinanceController extends Controller
                 });
         }
 
-        $rows = $members->map(function (Member $member) use ($actor, $month, $monthlyCompliantMemberIds, $monthlyStatsByMember, $projectByMemberYear, $effectiveYears) {
-            $hasMonthlyForMonth = $monthlyCompliantMemberIds->contains($member->id);
+        $rows = $members->map(function (Member $member) use ($actor, $month, $monthlyStatsByMember, $projectByMemberYear, $effectiveYears, $requiredMonthlyAmount) {
             $monthlyStats = $monthlyStatsByMember->get($member->id);
+            $monthlyEntryCount = (int) ($monthlyStats->monthly_entry_count ?? 0);
+            $monthlyTotalAmount = round((float) ($monthlyStats->monthly_total_amount ?? 0), 2);
+            $hasMonthlyForMonth = $monthlyEntryCount > 0;
+            $meetsRequiredMonthlyAmount = $monthlyTotalAmount >= $requiredMonthlyAmount;
             $memberProjectYears = collect($projectByMemberYear->get($member->id, []))
                 ->map(static fn ($year) => (int) $year)
                 ->all();
@@ -391,7 +409,7 @@ class FinanceController extends Controller
                 ->all();
 
             $projectCompliant = empty($effectiveYears) ? true : empty($missingProjectYears);
-            $isNonCompliant = !$hasMonthlyForMonth || !$projectCompliant;
+            $isNonCompliant = !$hasMonthlyForMonth || !$meetsRequiredMonthlyAmount || !$projectCompliant;
 
             return [
                 'member' => [
@@ -404,8 +422,10 @@ class FinanceController extends Controller
                 ],
                 'month' => $month,
                 'has_monthly_for_month' => $hasMonthlyForMonth,
-                'monthly_entry_count' => (int) ($monthlyStats->monthly_entry_count ?? 0),
-                'monthly_total_amount' => (float) ($monthlyStats->monthly_total_amount ?? 0),
+                'monthly_entry_count' => $monthlyEntryCount,
+                'monthly_total_amount' => $monthlyTotalAmount,
+                'required_monthly_amount' => $requiredMonthlyAmount,
+                'meets_required_monthly_amount' => $meetsRequiredMonthlyAmount,
                 'selected_project_years' => $effectiveYears,
                 'missing_project_years' => $missingProjectYears,
                 'is_non_compliant' => $isNonCompliant,
@@ -423,6 +443,7 @@ class FinanceController extends Controller
                 'month' => $month,
                 'years' => $selectedYears,
                 'effective_years' => $effectiveYears,
+                'required_monthly_amount' => $requiredMonthlyAmount,
                 'non_compliant_only' => $nonCompliantOnly,
             ],
             'available_project_years' => $availableYears,
@@ -611,6 +632,169 @@ class FinanceController extends Controller
         return response()->json($this->contributionDataForMember($member));
     }
 
+    public function mobileMyContributions(Request $request)
+    {
+        $member = $this->resolveEligiblePersonalMobileMember($request);
+        if ($member instanceof Response) {
+            return $member;
+        }
+
+        return response()->json($this->contributionDataForMember($member));
+    }
+
+    public function mobileDashboard(Request $request)
+    {
+        if ($response = $this->ensureMobileFinanceAccess($request)) {
+            return $response;
+        }
+
+        $monthStart = now()->startOfMonth()->toDateString();
+        $monthEnd = now()->endOfMonth()->toDateString();
+
+        $collectionsThisMonth = (float) Contribution::query()
+            ->whereBetween('contribution_date', [$monthStart, $monthEnd])
+            ->sum('amount');
+
+        $expensesThisMonth = (float) \App\Models\Expense::query()
+            ->whereBetween('expense_date', [$monthStart, $monthEnd])
+            ->sum('amount');
+
+        $latestContributions = Contribution::query()
+            ->with(['member:id,member_number,first_name,middle_name,last_name', 'financeAccount:id,code,name,account_type'])
+            ->latest('contribution_date')
+            ->latest('encoded_at')
+            ->latest('id')
+            ->limit(5)
+            ->get()
+            ->map(function (Contribution $row) {
+                return [
+                    'id' => $row->id,
+                    'type' => 'contribution',
+                    'amount' => (float) $row->amount,
+                    'date' => optional($row->contribution_date)?->toDateString(),
+                    'category' => $row->category,
+                    'member' => $row->member ? [
+                        'id' => $row->member->id,
+                        'member_number' => $row->member->member_number,
+                        'name' => $this->formatMemberName($row->member),
+                    ] : null,
+                    'finance_account' => $this->serializeFinanceAccount($row->financeAccount),
+                ];
+            });
+
+        $latestExpenses = \App\Models\Expense::query()
+            ->with(['financeAccount:id,code,name,account_type'])
+            ->latest('expense_date')
+            ->latest('encoded_at')
+            ->latest('id')
+            ->limit(5)
+            ->get()
+            ->map(function (\App\Models\Expense $row) {
+                return [
+                    'id' => $row->id,
+                    'type' => 'expense',
+                    'amount' => (float) $row->amount,
+                    'date' => optional($row->expense_date)?->toDateString(),
+                    'category' => $row->category,
+                    'payee_name' => $row->payee_name,
+                    'finance_account' => $row->financeAccount ? $this->serializeFinanceAccount($row->financeAccount) : null,
+                ];
+            });
+
+        $latestTransactions = $latestContributions
+            ->concat($latestExpenses)
+            ->sortByDesc('date')
+            ->take(8)
+            ->values();
+
+        $accountBalances = app(FinanceExpenseController::class)->accountBalances($request)->getData(true);
+        $complianceRequest = new Request([
+            'month' => now()->format('Y-m'),
+            'non_compliant_only' => 'true',
+        ]);
+        $complianceRequest->setUserResolver(fn () => $request->user());
+        $compliance = $this->complianceReport($complianceRequest)->getData(true);
+
+        return response()->json([
+            'period' => [
+                'month' => now()->format('Y-m'),
+                'month_start' => $monthStart,
+                'month_end' => $monthEnd,
+            ],
+            'totals' => [
+                'collections_this_month' => round($collectionsThisMonth, 2),
+                'expenses_this_month' => round($expensesThisMonth, 2),
+            ],
+            'account_balances' => $accountBalances['data'] ?? [],
+            'unassigned_contribution_total' => $accountBalances['unassigned_contribution_total'] ?? 0,
+            'compliance' => [
+                'filters' => $compliance['filters'] ?? null,
+                'available_project_years' => $compliance['available_project_years'] ?? [],
+                'non_compliant_members' => $compliance['data'] ?? [],
+            ],
+            'latest_transactions' => $latestTransactions,
+        ]);
+    }
+
+    public function mobileMembers(Request $request)
+    {
+        if ($response = $this->ensureMobileFinanceAccess($request)) {
+            return $response;
+        }
+
+        return $this->searchMembers($request);
+    }
+
+    public function mobileMemberSummary(Request $request, Member $member)
+    {
+        if ($response = $this->ensureMobileFinanceAccess($request)) {
+            return $response;
+        }
+
+        $this->authorize('viewFinancialContributions', $member);
+
+        $payload = $this->contributionDataForMember($member);
+
+        return response()->json([
+            'member' => [
+                'id' => $member->id,
+                'member_number' => $member->member_number,
+                'name' => $this->formatMemberName($member),
+                'email' => BootstrapSuperadminPrivacy::maskEmailForViewer($request->user(), $member->email),
+            ],
+            'total_amount' => $payload['total_amount'],
+            'category_totals' => $payload['category_totals'],
+            'category_labels' => $payload['category_labels'],
+            'monthly_summary' => $payload['monthly_summary'],
+            'yearly_summary' => $payload['yearly_summary'],
+            'latest_entries' => collect($payload['data'])->take(10)->values(),
+        ]);
+    }
+
+    public function mobileMemberContributions(Request $request, Member $member)
+    {
+        if ($response = $this->ensureMobileFinanceAccess($request)) {
+            return $response;
+        }
+
+        return $this->memberContributions($request, $member);
+    }
+
+    public function mobileStoreContribution(Request $request)
+    {
+        if ($response = $this->ensureMobileFinanceAccess($request)) {
+            return $response;
+        }
+
+        if (!$request->user()->hasPermission('finance.input')) {
+            return response()->json([
+                'message' => 'Forbidden',
+            ], 403);
+        }
+
+        return $this->storeContribution($request);
+    }
+
     public function storeContribution(Request $request)
     {
         $validated = $request->validate([
@@ -675,10 +859,6 @@ class FinanceController extends Controller
             'encoded_by_user_id' => $request->user()->id,
             'encoded_at' => now(),
         ]);
-
-        if ($created->category === 'extra_contribution') {
-            $this->publishExtraContributionNews($created, $request->user());
-        }
 
         return response()->json($created->load(['encodedBy:id,name', 'beneficiaryMember:id,first_name,middle_name,last_name', 'financeAccount:id,code,name,account_type']), 201);
     }

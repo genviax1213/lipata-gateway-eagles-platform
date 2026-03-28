@@ -82,4 +82,47 @@ class MemberAnnouncementAcknowledgementTest extends TestCase
             ->assertJsonPath('0.id', $post->id)
             ->assertJsonPath('0.acknowledged_at', $acknowledgedAt);
     }
+
+    public function test_member_announcement_access_uses_linked_member_when_emails_differ(): void
+    {
+        $memberRole = Role::query()->where('name', 'member')->firstOrFail();
+        $user = User::factory()->create([
+            'role_id' => $memberRole->id,
+            'email' => 'announcement.member@lgec.org',
+        ]);
+
+        Member::query()->create([
+            'member_number' => 'M-ANN-002',
+            'first_name' => 'Announcement',
+            'middle_name' => 'Linked',
+            'last_name' => 'Member',
+            'email' => 'announcement-member-personal@example.com',
+            'membership_status' => 'active',
+            'user_id' => $user->id,
+        ]);
+
+        $post = Post::query()->create([
+            'title' => 'Linked Member Notice',
+            'slug' => 'linked-member-notice',
+            'section' => 'activities',
+            'post_type' => 'article',
+            'excerpt' => 'Member notice for linked profile.',
+            'content' => 'Member notice for linked profile.',
+            'show_on_homepage_community' => false,
+            'show_on_announcement_bar' => true,
+            'announcement_text' => 'Linked member notice',
+            'announcement_audience' => 'members',
+            'announcement_expires_at' => now()->addWeek(),
+            'send_push_notification' => false,
+            'status' => 'published',
+            'published_at' => now()->subMinute(),
+            'author_id' => $user->id,
+        ]);
+
+        Sanctum::actingAs($user);
+
+        $this->getJson('/api/v1/member-content/announcements')
+            ->assertOk()
+            ->assertJsonPath('0.id', $post->id);
+    }
 }

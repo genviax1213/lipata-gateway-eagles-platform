@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Notifications\ContactInquiryNotification;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Notification;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
@@ -433,26 +434,32 @@ class PublicContentSectionsTest extends TestCase
 
     public function test_public_schedules_endpoint_serializes_local_calendar_times_as_correct_utc_iso(): void
     {
-        $creator = User::factory()->create();
+        Carbon::setTestNow(Carbon::parse('2026-03-20 12:00:00', 'Asia/Manila'));
 
-        $event = CalendarEvent::query()->create([
-            'title' => 'Morning Planning Session',
-            'event_type' => 'meeting',
-            'starts_at' => '2026-03-21 08:00:00',
-            'ends_at' => '2026-03-21 10:30:00',
-            'location' => 'Clubhouse',
-            'description' => 'Planning agenda.',
-            'created_by_user_id' => $creator->id,
-            'updated_by_user_id' => $creator->id,
-        ]);
+        try {
+            $creator = User::factory()->create();
 
-        $this->getJson('/api/v1/content/schedules')
-            ->assertOk()
-            ->assertJsonFragment([
-                'id' => $event->id,
-                'starts_at' => '2026-03-21T00:00:00.000000Z',
-                'ends_at' => '2026-03-21T02:30:00.000000Z',
+            $event = CalendarEvent::query()->create([
+                'title' => 'Morning Planning Session',
+                'event_type' => 'meeting',
+                'starts_at' => '2026-03-21 08:00:00',
+                'ends_at' => '2026-03-21 10:30:00',
+                'location' => 'Clubhouse',
+                'description' => 'Planning agenda.',
+                'created_by_user_id' => $creator->id,
+                'updated_by_user_id' => $creator->id,
             ]);
+
+            $this->getJson('/api/v1/content/schedules')
+                ->assertOk()
+                ->assertJsonFragment([
+                    'id' => $event->id,
+                    'starts_at' => '2026-03-21T00:00:00.000000Z',
+                    'ends_at' => '2026-03-21T02:30:00.000000Z',
+                ]);
+        } finally {
+            Carbon::setTestNow();
+        }
     }
 
     public function test_calendar_store_normalizes_iso_input_to_manila_local_storage_and_preserves_payload(): void

@@ -91,6 +91,42 @@ class DashboardMeTest extends TestCase
             ->assertJsonPath('member.member_number', 'M-DASH-001');
     }
 
+    public function test_member_dashboard_uses_linked_profile_even_when_account_and_member_emails_differ(): void
+    {
+        $memberRole = Role::query()->where('name', 'member')->firstOrFail();
+        $memberUser = User::factory()->create([
+            'role_id' => $memberRole->id,
+            'email' => 'dashboard.member@lgec.org',
+        ]);
+
+        $member = Member::query()->create([
+            'member_number' => 'M-DASH-002',
+            'first_name' => 'Dashboard',
+            'middle_name' => 'Linked',
+            'last_name' => 'Member',
+            'email' => 'dashboard-member-personal@example.com',
+            'membership_status' => 'active',
+            'user_id' => $memberUser->id,
+        ]);
+
+        Contribution::query()->create([
+            'member_id' => $member->id,
+            'category' => 'monthly_contribution',
+            'contribution_date' => now()->toDateString(),
+            'amount' => 500,
+            'note' => 'Linked profile contribution',
+            'encoded_by_user_id' => $memberUser->id,
+            'encoded_at' => now(),
+        ]);
+
+        Sanctum::actingAs($memberUser);
+
+        $this->getJson('/api/v1/dashboard/me')
+            ->assertOk()
+            ->assertJsonPath('view', 'member')
+            ->assertJsonPath('member.member_number', 'M-DASH-002');
+    }
+
     public function test_member_dashboard_reports_application_archive_availability(): void
     {
         $memberRole = Role::query()->where('name', 'member')->firstOrFail();

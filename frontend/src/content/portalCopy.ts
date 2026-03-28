@@ -1,7 +1,5 @@
 export const canonicalRoutes = {
   login: "/login",
-  applicantRegistration: "/applicant-registration",
-  memberRegistration: "/member-registration",
   passwordReset: "/member-reset-password",
 } as const;
 

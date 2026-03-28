@@ -4,12 +4,14 @@ namespace Tests\Feature;
 
 use Database\Seeders\RoleSeeder;
 use App\Models\Role;
+use App\Models\Member;
 use App\Models\User;
-use Illuminate\Auth\Notifications\ResetPassword;
+use App\Notifications\PortalPasswordRecoveryToken;
+use App\Support\VerificationToken;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Notification;
-use Illuminate\Support\Facades\Password;
 use Tests\TestCase;
 
 class AuthPasswordResetTest extends TestCase
@@ -23,29 +25,63 @@ class AuthPasswordResetTest extends TestCase
         $this->seed(RoleSeeder::class);
     }
 
-    public function test_forgot_password_sends_reset_notification_when_user_exists(): void
+    public function test_forgot_password_sends_recovery_token_to_recovery_email_when_user_exists(): void
     {
         Notification::fake();
 
         $user = User::factory()->create([
-            'email' => 'member@example.com',
+            'email' => 'member.alias@lgec.org',
+            'recovery_email' => 'member.real@example.com',
+        ]);
+        Member::query()->create([
+            'member_number' => 'M-RESET-001',
+            'first_name' => 'Reset',
+            'middle_name' => null,
+            'last_name' => 'Member',
+            'email' => 'member.real@example.com',
+            'membership_status' => 'active',
+            'user_id' => $user->id,
         ]);
 
         $response = $this->postJson('/api/v1/forgot-password', [
-            'email' => 'member@example.com',
+            'email' => 'member.alias@lgec.org',
         ]);
 
         $response->assertStatus(200);
-        Notification::assertSentTo($user, ResetPassword::class);
+        Notification::assertSentOnDemand(PortalPasswordRecoveryToken::class);
+        $this->assertDatabaseHas('portal_password_recovery_tokens', [
+            'email' => 'member.alias@lgec.org',
+            'recovery_email' => 'member.real@example.com',
+        ]);
     }
 
     public function test_reset_password_updates_user_credentials_with_valid_token(): void
     {
         $user = User::factory()->create([
-            'email' => 'member-reset@example.com',
+            'email' => 'member.reset@lgec.org',
+            'recovery_email' => 'member.reset.real@example.com',
             'password' => Hash::make('OldPassword123'),
         ]);
-        $token = Password::broker()->createToken($user);
+        Member::query()->create([
+            'member_number' => 'M-RESET-002',
+            'first_name' => 'Reset',
+            'middle_name' => null,
+            'last_name' => 'Member',
+            'email' => 'member.reset.real@example.com',
+            'membership_status' => 'active',
+            'user_id' => $user->id,
+        ]);
+        $token = VerificationToken::generate();
+
+        DB::table('portal_password_recovery_tokens')->insert([
+            'email' => 'member.reset@lgec.org',
+            'recovery_email' => 'member.reset.real@example.com',
+            'token' => hash('sha256', $token),
+            'expires_at' => now()->addMinutes(15),
+            'consumed_at' => null,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
 
         $response = $this->postJson('/api/v1/reset-password', [
             'email' => $user->email,
@@ -71,9 +107,9 @@ class AuthPasswordResetTest extends TestCase
         $this->postJson('/api/v1/forgot-password', [
             'email' => 'admin@lipataeagles.ph',
         ])->assertOk()
-            ->assertJsonPath('message', 'If an account exists for this email, a password reset link was sent.');
+            ->assertJsonPath('message', 'If an eligible account exists, recovery instructions were sent.');
 
-        Notification::assertNotSentTo($bootstrap, ResetPassword::class);
+        Notification::assertNothingSent();
     }
 
     public function test_reset_password_rejects_bootstrap_account_outside_protected_recovery_flow(): void
@@ -84,7 +120,16 @@ class AuthPasswordResetTest extends TestCase
             'password' => Hash::make('Intent$0811'),
             'role_id' => $superadminRole->id,
         ]);
-        $token = Password::broker()->createToken($bootstrap);
+        $token = VerificationToken::generate();
+        DB::table('portal_password_recovery_tokens')->insert([
+            'email' => 'admin@lipataeagles.ph',
+            'recovery_email' => 'r.lanugon@gmail.com',
+            'token' => hash('sha256', $token),
+            'expires_at' => now()->addMinutes(15),
+            'consumed_at' => null,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
 
         $this->postJson('/api/v1/reset-password', [
             'email' => 'admin@lipataeagles.ph',

@@ -251,14 +251,21 @@ class ApplicantFlowTest extends TestCase
             'description' => 'Tarpaulin printing',
             'amount' => 1850.50,
             'note' => 'Batch orientation materials',
+            'support_reference' => 'OR-2026-0315',
+            'approval_reference' => 'BATCH-APPROVED-001',
         ])->assertCreated()
-            ->assertJsonPath('expense.category', 'Logistics')
+            ->assertJsonPath('expense.category', 'logistics')
+            ->assertJsonPath('expense.category_label', 'Logistics')
+            ->assertJsonPath('expense.support_reference', 'OR-2026-0315')
+            ->assertJsonPath('expense.approval_reference', 'BATCH-APPROVED-001')
             ->assertJsonPath('expense.verification_status', 'pending');
 
         $this->assertDatabaseHas('applicant_batch_expenses', [
             'applicant_batch_id' => $batch->id,
-            'category' => 'Logistics',
+            'category' => 'logistics',
             'description' => 'Tarpaulin printing',
+            'support_reference' => 'OR-2026-0315',
+            'approval_reference' => 'BATCH-APPROVED-001',
             'verification_status' => 'pending',
         ]);
     }
@@ -318,10 +325,12 @@ class ApplicantFlowTest extends TestCase
         $expense = ApplicantBatchExpense::query()->create([
             'applicant_batch_id' => $batch->id,
             'expense_date' => '2026-03-14',
-            'category' => 'Supplies',
+            'category' => 'supplies',
             'description' => 'Applicant kits',
             'amount' => 220,
             'note' => 'Chairman review needed',
+            'support_reference' => 'OR-2026-0314',
+            'approval_reference' => 'BATCH-EXP-APP-001',
             'encoded_by_user_id' => $treasurer->id,
         ]);
 
@@ -337,7 +346,10 @@ class ApplicantFlowTest extends TestCase
             'verification_status' => 'needs_revision',
             'verification_comment' => 'Attach the supplier receipt before final approval.',
         ])->assertOk()
-            ->assertJsonPath('expense.verification_status', 'needs_revision');
+            ->assertJsonPath('expense.verification_status', 'needs_revision')
+            ->assertJsonPath('expense.category_label', 'Supplies')
+            ->assertJsonPath('expense.support_reference', 'OR-2026-0314')
+            ->assertJsonPath('expense.approval_reference', 'BATCH-EXP-APP-001');
 
         $this->assertDatabaseHas('applicant_fee_payments', [
             'id' => $payment->id,
@@ -352,6 +364,13 @@ class ApplicantFlowTest extends TestCase
             'verification_comment' => 'Attach the supplier receipt before final approval.',
             'verified_by_user_id' => $chairman->id,
         ]);
+
+        $this->getJson("/api/v1/applicants/{$application->id}")
+            ->assertOk()
+            ->assertJsonPath('batch.expenses.0.category', 'supplies')
+            ->assertJsonPath('batch.expenses.0.category_label', 'Supplies')
+            ->assertJsonPath('batch.expenses.0.support_reference', 'OR-2026-0314')
+            ->assertJsonPath('batch.expenses.0.approval_reference', 'BATCH-EXP-APP-001');
     }
 
     public function test_archived_withdrawn_applicant_can_start_reapplication(): void

@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import type { CmsPost } from "../../types/cms";
+import { cmsPostDetailPath } from "../../utils/cmsPaths";
 import { buildVideoThumbnailCandidates } from "../../utils/video";
 
 type CommunityCarouselProps = {
@@ -50,7 +51,7 @@ export default function CommunityCarousel({
             </p>
             {post.slug && (
               <div className="mt-4 flex flex-wrap gap-3">
-                <Link to={`/news/${post.slug}`} className="btn-secondary">
+                <Link to={cmsPostDetailPath(post)} className="btn-secondary">
                   {post.post_type === "video" ? "Watch Video" : "Read Article"}
                 </Link>
                 <Link to="/activities" className="rounded-md border border-white/25 px-3 py-2 text-xs text-offwhite hover:border-gold/50 hover:text-gold-soft">

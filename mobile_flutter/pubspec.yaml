@@ -1,5 +1,5 @@
 name: lgec_members_mobile
-description: LGEC members mobile app for viewing and managing contribution records.
+description: LGEC internal mobile app for finance and announcements.
 publish_to: "none"
 
 version: 0.1.0+1
@@ -21,3 +21,6 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/images/tfoe-logo.png
+    - assets/images/lgec-logo.png

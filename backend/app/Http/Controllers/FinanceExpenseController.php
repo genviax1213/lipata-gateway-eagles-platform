@@ -6,6 +6,7 @@ use App\Models\Expense;
 use App\Models\FinanceAccount;
 use App\Models\FinanceAccountOpeningBalance;
 use App\Models\Member;
+use App\Models\User;
 use App\Support\TextCase;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -37,6 +38,37 @@ class FinanceExpenseController extends Controller
     private function expenseCategoryLabels(): array
     {
         return self::EXPENSE_CATEGORY_LABELS;
+    }
+
+    private function normalizeEmail(string $value): string
+    {
+        return Str::of($value)->lower()->trim()->value();
+    }
+
+    private function ensureMobileFinanceAccess(Request $request)
+    {
+        /** @var User $user */
+        $user = $request->user();
+
+        if (!$user->mobile_access_enabled) {
+            return response()->json([
+                'message' => 'Mobile access is not enabled for this account.',
+            ], 403);
+        }
+
+        if ($this->normalizeEmail((string) $user->email) === $this->normalizeEmail((string) config('app.bootstrap_superadmin_email', 'admin@lipataeagles.ph'))) {
+            return response()->json([
+                'message' => 'Bootstrap account is not available through the mobile app.',
+            ], 403);
+        }
+
+        if (!$user->hasPermission('finance.view')) {
+            return response()->json([
+                'message' => 'Forbidden',
+            ], 403);
+        }
+
+        return null;
     }
 
     private function formatMemberName(Member $member): string
@@ -122,6 +154,15 @@ class FinanceExpenseController extends Controller
             'data' => $rows,
             'unassigned_contribution_total' => $unassignedContributionTotal,
         ]);
+    }
+
+    public function mobileAccounts(Request $request)
+    {
+        if ($response = $this->ensureMobileFinanceAccess($request)) {
+            return $response;
+        }
+
+        return $this->accounts($request);
     }
 
     public function openingBalances(Request $request)
@@ -418,6 +459,21 @@ class FinanceExpenseController extends Controller
             $created->load(['financeAccount:id,code,name,account_type', 'beneficiaryMember:id,first_name,middle_name,last_name', 'encodedBy:id,name']),
             201
         );
+    }
+
+    public function mobileStoreExpense(Request $request)
+    {
+        if ($response = $this->ensureMobileFinanceAccess($request)) {
+            return $response;
+        }
+
+        if (!$request->user()->hasPermission('finance.input')) {
+            return response()->json([
+                'message' => 'Forbidden',
+            ], 403);
+        }
+
+        return $this->storeExpense($request);
     }
 
     public function reverseExpense(Request $request, Expense $expense)

@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import type { CmsPost } from "../../types/cms";
+import { cmsPostDetailPath } from "../../utils/cmsPaths";
 import { htmlToPlainText } from "../../utils/richText";
 import { buildVideoThumbnailCandidates } from "../../utils/video";
 
@@ -107,7 +108,7 @@ export default function PublicPostCard({
       <p className="mt-2 text-sm text-mist/85">{description}</p>
       {post.slug && (
         <div className="mt-4">
-          <Link to={articlePath ?? `/news/${post.slug}`} className="btn-secondary">
+          <Link to={articlePath ?? cmsPostDetailPath(post)} className="btn-secondary">
             {post.post_type === "video" ? "Watch Video" : readLabel}
           </Link>
         </div>

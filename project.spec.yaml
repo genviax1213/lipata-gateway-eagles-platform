@@ -180,6 +180,11 @@ invariants:
   arch: [layers_explicit, contracts_and_ownership_explicit, bb]
   exec: [sdlc, incremental_checkpointed_delivery, no_done_without_verification]
   repo: [respect_conventions_and_dep_direction, minimal_diff_surface, no_unrelated_changes]
+  mobile:
+    - internal_mobile_scope(finance+announcements_only)
+    - personal_member_mobile_shell(my_contributions+announcements)
+    - elevated_accounts_blocked_from_mobile(bootstrap+admin+officer+secretary+membership_chairman+treasurer+auditor)
+    - no_chat_feature_until_explicit_reapproval
   sec:
     - no_secret_material_in_code
     - env_secret_management

@@ -125,6 +125,38 @@ class AuthSessionTest extends TestCase
             ->assertJsonPath('message', 'Your membership application was withdrawn. Login access is blocked.');
     }
 
+    public function test_login_blocks_recovery_email_for_non_bootstrap_accounts(): void
+    {
+        $password = 'Password123';
+        User::factory()->create([
+            'email' => 'member.login@lgec.org',
+            'recovery_email' => 'member.real@example.com',
+            'password' => Hash::make($password),
+        ]);
+
+        $this->postJson('/api/v1/login', [
+            'email' => 'member.real@example.com',
+            'password' => $password,
+        ])->assertStatus(403)
+            ->assertJsonPath('message', 'Use your login alias (@lgec.org). Recovery email cannot be used to sign in.');
+    }
+
+    public function test_login_blocks_locked_alias_until_admin_generates_credentials(): void
+    {
+        $password = 'Password123';
+        User::factory()->create([
+            'email' => 'locked.member@lgec.org',
+            'password' => Hash::make($password),
+            'login_email_locked' => true,
+        ]);
+
+        $this->postJson('/api/v1/login', [
+            'email' => 'locked.member@lgec.org',
+            'password' => $password,
+        ])->assertStatus(403)
+            ->assertJsonPath('message', 'Login is locked for this alias. Ask an admin to generate credentials for your account.');
+    }
+
     public function test_logout_revokes_current_access_token(): void
     {
         $user = User::factory()->create();

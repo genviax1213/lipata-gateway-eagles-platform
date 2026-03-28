@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import api from "../services/api";
 import type { CmsPost } from "../types/cms";
 import { unsplashImages } from "../content/unsplashImages";
+import { cmsPostDetailPath } from "../utils/cmsPaths";
 import { sanitizeRichHtml } from "../utils/richText";
 
 export default function About() {
@@ -75,7 +76,7 @@ export default function About() {
               />
               {primary.slug && (
                 <div className="mt-6">
-                  <Link to={`/news/${primary.slug}`} className="btn-secondary">
+                  <Link to={cmsPostDetailPath(primary)} className="btn-secondary">
                     Read Full Article
                   </Link>
                 </div>

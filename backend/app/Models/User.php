@@ -26,11 +26,17 @@ class User extends Authenticatable
     protected $fillable = [
         'name',
         'email',
+        'recovery_email',
+        'login_email_locked',
         'email_verified_at',
         'password',
         'role_id',
         'finance_role',
         'forum_role',
+        'must_change_password',
+        'mobile_access_enabled',
+        'mobile_chat_enabled',
+        'last_password_changed_at',
         'data_privacy_notice_acknowledged_at',
         'data_privacy_notice_acknowledged_version',
     ];
@@ -55,7 +61,12 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'last_activity_at' => 'datetime',
+            'last_password_changed_at' => 'datetime',
             'data_privacy_notice_acknowledged_at' => 'datetime',
+            'must_change_password' => 'boolean',
+            'login_email_locked' => 'boolean',
+            'mobile_access_enabled' => 'boolean',
+            'mobile_chat_enabled' => 'boolean',
             'password' => 'hashed',
         ];
     }
@@ -72,7 +83,7 @@ class User extends Authenticatable
         });
 
         static::updated(function (User $user): void {
-            if (!$user->wasChanged(['email', 'email_verified_at', 'password', 'role_id'])) {
+            if (!$user->wasChanged(['email', 'recovery_email', 'email_verified_at', 'password', 'role_id'])) {
                 return;
             }
 
@@ -83,6 +94,11 @@ class User extends Authenticatable
     public function setEmailAttribute(?string $value): void
     {
         $this->attributes['email'] = $value === null ? null : Str::of($value)->trim()->lower()->value();
+    }
+
+    public function setRecoveryEmailAttribute(?string $value): void
+    {
+        $this->attributes['recovery_email'] = $value === null ? null : Str::of($value)->trim()->lower()->value();
     }
 
     public function role()
@@ -206,7 +222,9 @@ class User extends Authenticatable
     private static function syncMemberProfile(User $user, ?string $previousEmail = null): void
     {
         $normalizedEmail = Str::of((string) $user->email)->trim()->lower()->value();
-        if ($normalizedEmail === '') {
+        $normalizedRecoveryEmail = Str::of((string) ($user->recovery_email ?? ''))->trim()->lower()->value();
+        $matchEmail = $normalizedRecoveryEmail !== '' ? $normalizedRecoveryEmail : $normalizedEmail;
+        if ($matchEmail === '') {
             return;
         }
 
@@ -215,7 +233,7 @@ class User extends Authenticatable
             ->first();
 
         if (!$member) {
-            $memberByEmail = Member::query()->where('email', $normalizedEmail)->first();
+            $memberByEmail = Member::query()->where('email', $matchEmail)->first();
             if ($memberByEmail && $memberByEmail->user_id === null) {
                 $member = $memberByEmail;
             } elseif (!$memberByEmail && $previousEmail !== null && $previousEmail !== '') {
@@ -249,7 +267,6 @@ class User extends Authenticatable
 
         $member->fill([
             'user_id' => $user->id,
-            'email' => $normalizedEmail,
             'email_verified' => $emailVerified,
             'password_set' => $passwordSet,
         ]);

@@ -114,6 +114,26 @@ class ApplicantController extends Controller
         return ApplicantFeeRequirement::CATEGORY_LABELS;
     }
 
+    private function serializeBatchExpense(ApplicantBatchExpense $expense): array
+    {
+        return [
+            'id' => $expense->id,
+            'expense_date' => optional($expense->expense_date)?->toDateString(),
+            'category' => $expense->category,
+            'category_label' => $expense->category_label,
+            'description' => $expense->description,
+            'amount' => $expense->amount,
+            'note' => $expense->note,
+            'support_reference' => $expense->support_reference,
+            'approval_reference' => $expense->approval_reference,
+            'encoded_by' => $expense->encodedBy ? ['id' => $expense->encodedBy->id, 'name' => $expense->encodedBy->name] : null,
+            'verification_status' => $expense->verification_status ?: 'pending',
+            'verification_comment' => $expense->verification_comment,
+            'verified_at' => optional($expense->verified_at)?->toISOString(),
+            'verified_by' => $expense->verifiedBy ? ['id' => $expense->verifiedBy->id, 'name' => $expense->verifiedBy->name] : null,
+        ];
+    }
+
     private function resolveCategoryRequirement(Applicant $application, string $category): ?ApplicantFeeRequirement
     {
         return $application->feeRequirements
@@ -551,19 +571,7 @@ class ApplicantController extends Controller
             $batchExpenseRecords = $application->batch->expenses
                 ->sortByDesc(fn (ApplicantBatchExpense $expense) => sprintf('%s-%010d', (string) optional($expense->expense_date)?->toDateString(), $expense->id))
                 ->values()
-                ->map(fn (ApplicantBatchExpense $expense) => [
-                    'id' => $expense->id,
-                    'expense_date' => optional($expense->expense_date)?->toDateString(),
-                    'category' => $expense->category,
-                    'description' => $expense->description,
-                    'amount' => $expense->amount,
-                    'note' => $expense->note,
-                    'encoded_by' => $expense->encodedBy ? ['id' => $expense->encodedBy->id, 'name' => $expense->encodedBy->name] : null,
-                    'verification_status' => $expense->verification_status ?: 'pending',
-                    'verification_comment' => $expense->verification_comment,
-                    'verified_at' => optional($expense->verified_at)?->toISOString(),
-                    'verified_by' => $expense->verifiedBy ? ['id' => $expense->verifiedBy->id, 'name' => $expense->verifiedBy->name] : null,
-                ]);
+                ->map(fn (ApplicantBatchExpense $expense) => $this->serializeBatchExpense($expense));
         }
 
         return [
@@ -1413,7 +1421,7 @@ class ApplicantController extends Controller
         ]);
 
         return response()->json([
-            'message' => 'Applicant fee payment recorded.',
+            'message' => 'Applicant payment recorded.',
             'payment' => $payment->fresh(),
             'requirement' => $requirement->fresh(),
         ], 201);
@@ -1440,7 +1448,7 @@ class ApplicantController extends Controller
         $applicantFeePayment->save();
 
         return response()->json([
-            'message' => 'Applicant contribution verification updated.',
+            'message' => 'Applicant payment review updated.',
             'payment' => $applicantFeePayment->fresh('verifiedBy:id,name'),
         ]);
     }
@@ -1460,15 +1468,19 @@ class ApplicantController extends Controller
             'description' => 'required|string|min:3|max:255',
             'amount' => 'required|numeric|min:0.01',
             'note' => 'nullable|string|max:3000',
+            'support_reference' => 'nullable|string|max:255',
+            'approval_reference' => 'nullable|string|max:255',
         ]);
 
         $expense = ApplicantBatchExpense::query()->create([
             'applicant_batch_id' => $applicantBatch->id,
             'expense_date' => $validated['expense_date'],
-            'category' => trim((string) $validated['category']),
+            'category' => ApplicantBatchExpense::normalizeCategory((string) $validated['category']),
             'description' => trim((string) $validated['description']),
             'amount' => $validated['amount'],
             'note' => $this->trimOrNull($validated['note'] ?? null),
+            'support_reference' => $this->trimOrNull($validated['support_reference'] ?? null),
+            'approval_reference' => $this->trimOrNull($validated['approval_reference'] ?? null),
             'verification_status' => 'pending',
             'encoded_by_user_id' => $user->id,
         ]);
@@ -1483,7 +1495,7 @@ class ApplicantController extends Controller
 
         return response()->json([
             'message' => 'Applicant batch expense recorded.',
-            'expense' => $expense->fresh(['encodedBy:id,name', 'verifiedBy:id,name']),
+            'expense' => $this->serializeBatchExpense($expense->fresh(['encodedBy:id,name', 'verifiedBy:id,name'])),
         ], 201);
     }
 
@@ -1508,8 +1520,8 @@ class ApplicantController extends Controller
         $applicantBatchExpense->save();
 
         return response()->json([
-            'message' => 'Applicant batch expense verification updated.',
-            'expense' => $applicantBatchExpense->fresh(['encodedBy:id,name', 'verifiedBy:id,name']),
+            'message' => 'Applicant batch expense review updated.',
+            'expense' => $this->serializeBatchExpense($applicantBatchExpense->fresh(['encodedBy:id,name', 'verifiedBy:id,name'])),
         ]);
     }
 

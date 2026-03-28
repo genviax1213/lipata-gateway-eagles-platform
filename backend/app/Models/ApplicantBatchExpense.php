@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Str;
 
 class ApplicantBatchExpense extends Model
 {
@@ -30,6 +31,8 @@ class ApplicantBatchExpense extends Model
         'description',
         'amount',
         'note',
+        'support_reference',
+        'approval_reference',
         'verification_status',
         'verification_comment',
         'encoded_by_user_id',
@@ -42,6 +45,32 @@ class ApplicantBatchExpense extends Model
         'amount' => 'decimal:2',
         'verified_at' => 'datetime',
     ];
+
+    public static function categoryLabels(): array
+    {
+        return self::CATEGORY_LABELS;
+    }
+
+    public static function normalizeCategory(string $value): string
+    {
+        $normalized = Str::of($value)
+            ->lower()
+            ->trim()
+            ->replaceMatches('/[^a-z0-9]+/', '_')
+            ->trim('_')
+            ->value();
+
+        return $normalized !== '' ? $normalized : self::CATEGORY_MISC;
+    }
+
+    public function getCategoryLabelAttribute(): string
+    {
+        return self::CATEGORY_LABELS[$this->category] ?? Str::of($this->category)
+            ->replace(['_', '-'], ' ')
+            ->squish()
+            ->title()
+            ->value();
+    }
 
     public function batch()
     {

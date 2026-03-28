@@ -234,7 +234,10 @@ class MemberController extends Controller
             return null;
         }
 
-        return Member::query()->where('email', $email)->first();
+        return Member::query()
+            ->whereNull('user_id')
+            ->where('email', $email)
+            ->first();
     }
 
     public function index(Request $request)

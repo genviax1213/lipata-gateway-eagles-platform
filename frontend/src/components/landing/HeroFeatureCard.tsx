@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import type { CmsPost } from "../../types/cms";
+import { cmsPostDetailPath } from "../../utils/cmsPaths";
 
 type HeroFeatureCardProps = {
   post: CmsPost | null;
@@ -58,7 +59,7 @@ export default function HeroFeatureCard({
       )}
       {post?.slug && (
         <div className="mt-3">
-          <Link to={`/news/${post.slug}`} className="btn-secondary">
+          <Link to={cmsPostDetailPath(post)} className="btn-secondary">
             Learn More
           </Link>
         </div>

@@ -5,15 +5,17 @@ import ProtectedRoute from "./ProtectedRoute";
 import MemberContentRoute from "./MemberContentRoute";
 import GuestRoute from "./GuestRoute";
 import VisitorTracker from "../components/VisitorTracker";
+import Landing from "../pages/Landing";
+import About from "../pages/About";
+import History from "../pages/History";
+import Activities from "../pages/Activities";
+import NewsArticle from "../pages/NewsArticle";
+import Layout from "../components/layout/Layout";
 
 const Login = lazy(() => import("../pages/Login"));
-const Landing = lazy(() => import("../pages/Landing"));
-const About = lazy(() => import("../pages/About"));
-const History = lazy(() => import("../pages/History"));
 const MagnaCarta = lazy(() => import("../pages/MagnaCarta"));
 const Resolutions = lazy(() => import("../pages/Resolutions"));
 const Gmm = lazy(() => import("../pages/Gmm"));
-const Activities = lazy(() => import("../pages/Activities"));
 const Schedules = lazy(() => import("../pages/Schedules"));
 const Forms = lazy(() => import("../pages/Forms"));
 const Contact = lazy(() => import("../pages/Contact"));
@@ -23,13 +25,11 @@ const PortalDashboard = lazy(() => import("../pages/PortalDashboard"));
 const Members = lazy(() => import("../pages/Members"));
 const Contributions = lazy(() => import("../pages/Contributions"));
 const CmsPosts = lazy(() => import("../pages/CmsPosts"));
-const NewsArticle = lazy(() => import("../pages/NewsArticle"));
 const UserRoles = lazy(() => import("../pages/UserRoles"));
 const Forum = lazy(() => import("../pages/Forum"));
 const SecuritySettings = lazy(() => import("../pages/SecuritySettings"));
 const Logs = lazy(() => import("../pages/Logs"));
 const Visitors = lazy(() => import("../pages/Visitors"));
-const Layout = lazy(() => import("../components/layout/Layout"));
 const AdminLayout = lazy(() => import("../components/layout/AdminLayout"));
 
 export default function AppRoutes() {
@@ -43,7 +43,9 @@ export default function AppRoutes() {
           {/* Public */}
           <Route path="/" element={<Layout><Landing /></Layout>} />
           <Route path="/about" element={<Layout><About /></Layout>} />
+          <Route path="/about/:slug" element={<Layout><NewsArticle /></Layout>} />
           <Route path="/history" element={<Layout><History /></Layout>} />
+          <Route path="/history/:slug" element={<Layout><NewsArticle /></Layout>} />
           <Route
             path="/magna-carta"
             element={
@@ -79,6 +81,7 @@ export default function AppRoutes() {
             }
           />
           <Route path="/activities" element={<Layout><Activities /></Layout>} />
+          <Route path="/activities/:slug" element={<Layout><NewsArticle /></Layout>} />
           <Route path="/schedules" element={<Layout><Schedules /></Layout>} />
           <Route
             path="/downloads/forms"
@@ -105,8 +108,6 @@ export default function AppRoutes() {
               </GuestRoute>
             }
           />
-          <Route path="/news/:slug" element={<Layout><NewsArticle /></Layout>} />
-
           {/* Auth */}
           <Route
             path="/login"

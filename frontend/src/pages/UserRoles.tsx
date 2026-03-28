@@ -28,7 +28,14 @@ interface MemberRow {
   user_id: number | null;
   user?: {
     id: number;
+    email?: string | null;
+    recovery_email?: string | null;
+    login_email_locked?: boolean;
+    finance_role?: string | null;
     forum_role?: "forum_moderator" | null;
+    must_change_password?: boolean;
+    mobile_access_enabled?: boolean;
+    mobile_chat_enabled?: boolean;
     role?: { id: number; name: string } | null;
   } | null;
 }
@@ -37,8 +44,13 @@ interface AdminUserRow {
   id: number;
   name: string;
   email: string;
+  recovery_email?: string | null;
+  login_email_locked?: boolean;
   finance_role: string | null;
   forum_role: "forum_moderator" | null;
+  must_change_password?: boolean;
+  mobile_access_enabled?: boolean;
+  mobile_chat_enabled?: boolean;
   role?: { id: number; name: string } | null;
   created_at: string;
 }
@@ -59,7 +71,30 @@ interface PaginatedUsers {
   per_page: number;
 }
 
-type UserRolesTab = "members" | "assign" | "passwords" | "roles";
+type UserRolesTab = "members" | "assign" | "passwords" | "roles" | "conversion";
+
+interface ConversionRow {
+  member_id: number;
+  user_id: number;
+  member_name: string;
+  current_login_email: string;
+  current_recovery_email: string | null;
+  member_email: string | null;
+  proposed_alias: string | null;
+  proposed_recovery_email: string | null;
+  login_email_locked: boolean;
+  status: string;
+}
+
+interface ConversionSummary {
+  total_members: number;
+  convertible: number;
+  missing_name: number;
+  missing_recovery_email: number;
+  missing_user_link: number;
+  already_alias: number;
+  locked: number;
+}
 
 const ROLES_PER_PAGE = 6;
 
@@ -89,6 +124,7 @@ export default function UserRoles() {
   const { user } = useAuth();
   const canDelegateRoles = isAdminUser(user) || hasPermission(user, "roles.delegate");
   const canResetPasswords = isAdminUser(user) || hasPermission(user, "users.password.reset");
+  const canManageUsers = isAdminUser(user) || hasPermission(user, "users.manage");
   const actorRoleName = extractRoleName(user);
   const isSuperadmin = actorRoleName === "superadmin";
 
@@ -105,6 +141,8 @@ export default function UserRoles() {
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
   const [selectedRoleId, setSelectedRoleId] = useState<number | "">("");
   const [selectedForumRole, setSelectedForumRole] = useState<"" | "forum_moderator">("");
+  const [selectedLoginEmail, setSelectedLoginEmail] = useState("");
+  const [selectedUserLoginEmail, setSelectedUserLoginEmail] = useState("");
   const [password, setPassword] = useState("");
   const [passwordConfirmation, setPasswordConfirmation] = useState("");
   const [page, setPage] = useState(1);
@@ -118,9 +156,13 @@ export default function UserRoles() {
   const [loadingMembers, setLoadingMembers] = useState(false);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [loadingRoles, setLoadingRoles] = useState(false);
+  const [loadingConversion, setLoadingConversion] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [generatedCredential, setGeneratedCredential] = useState<{ login: string; password: string } | null>(null);
+  const [conversionRows, setConversionRows] = useState<ConversionRow[]>([]);
+  const [conversionSummary, setConversionSummary] = useState<ConversionSummary | null>(null);
   const [isWindowVisible, setIsWindowVisible] = useState(() => typeof document === "undefined" || document.visibilityState === "visible");
 
   const selectedMember = useMemo(
@@ -227,6 +269,23 @@ export default function UserRoles() {
     }
   }, [canDelegateRoles]);
 
+  const fetchConversionPreview = useCallback(async () => {
+    if (!canManageUsers) return;
+
+    setLoadingConversion(true);
+    setError("");
+
+    try {
+      const response = await api.get<{ summary: ConversionSummary; data: ConversionRow[] }>("/admin/identity-conversion/preview");
+      setConversionSummary(response.data.summary);
+      setConversionRows(response.data.data ?? []);
+    } catch {
+      setError("Unable to load conversion preview.");
+    } finally {
+      setLoadingConversion(false);
+    }
+  }, [canManageUsers]);
+
   useEffect(() => {
     if (!canDelegateRoles || membersLoaded) return;
     void fetchMembers(1);
@@ -243,6 +302,13 @@ export default function UserRoles() {
       void fetchRoles();
     }
   }, [activeTab, canDelegateRoles, fetchRoles, rolesLoaded]);
+
+  useEffect(() => {
+    if (!canManageUsers || activeTab !== "conversion") return;
+    if (!conversionSummary && conversionRows.length === 0 && !loadingConversion) {
+      void fetchConversionPreview();
+    }
+  }, [activeTab, canManageUsers, conversionRows.length, conversionSummary, fetchConversionPreview, loadingConversion]);
 
   useEffect(() => {
     if (!selectedMemberId) return;
@@ -262,13 +328,19 @@ export default function UserRoles() {
     if (!selectedMember) {
       setSelectedRoleId("");
       setSelectedForumRole("");
+      setSelectedLoginEmail("");
       return;
     }
 
     const currentRoleId = selectedMember.user?.role?.id ?? "";
     setSelectedRoleId(currentRoleId);
     setSelectedForumRole(selectedMember.user?.forum_role ?? "");
+    setSelectedLoginEmail(selectedMember.user?.email ?? "");
   }, [selectedMember]);
+
+  useEffect(() => {
+    setSelectedUserLoginEmail(selectedUser?.email ?? "");
+  }, [selectedUser]);
 
   const refreshVisibleData = useCallback(() => {
     if (!isWindowVisible || saving) return;
@@ -356,6 +428,7 @@ export default function UserRoles() {
       await api.put(`/admin/members/${selectedMember.id}/role`, {
         role_id: selectedRoleId,
         forum_role: selectedForumRole || null,
+        login_email: selectedLoginEmail.trim() || null,
       });
       setNotice(`Assigned role to ${fullName(selectedMember)}.`);
       if (membersLoaded) {
@@ -404,6 +477,41 @@ export default function UserRoles() {
     }
   };
 
+  const generateSelectedUserCredentials = async () => {
+    if (!selectedUser || !canResetSelectedUserPassword) return;
+
+    setSaving(true);
+    setError("");
+    setNotice("");
+    setGeneratedCredential(null);
+
+    try {
+      const response = await api.post<{ message?: string; generated_password?: string; user?: AdminUserRow }>(
+        `/admin/users/${selectedUser.id}/generate-credentials`,
+      );
+      const password = response.data.generated_password ?? "";
+      if (password) {
+        setGeneratedCredential({
+          login: selectedUser.email,
+          password,
+        });
+      }
+      setNotice(response.data.message ?? `Generated credentials for ${selectedUser.name}.`);
+      if (usersLoaded) {
+        await fetchUsers(usersPage);
+      }
+    } catch (err: unknown) {
+      if (axios.isAxiosError(err)) {
+        const message = (err.response?.data as { message?: string })?.message;
+        setError(message ?? "Failed to generate credentials.");
+      } else {
+        setError("Failed to generate credentials.");
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const resetRoleSelection = () => {
     setSelectedMemberId(null);
     setSelectedRoleId("");
@@ -414,18 +522,94 @@ export default function UserRoles() {
 
   const resetPasswordSelection = () => {
     setSelectedUserId(null);
+    setSelectedUserLoginEmail("");
     setPassword("");
     setPasswordConfirmation("");
     setError("");
     setNotice("");
+    setGeneratedCredential(null);
   };
 
-  if (!canDelegateRoles && !canResetPasswords) {
+  const saveSelectedUserAlias = async () => {
+    if (!selectedUser || !selectedUser.role?.id || !selectedUserLoginEmail.trim()) return;
+
+    setSaving(true);
+    setError("");
+    setNotice("");
+
+    try {
+      await api.put(`/admin/users/${selectedUser.id}`, {
+        name: selectedUser.name,
+        email: selectedUserLoginEmail.trim(),
+        role_id: selectedUser.role.id,
+        finance_role: selectedUser.finance_role,
+        forum_role: selectedUser.forum_role,
+        must_change_password: selectedUser.must_change_password ?? false,
+        mobile_access_enabled: selectedUser.mobile_access_enabled ?? false,
+        mobile_chat_enabled: selectedUser.mobile_chat_enabled ?? false,
+      });
+      setNotice(`Updated login alias for ${selectedUser.name}.`);
+      if (usersLoaded) {
+        await fetchUsers(usersPage);
+      }
+    } catch (err: unknown) {
+      if (axios.isAxiosError(err)) {
+        const responseData = err.response?.data as { message?: string; errors?: Record<string, string[]> } | undefined;
+        const firstValidationError = responseData?.errors ? Object.values(responseData.errors)[0]?.[0] : undefined;
+        setError(firstValidationError ?? responseData?.message ?? "Failed to update login alias.");
+      } else {
+        setError("Failed to update login alias.");
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const runAliasConversion = async () => {
+    if (!canManageUsers) return;
+    if (!window.confirm("Run alias conversion now? This will convert existing login emails to @lgec.org aliases and lock affected accounts until credentials are generated.")) {
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+    setNotice("");
+
+    try {
+      const response = await api.post<{
+        message?: string;
+        summary?: { converted?: number; skipped?: number; exceptions_count?: number };
+      }>("/admin/identity-conversion/run", { confirm: true });
+      const summary = response.data.summary;
+      setNotice(
+        response.data.message
+          ?? `Alias conversion completed. Converted: ${summary?.converted ?? 0}, skipped: ${summary?.skipped ?? 0}, exceptions: ${summary?.exceptions_count ?? 0}.`,
+      );
+      await fetchConversionPreview();
+      if (usersLoaded) {
+        await fetchUsers(usersPage);
+      }
+      if (membersLoaded) {
+        await fetchMembers(page);
+      }
+    } catch (err: unknown) {
+      if (axios.isAxiosError(err)) {
+        const message = (err.response?.data as { message?: string })?.message;
+        setError(message ?? "Failed to run alias conversion.");
+      } else {
+        setError("Failed to run alias conversion.");
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!canDelegateRoles && !canResetPasswords && !canManageUsers) {
     return (
       <section>
         <h1 className="mb-3 font-heading text-4xl text-offwhite">Member Role Provisioning</h1>
         <p className="rounded-md border border-red-400/40 bg-red-400/10 px-4 py-3 text-sm text-red-200">
-          You do not have permission to manage roles or reset user passwords.
+          You do not have permission to manage roles, conversion, or user credentials.
         </p>
       </section>
     );
@@ -436,7 +620,7 @@ export default function UserRoles() {
       <div className="mb-6">
         <h1 className="mb-2 font-heading text-4xl text-offwhite">Member Role Provisioning</h1>
         <p className="text-sm text-mist/85">
-          Primary role controls portal access. Superadmin manages the platform account hierarchy. Admin password resets are blocked from superadmin and peer admin targets.
+          Primary role controls portal access. `users.email` is the assigned login alias and `members.email` remains the real member contact/recovery email.
         </p>
       </div>
 
@@ -478,6 +662,15 @@ export default function UserRoles() {
             className={`rounded-md border px-4 py-2 text-sm ${activeTab === "passwords" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}
           >
             Passwords
+          </button>
+        )}
+        {canManageUsers && (
+          <button
+            type="button"
+            onClick={() => setActiveTab("conversion")}
+            className={`rounded-md border px-4 py-2 text-sm ${activeTab === "conversion" ? "border-gold bg-gold text-ink" : "border-white/25 text-offwhite"}`}
+          >
+            Conversion
           </button>
         )}
         {canDelegateRoles && (
@@ -622,6 +815,13 @@ export default function UserRoles() {
             </p>
           ) : (
             <div className="flex flex-wrap items-center gap-3">
+              <input
+                aria-label="Assigned login alias"
+                placeholder="firstname.lastname@lgec.org"
+                value={selectedLoginEmail}
+                onChange={(e) => setSelectedLoginEmail(e.target.value)}
+                className="min-w-[18rem] rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+              />
               <select
                 aria-label="Select primary role"
                 value={selectedRoleId}
@@ -656,7 +856,7 @@ export default function UserRoles() {
               <button
                 type="button"
                 onClick={() => void assignRole()}
-                disabled={!selectedMember || !selectedRoleId || saving}
+                disabled={!selectedMember || !selectedRoleId || !selectedLoginEmail.trim() || saving}
                 className="btn-primary disabled:opacity-45"
               >
                 {saving ? "Saving..." : "Save Roles"}
@@ -708,8 +908,10 @@ export default function UserRoles() {
                     <tr>
                       <th className="px-4 py-3 text-left">Select</th>
                       <th className="px-4 py-3 text-left">Name</th>
-                      <th className="px-4 py-3 text-left">Email</th>
+                      <th className="px-4 py-3 text-left">Login Alias</th>
+                      <th className="px-4 py-3 text-left">Recovery Email</th>
                       <th className="px-4 py-3 text-left">Role</th>
+                      <th className="px-4 py-3 text-left">Login Lock</th>
                       <th className="px-4 py-3 text-left">Password Reset</th>
                     </tr>
                   </thead>
@@ -734,7 +936,9 @@ export default function UserRoles() {
                           </td>
                           <td className="px-4 py-3">{item.name}</td>
                           <td className="px-4 py-3">{item.email}</td>
+                          <td className="px-4 py-3">{item.recovery_email ?? "—"}</td>
                           <td className="px-4 py-3">{item.role?.name ? labelCase(item.role.name) : "No role"}</td>
+                          <td className="px-4 py-3">{item.login_email_locked ? "Locked" : "Open"}</td>
                           <td className="px-4 py-3">{canResetTarget ? "Allowed" : "Blocked"}</td>
                         </tr>
                       );
@@ -742,7 +946,7 @@ export default function UserRoles() {
 
                     {loadingUsers && (
                       <tr>
-                        <td colSpan={5} className="px-4 py-8 text-center text-mist/80">
+                        <td colSpan={7} className="px-4 py-8 text-center text-mist/80">
                           Loading users...
                         </td>
                       </tr>
@@ -750,7 +954,7 @@ export default function UserRoles() {
 
                     {!loadingUsers && adminUsers.length === 0 && (
                       <tr>
-                        <td colSpan={5} className="px-4 py-8 text-center text-mist/80">
+                        <td colSpan={7} className="px-4 py-8 text-center text-mist/80">
                           No users found.
                         </td>
                       </tr>
@@ -794,35 +998,88 @@ export default function UserRoles() {
               <p className="rounded-md border border-white/20 bg-white/5 px-4 py-3 text-sm text-mist/80">
                 Select a user from the list before changing a password.
               </p>
-            ) : !canResetSelectedUserPassword ? (
-              <p className="rounded-md border border-red-400/40 bg-red-400/10 px-4 py-3 text-sm text-red-200">
-                This account cannot be reset from your role. Admins are blocked from superadmin and fellow admin accounts.
-              </p>
             ) : (
-              <div className="grid gap-3 md:grid-cols-2">
-                <PasswordField
-                  ariaLabel="New password"
-                  placeholder="New password"
-                  value={password}
-                  onChange={setPassword}
-                  className="rounded-md border border-white/25 bg-white/10 px-3 py-2 pr-12 text-offwhite"
-                />
-                <PasswordField
-                  ariaLabel="Confirm new password"
-                  placeholder="Confirm new password"
-                  value={passwordConfirmation}
-                  onChange={setPasswordConfirmation}
-                  className="rounded-md border border-white/25 bg-white/10 px-3 py-2 pr-12 text-offwhite"
-                />
-                <div className="md:col-span-2 flex flex-wrap gap-3">
+              <div className="space-y-4">
+                <p className="text-xs text-mist/80">
+                  Login lock: <span className="text-offwhite">{selectedUser.login_email_locked ? "Locked" : "Open"}</span>
+                </p>
+                <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
+                  <input
+                    aria-label="Assigned login alias"
+                    placeholder="firstname.lastname@lgec.org"
+                    value={selectedUserLoginEmail}
+                    onChange={(e) => setSelectedUserLoginEmail(e.target.value)}
+                    className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite"
+                  />
                   <button
                     type="button"
-                    onClick={() => void resetSelectedUserPassword()}
-                    disabled={!password || password !== passwordConfirmation || saving}
-                    className="btn-primary disabled:opacity-45"
+                    onClick={() => void saveSelectedUserAlias()}
+                    disabled={!selectedUserLoginEmail.trim() || saving}
+                    className="btn-secondary disabled:opacity-45"
                   >
-                    {saving ? "Saving..." : "Update Password"}
+                    {saving ? "Saving..." : "Save Login Alias"}
                   </button>
+                </div>
+                <p className="text-xs text-mist/80">
+                  Assign the recognizable `@lgec.org` login here. Member recovery stays on the linked member email.
+                </p>
+
+                {!canResetSelectedUserPassword ? (
+                  <p className="rounded-md border border-red-400/40 bg-red-400/10 px-4 py-3 text-sm text-red-200">
+                    This account cannot be reset from your role. Admins are blocked from superadmin and fellow admin accounts.
+                  </p>
+                ) : (
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <PasswordField
+                      ariaLabel="New password"
+                      placeholder="New password"
+                      value={password}
+                      onChange={setPassword}
+                      className="rounded-md border border-white/25 bg-white/10 px-3 py-2 pr-12 text-offwhite"
+                    />
+                    <PasswordField
+                      ariaLabel="Confirm new password"
+                      placeholder="Confirm new password"
+                      value={passwordConfirmation}
+                      onChange={setPasswordConfirmation}
+                      className="rounded-md border border-white/25 bg-white/10 px-3 py-2 pr-12 text-offwhite"
+                    />
+                    <div className="md:col-span-2 flex flex-wrap gap-3">
+                      <button
+                        type="button"
+                        onClick={() => void generateSelectedUserCredentials()}
+                        disabled={saving}
+                        className="btn-secondary disabled:opacity-45"
+                      >
+                        {saving ? "Saving..." : "Generate Credentials"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void resetSelectedUserPassword()}
+                        disabled={!password || password !== passwordConfirmation || saving}
+                        className="btn-primary disabled:opacity-45"
+                      >
+                        {saving ? "Saving..." : "Update Password"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={resetPasswordSelection}
+                        disabled={saving}
+                        className="rounded-md border border-white/30 px-3 py-2 text-sm text-offwhite/90 transition hover:bg-white/10 disabled:opacity-45"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {generatedCredential && (
+                  <div className="rounded-md border border-gold/40 bg-gold/10 px-4 py-3 text-sm text-gold-soft">
+                    <p>Temporary credential generated (show once):</p>
+                    <p className="mt-1">Login: <span className="text-offwhite">{generatedCredential.login}</span></p>
+                    <p>Password: <span className="text-offwhite">{generatedCredential.password}</span></p>
+                  </div>
+                )}
+                {!canResetSelectedUserPassword && (
                   <button
                     type="button"
                     onClick={resetPasswordSelection}
@@ -831,7 +1088,7 @@ export default function UserRoles() {
                   >
                     Cancel
                   </button>
-                </div>
+                )}
               </div>
             )}
           </div>
@@ -901,6 +1158,90 @@ export default function UserRoles() {
             </>
           )}
         </>
+      )}
+
+      {activeTab === "conversion" && canManageUsers && (
+        <div className="space-y-4">
+          <div className="rounded-xl border border-gold/30 bg-white/10 p-4">
+            <p className="text-sm text-mist/85">
+              Run alias conversion to enforce `firstname.lastname@lgec.org` login and move existing real emails to recovery.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={() => void fetchConversionPreview()}
+                className="btn-secondary"
+                disabled={loadingConversion || saving}
+              >
+                {loadingConversion ? "Loading..." : "Refresh Preview"}
+              </button>
+              <button
+                type="button"
+                onClick={() => void runAliasConversion()}
+                className="btn-primary disabled:opacity-45"
+                disabled={loadingConversion || saving}
+              >
+                {saving ? "Running..." : "Run Conversion"}
+              </button>
+            </div>
+          </div>
+
+          {conversionSummary && (
+            <div className="grid gap-3 md:grid-cols-3">
+              <article className="rounded-lg border border-white/20 bg-white/10 p-3 text-sm text-offwhite">
+                <p>Total Members</p>
+                <p className="mt-1 text-xl font-semibold text-gold-soft">{conversionSummary.total_members}</p>
+              </article>
+              <article className="rounded-lg border border-white/20 bg-white/10 p-3 text-sm text-offwhite">
+                <p>Convertible</p>
+                <p className="mt-1 text-xl font-semibold text-gold-soft">{conversionSummary.convertible}</p>
+              </article>
+              <article className="rounded-lg border border-white/20 bg-white/10 p-3 text-sm text-offwhite">
+                <p>Locked</p>
+                <p className="mt-1 text-xl font-semibold text-gold-soft">{conversionSummary.locked}</p>
+              </article>
+            </div>
+          )}
+
+          <div className="overflow-x-auto rounded-xl border border-white/20 bg-white/10 shadow-lg">
+            <table className="min-w-[980px] text-sm text-offwhite">
+              <thead className="bg-navy/70 text-gold-soft">
+                <tr>
+                  <th className="px-3 py-2 text-left">Member</th>
+                  <th className="px-3 py-2 text-left">Current Login</th>
+                  <th className="px-3 py-2 text-left">Current Recovery</th>
+                  <th className="px-3 py-2 text-left">Proposed Alias</th>
+                  <th className="px-3 py-2 text-left">Proposed Recovery</th>
+                  <th className="px-3 py-2 text-left">Lock</th>
+                  <th className="px-3 py-2 text-left">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loadingConversion && (
+                  <tr>
+                    <td colSpan={7} className="px-3 py-8 text-center text-mist/80">Loading conversion preview...</td>
+                  </tr>
+                )}
+                {!loadingConversion && conversionRows.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="px-3 py-8 text-center text-mist/80">No conversion rows available.</td>
+                  </tr>
+                )}
+                {!loadingConversion && conversionRows.map((row) => (
+                  <tr key={`${row.member_id}-${row.user_id}`} className="border-b border-white/15">
+                    <td className="px-3 py-2">{row.member_name}</td>
+                    <td className="px-3 py-2">{row.current_login_email}</td>
+                    <td className="px-3 py-2">{row.current_recovery_email ?? row.member_email ?? "—"}</td>
+                    <td className="px-3 py-2">{row.proposed_alias ?? "—"}</td>
+                    <td className="px-3 py-2">{row.proposed_recovery_email ?? "—"}</td>
+                    <td className="px-3 py-2">{row.login_email_locked ? "Locked" : "Open"}</td>
+                    <td className="px-3 py-2">{row.status}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       )}
     </section>
   );

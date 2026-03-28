@@ -526,6 +526,15 @@ class FinancePolicyAuthorizationTest extends TestCase
             'membership_status' => 'active',
         ]);
 
+        $memberBelowRequired = Member::query()->create([
+            'member_number' => 'M-COMP-003',
+            'first_name' => 'Below',
+            'middle_name' => null,
+            'last_name' => 'Required',
+            'email' => 'below-required-member@example.com',
+            'membership_status' => 'active',
+        ]);
+
         $memberNonCompliant = Member::query()->create([
             'member_number' => 'M-COMP-002',
             'first_name' => 'Non',
@@ -555,6 +564,16 @@ class FinancePolicyAuthorizationTest extends TestCase
             'encoded_by_user_id' => $auditor->id,
             'encoded_at' => now(),
         ]);
+        Contribution::query()->create([
+            'member_id' => $memberBelowRequired->id,
+            'category' => 'monthly_contribution',
+            'contribution_date' => '2026-03-10',
+            'amount' => 250,
+            'note' => 'Partial monthly payment',
+            'finance_account_id' => $account->id,
+            'encoded_by_user_id' => $auditor->id,
+            'encoded_at' => now(),
+        ]);
 
         Sanctum::actingAs($auditor);
 
@@ -562,17 +581,24 @@ class FinancePolicyAuthorizationTest extends TestCase
 
         $response->assertStatus(200)
             ->assertJsonPath('filters.month', '2026-03')
-            ->assertJsonPath('filters.years.0', 2026);
+            ->assertJsonPath('filters.years.0', 2026)
+            ->assertJsonPath('filters.required_monthly_amount', 500);
 
         $rows = collect($response->json('data'));
         $compliantRow = $rows->firstWhere('member.id', $memberCompliant->id);
+        $belowRequiredRow = $rows->firstWhere('member.id', $memberBelowRequired->id);
         $nonCompliantRow = $rows->firstWhere('member.id', $memberNonCompliant->id);
 
         $this->assertNotNull($compliantRow);
+        $this->assertNotNull($belowRequiredRow);
         $this->assertNotNull($nonCompliantRow);
         $this->assertTrue((bool) $compliantRow['has_monthly_for_month']);
+        $this->assertTrue((bool) $compliantRow['meets_required_monthly_amount']);
         $this->assertSame([], $compliantRow['missing_project_years']);
         $this->assertFalse((bool) $compliantRow['is_non_compliant']);
+        $this->assertTrue((bool) $belowRequiredRow['has_monthly_for_month']);
+        $this->assertFalse((bool) $belowRequiredRow['meets_required_monthly_amount']);
+        $this->assertTrue((bool) $belowRequiredRow['is_non_compliant']);
         $this->assertFalse((bool) $nonCompliantRow['has_monthly_for_month']);
         $this->assertSame([2026], $nonCompliantRow['missing_project_years']);
         $this->assertTrue((bool) $nonCompliantRow['is_non_compliant']);

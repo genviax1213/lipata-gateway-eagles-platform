@@ -9,6 +9,7 @@ import CommunityCarousel from "../components/landing/CommunityCarousel";
 import HomepageReputationVideo, {
   type HomepageReputationVideoData,
 } from "../components/landing/HomepageReputationVideo";
+import { readInitialHomepagePayload } from "../utils/prerender";
 
 const HERO_CACHE_KEY = "landing:homepage-hero";
 const HERO_CACHE_MAX_AGE_MS = 10 * 60 * 1000;
@@ -135,14 +136,17 @@ function writeHeroCache(posts: CmsPost[]): void {
 }
 
 export default function Landing() {
+  const initialHomepagePayload = useMemo(() => readInitialHomepagePayload(), []);
   const cachedHeroPosts = useMemo(() => readHeroCache(), []);
-  const [heroPosts, setHeroPosts] = useState<CmsPost[]>(cachedHeroPosts);
-  const [heroPost, setHeroPost] = useState<CmsPost | null>(() => selectInitialHeroPost(cachedHeroPosts));
+  const initialHeroPosts = initialHomepagePayload?.heroPosts?.length ? initialHomepagePayload.heroPosts : cachedHeroPosts;
+  const [heroPosts, setHeroPosts] = useState<CmsPost[]>(initialHeroPosts);
+  const [heroPost, setHeroPost] = useState<CmsPost | null>(() => selectInitialHeroPost(initialHeroPosts));
   const [heroImageLoaded, setHeroImageLoaded] = useState(false);
-  const [heroLoading, setHeroLoading] = useState(cachedHeroPosts.length === 0);
-  const [homepageVideos, setHomepageVideos] = useState<HomepageReputationVideoData[]>([]);
-  const [communityPosts, setCommunityPosts] = useState<CmsPost[]>([]);
-  const [loadingCommunity, setLoadingCommunity] = useState(true);
+  const [heroLoading, setHeroLoading] = useState(initialHeroPosts.length === 0);
+  const [homepageVideos, setHomepageVideos] = useState<HomepageReputationVideoData[]>(initialHomepagePayload?.homepageVideos ?? []);
+  const [, setVideosLoading] = useState((initialHomepagePayload?.homepageVideos?.length ?? 0) === 0);
+  const [communityPosts, setCommunityPosts] = useState<CmsPost[]>(initialHomepagePayload?.communityPosts ?? []);
+  const [loadingCommunity, setLoadingCommunity] = useState((initialHomepagePayload?.communityPosts?.length ?? 0) === 0);
   const [communitySlide, setCommunitySlide] = useState(0);
   const communityVisibleCount = 3;
   const communitySlideCount = Math.max(1, Math.ceil(communityPosts.length / communityVisibleCount));
@@ -198,6 +202,10 @@ export default function Landing() {
       } catch {
         if (!mounted) return;
         setHomepageVideos([]);
+      } finally {
+        if (mounted) {
+          setVideosLoading(false);
+        }
       }
     };
 

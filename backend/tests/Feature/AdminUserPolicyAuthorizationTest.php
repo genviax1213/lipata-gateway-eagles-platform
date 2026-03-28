@@ -134,6 +134,171 @@ class AdminUserPolicyAuthorizationTest extends TestCase
             ->assertJsonPath('role.name', 'admin');
     }
 
+    public function test_superadmin_can_create_mobile_enabled_user_with_flags(): void
+    {
+        $superadminRole = Role::query()->where('name', 'superadmin')->firstOrFail();
+        $memberRole = Role::query()->where('name', 'member')->firstOrFail();
+
+        $superadmin = User::factory()->create(['role_id' => $superadminRole->id]);
+
+        Sanctum::actingAs($superadmin);
+
+        $response = $this->postJson('/api/v1/admin/users', [
+            'name' => 'Mobile Treasurer',
+            'email' => 'mobile.treasurer@lgec.org',
+            'password' => 'Password123',
+            'role_id' => $memberRole->id,
+            'finance_role' => 'treasurer',
+            'must_change_password' => true,
+            'mobile_access_enabled' => true,
+            'mobile_chat_enabled' => true,
+        ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('email', 'mobile.treasurer@lgec.org')
+            ->assertJsonPath('finance_role', 'treasurer')
+            ->assertJsonPath('must_change_password', true)
+            ->assertJsonPath('mobile_access_enabled', true)
+            ->assertJsonPath('mobile_chat_enabled', true);
+    }
+
+    public function test_superadmin_can_update_mobile_flags_without_changing_email(): void
+    {
+        $superadminRole = Role::query()->where('name', 'superadmin')->firstOrFail();
+        $memberRole = Role::query()->where('name', 'member')->firstOrFail();
+
+        $superadmin = User::factory()->create(['role_id' => $superadminRole->id]);
+        $target = User::factory()->create([
+            'role_id' => $memberRole->id,
+            'email' => 'finance.user@lgec.org',
+        ]);
+
+        Sanctum::actingAs($superadmin);
+
+        $response = $this->putJson("/api/v1/admin/users/{$target->id}", [
+            'name' => $target->name,
+            'email' => $target->email,
+            'role_id' => $memberRole->id,
+            'finance_role' => 'auditor',
+            'must_change_password' => true,
+            'mobile_access_enabled' => true,
+            'mobile_chat_enabled' => false,
+        ]);
+
+        $response->assertOk()
+            ->assertJsonPath('finance_role', 'auditor')
+            ->assertJsonPath('must_change_password', true)
+            ->assertJsonPath('mobile_access_enabled', true)
+            ->assertJsonPath('mobile_chat_enabled', false);
+    }
+
+    public function test_superadmin_can_update_member_login_alias_email(): void
+    {
+        $superadminRole = Role::query()->where('name', 'superadmin')->firstOrFail();
+        $memberRole = Role::query()->where('name', 'member')->firstOrFail();
+
+        $superadmin = User::factory()->create(['role_id' => $superadminRole->id]);
+        $target = User::factory()->create([
+            'role_id' => $memberRole->id,
+            'email' => 'old.login@example.com',
+        ]);
+
+        Sanctum::actingAs($superadmin);
+
+        $response = $this->putJson("/api/v1/admin/users/{$target->id}", [
+            'name' => $target->name,
+            'email' => 'rolando.lanugon@lgec.org',
+            'role_id' => $memberRole->id,
+        ]);
+
+        $response->assertOk()
+            ->assertJsonPath('email', 'rolando.lanugon@lgec.org');
+    }
+
+    public function test_superadmin_cannot_change_bootstrap_login_alias_email(): void
+    {
+        config()->set('app.bootstrap_superadmin_email', 'admin@lipataeagles.ph');
+
+        $superadminRole = Role::query()->where('name', 'superadmin')->firstOrFail();
+        $actor = User::factory()->create([
+            'role_id' => $superadminRole->id,
+            'email' => 'second-superadmin@example.com',
+        ]);
+        $bootstrap = User::factory()->create([
+            'role_id' => $superadminRole->id,
+            'email' => 'admin@lipataeagles.ph',
+        ]);
+
+        Sanctum::actingAs($actor);
+
+        $this->putJson("/api/v1/admin/users/{$bootstrap->id}", [
+            'name' => $bootstrap->name,
+            'email' => 'renamed.bootstrap@lgec.org',
+            'role_id' => $superadminRole->id,
+        ])->assertStatus(422)
+            ->assertJsonPath('message', 'Bootstrap login email is protected and cannot be changed from admin user management.');
+    }
+
+    public function test_superadmin_can_generate_credentials_and_unlock_alias_login(): void
+    {
+        $superadminRole = Role::query()->where('name', 'superadmin')->firstOrFail();
+        $memberRole = Role::query()->where('name', 'member')->firstOrFail();
+
+        $superadmin = User::factory()->create(['role_id' => $superadminRole->id]);
+        $target = User::factory()->create([
+            'role_id' => $memberRole->id,
+            'email' => 'locked.member@lgec.org',
+            'login_email_locked' => true,
+        ]);
+
+        Sanctum::actingAs($superadmin);
+
+        $response = $this->postJson("/api/v1/admin/users/{$target->id}/generate-credentials");
+
+        $response->assertOk()
+            ->assertJsonPath('message', 'Credentials generated successfully.');
+
+        $this->assertFalse((bool) $target->fresh()->login_email_locked);
+        $this->assertTrue((bool) $target->fresh()->must_change_password);
+    }
+
+    public function test_superadmin_can_run_alias_conversion_for_member_linked_user(): void
+    {
+        $superadminRole = Role::query()->where('name', 'superadmin')->firstOrFail();
+        $memberRole = Role::query()->where('name', 'member')->firstOrFail();
+
+        $superadmin = User::factory()->create(['role_id' => $superadminRole->id, 'email' => 'admin.primary@lgec.org']);
+        $target = User::factory()->create([
+            'role_id' => $memberRole->id,
+            'email' => 'old.member.real@example.com',
+            'recovery_email' => null,
+        ]);
+
+        \App\Models\Member::query()->create([
+            'member_number' => 'M-ALIAS-001',
+            'first_name' => 'Juan',
+            'middle_name' => null,
+            'last_name' => 'Dela Cruz',
+            'email' => 'juan.real@example.com',
+            'membership_status' => 'active',
+            'user_id' => $target->id,
+        ]);
+
+        Sanctum::actingAs($superadmin);
+
+        $response = $this->postJson('/api/v1/admin/identity-conversion/run', [
+            'confirm' => true,
+        ]);
+
+        $response->assertOk()
+            ->assertJsonPath('summary.converted', 1);
+
+        $target->refresh();
+        $this->assertSame('juan.delacruz@lgec.org', $target->email);
+        $this->assertSame('juan.real@example.com', $target->recovery_email);
+        $this->assertTrue((bool) $target->login_email_locked);
+    }
+
     public function test_superadmin_cannot_exceed_max_admin_count(): void
     {
         $superadminRole = Role::query()->where('name', 'superadmin')->firstOrFail();
@@ -239,6 +404,7 @@ class AdminUserPolicyAuthorizationTest extends TestCase
         $response->assertOk()
             ->assertJsonPath('message', 'Password updated successfully.');
         $this->assertTrue(Hash::check('NewPass456', (string) $target->fresh()->password));
+        $this->assertTrue((bool) $target->fresh()->must_change_password);
     }
 
     public function test_superadmin_cannot_reset_bootstrap_superadmin_password_via_admin_endpoint(): void
@@ -267,7 +433,7 @@ class AdminUserPolicyAuthorizationTest extends TestCase
         $this->assertTrue(Hash::check('Intent$0811', (string) $bootstrap->fresh()->password));
     }
 
-    public function test_registered_user_email_cannot_be_changed_via_user_update(): void
+    public function test_superadmin_can_change_registered_user_email_via_user_update(): void
     {
         $superadminRole = Role::query()->where('name', 'superadmin')->firstOrFail();
         $actor = User::factory()->create(['role_id' => $superadminRole->id]);
@@ -282,7 +448,7 @@ class AdminUserPolicyAuthorizationTest extends TestCase
             'name' => $target->name,
             'email' => 'changed-bootstrap@example.com',
             'role_id' => $superadminRole->id,
-        ])->assertStatus(422)
-            ->assertJsonPath('message', 'Registration email is the canonical account identity and cannot be changed.');
+        ])->assertOk()
+            ->assertJsonPath('email', 'changed-bootstrap@example.com');
     }
 }

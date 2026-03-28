@@ -69,6 +69,12 @@ Route::prefix('v1')->group(function () {
     // Login route
     Route::post('/login', [AuthController::class, 'login'])
         ->middleware('throttle:auth-login');
+    Route::post('/mobile/login', [AuthController::class, 'mobileLogin'])
+        ->middleware('throttle:auth-login');
+    Route::post('/mobile/forgot-password', [AuthController::class, 'mobileForgotPassword'])
+        ->middleware('throttle:mobile-auth-forgot-password');
+    Route::post('/mobile/reset-password', [AuthController::class, 'mobileResetPassword'])
+        ->middleware('throttle:mobile-auth-reset-password');
     Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])
         ->middleware('throttle:auth-forgot-password');
     Route::post('/reset-password', [AuthController::class, 'resetPassword'])
@@ -86,6 +92,20 @@ Route::prefix('v1')->group(function () {
             ]));
         });
         Route::post('/logout', [AuthController::class, 'logout']);
+        Route::post('/mobile/logout', [AuthController::class, 'mobileLogout']);
+        Route::get('/mobile/me', [AuthController::class, 'mobileMe']);
+        Route::post('/mobile/change-password', [AuthController::class, 'mobileChangePassword']);
+        Route::get('/mobile/announcements', [PostController::class, 'mobileAnnouncements']);
+        Route::get('/mobile/announcements/{slug}', [PostController::class, 'mobileAnnouncementDetail']);
+        Route::post('/mobile/announcements/{post}/acknowledge', [PostController::class, 'mobileAcknowledgeAnnouncement']);
+        Route::get('/mobile/finance/my-contributions', [FinanceController::class, 'mobileMyContributions']);
+        Route::get('/mobile/finance/dashboard', [FinanceController::class, 'mobileDashboard']);
+        Route::get('/mobile/finance/members', [FinanceController::class, 'mobileMembers']);
+        Route::get('/mobile/finance/members/{member}/summary', [FinanceController::class, 'mobileMemberSummary']);
+        Route::get('/mobile/finance/members/{member}/contributions', [FinanceController::class, 'mobileMemberContributions']);
+        Route::get('/mobile/finance/accounts', [FinanceExpenseController::class, 'mobileAccounts']);
+        Route::post('/mobile/finance/contributions', [FinanceController::class, 'mobileStoreContribution']);
+        Route::post('/mobile/finance/expenses', [FinanceExpenseController::class, 'mobileStoreExpense']);
         Route::post('/auth/data-privacy/acknowledge', [DataPrivacyNoticeController::class, 'acknowledge']);
         Route::post('/auth/activity', [AuthController::class, 'activity']);
         Route::post('/auth/change-password', [AuthController::class, 'changePassword']);
@@ -191,6 +211,9 @@ Route::prefix('v1')->group(function () {
         Route::delete('/admin/users/{user}', [AdminUserController::class, 'destroy'])->middleware('portal.permission:users.manage');
         Route::put('/admin/users/{user}/role', [AdminUserController::class, 'updateRole'])->middleware('portal.permission:users.manage');
         Route::put('/admin/users/{user}/password', [AdminUserController::class, 'resetPassword'])->middleware('portal.permission:users.password.reset');
+        Route::post('/admin/users/{user}/generate-credentials', [AdminUserController::class, 'generateCredentials'])->middleware('portal.permission:users.password.reset');
+        Route::get('/admin/identity-conversion/preview', [AdminUserController::class, 'aliasConversionPreview'])->middleware('portal.permission:users.view');
+        Route::post('/admin/identity-conversion/run', [AdminUserController::class, 'runAliasConversion'])->middleware('portal.permission:users.manage');
         Route::post('/admin/users/me/link-member-profile', [AdminUserController::class, 'linkCurrentUserMemberProfile'])->middleware('portal.permission:users.manage');
 
         Route::get('/finance/members', [FinanceController::class, 'searchMembers'])->middleware('portal.permission:finance.view');

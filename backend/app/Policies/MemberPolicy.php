@@ -25,7 +25,8 @@ class MemberPolicy
             return true;
         }
 
-        return strtolower(trim((string) $member->email)) !== ''
+        return $member->user_id === null
+            && strtolower(trim((string) $member->email)) !== ''
             && strtolower(trim((string) $member->email)) === strtolower(trim((string) $user->email));
     }
 

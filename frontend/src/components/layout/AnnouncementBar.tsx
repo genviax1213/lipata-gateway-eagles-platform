@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../contexts/useAuth";
 import api from "../../services/api";
 import type { CmsPost } from "../../types/cms";
+import { cmsPostDetailPath } from "../../utils/cmsPaths";
 import { serializePushSubscription, urlBase64ToUint8Array } from "../../utils/pushNotifications";
 
 type AnnouncementItem = {
@@ -106,7 +107,7 @@ export default function AnnouncementBar() {
         title: post.title,
         headline: post.announcement_text!.trim(),
         excerpt: post.excerpt?.trim() || "Read the latest club notice and schedule details.",
-        to: `/news/${post.slug}`,
+        to: cmsPostDetailPath(post),
         meta: post.published_at ? `Posted ${formatAnnouncementDate(post.published_at)}` : "Active announcement",
         acknowledgedAt: post.acknowledged_at,
       }))

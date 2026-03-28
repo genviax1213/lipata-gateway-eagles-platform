@@ -33,7 +33,7 @@ class UserMemberSyncTest extends TestCase
         $this->assertSame('juan.dela.cruz@example.com', $member->email);
     }
 
-    public function test_user_email_update_propagates_to_linked_member(): void
+    public function test_user_email_update_does_not_overwrite_linked_member_contact_email(): void
     {
         $user = User::factory()->create([
             'name' => 'Maria Santos',
@@ -55,6 +55,33 @@ class UserMemberSyncTest extends TestCase
         ]);
 
         $member->refresh();
-        $this->assertSame('maria.santos+new@example.com', $member->email);
+        $this->assertSame('maria.santos@example.com', $member->email);
+    }
+
+    public function test_user_update_keeps_linked_member_with_different_contact_email(): void
+    {
+        $user = User::factory()->create([
+            'name' => 'Rolando Lanugon',
+            'email' => 'rolando.lanugon@lgec.org',
+        ]);
+
+        $member = Member::query()->create([
+            'member_number' => 'M-LINK-003',
+            'first_name' => 'Rolando',
+            'middle_name' => null,
+            'last_name' => 'Lanugon',
+            'email' => 'rolando.personal@example.com',
+            'user_id' => $user->id,
+            'membership_status' => 'active',
+        ]);
+
+        $user->update([
+            'name' => 'Rolando R. Lanugon',
+        ]);
+
+        $member->refresh();
+
+        $this->assertSame($user->id, $member->user_id);
+        $this->assertSame('rolando.personal@example.com', $member->email);
     }
 }

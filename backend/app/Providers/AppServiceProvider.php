@@ -72,6 +72,16 @@ class AppServiceProvider extends ServiceProvider
             return Limit::perMinute(5)->by($request->ip() . '|' . $email);
         });
 
+        RateLimiter::for('mobile-auth-forgot-password', function (Request $request) {
+            $email = strtolower((string) $request->input('email', ''));
+            return Limit::perMinute(5)->by($request->ip() . '|' . $email);
+        });
+
+        RateLimiter::for('mobile-auth-reset-password', function (Request $request) {
+            $email = strtolower((string) $request->input('email', ''));
+            return Limit::perMinute(5)->by($request->ip() . '|' . $email);
+        });
+
         RateLimiter::for('bootstrap-recovery-request', function (Request $request) {
             $email = strtolower((string) $request->input('email', ''));
             return Limit::perMinute(3)->by($request->ip() . '|' . $email);

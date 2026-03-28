@@ -241,9 +241,12 @@ interface ApplicantBatchExpense {
   id: number;
   expense_date: string | null;
   category: string;
+  category_label?: string;
   description: string;
   amount: number | string;
   note?: string | null;
+  support_reference?: string | null;
+  approval_reference?: string | null;
   encoded_by?: { id: number; name: string } | null;
   verification_status: FinanceVerificationStatus;
   verification_comment?: string | null;
@@ -287,6 +290,14 @@ interface ApplicantFeeRequirement {
 }
 
 type RequirementReviewStatus = "approved" | "rejected" | "pending";
+
+const APPLICANT_BATCH_EXPENSE_OPTIONS = [
+  { value: "logistics", label: "Logistics" },
+  { value: "documents", label: "Documents" },
+  { value: "training", label: "Training" },
+  { value: "event", label: "Event" },
+  { value: "misc", label: "Miscellaneous" },
+] as const;
 
 interface ReviewStatusCounts {
   approved: number;
@@ -431,6 +442,16 @@ function statusBadgeClasses(value?: string | null): string {
     return "border-amber-300/40 bg-amber-300/10 text-amber-100";
   }
   return "border-white/20 bg-white/10 text-mist";
+}
+
+function normalizeFinanceSearchValue(value: string | number | null | undefined): string {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function rowMatchesFinanceSearch(values: Array<string | number | null | undefined>, search: string): boolean {
+  const query = normalizeFinanceSearchValue(search);
+  if (!query) return true;
+  return values.some((value) => normalizeFinanceSearchValue(value).includes(query));
 }
 
 function dateRangeLabel(start?: string | null, end?: string | null): string {
@@ -715,6 +736,8 @@ type CommitteeSection = "queue" | "review" | "batches" | "finance" | "documents"
 
 const PAGE_SIZE = 10;
 const READABLE_SELECT_CLASS = "rounded-md border border-gold/30 bg-offwhite px-2 py-1 text-ink focus:border-gold focus:outline-none";
+const APPLICANT_FINANCE_TABLE_WRAPPER_CLASS = "max-h-[24rem] overflow-auto rounded-lg border border-white/20";
+const APPLICANT_FINANCE_TABLE_HEAD_CLASS = "sticky top-0 z-10 bg-navy/95 text-gold-soft";
 
 export default function PortalDashboard() {
   const { user } = useAuth();
@@ -757,6 +780,8 @@ export default function PortalDashboard() {
   const [selectedContributionCategory, setSelectedContributionCategory] = useState<"project" | "community_service" | "fellowship" | "five_i_activities">("project");
   const [requiredAmount, setRequiredAmount] = useState("");
   const [paymentAmount, setPaymentAmount] = useState("");
+  const [paymentDate, setPaymentDate] = useState("");
+  const [paymentNote, setPaymentNote] = useState("");
   const [documentFile, setDocumentFile] = useState<File | null>(null);
   const [documentLabel, setDocumentLabel] = useState("");
   const [documentDescription, setDocumentDescription] = useState("");
@@ -776,6 +801,11 @@ export default function PortalDashboard() {
   const [batchExpenseDescription, setBatchExpenseDescription] = useState("");
   const [batchExpenseAmount, setBatchExpenseAmount] = useState("");
   const [batchExpenseNote, setBatchExpenseNote] = useState("");
+  const [batchExpenseSupportReference, setBatchExpenseSupportReference] = useState("");
+  const [batchExpenseApprovalReference, setBatchExpenseApprovalReference] = useState("");
+  const [applicantRequirementSearch, setApplicantRequirementSearch] = useState("");
+  const [batchPaymentSearch, setBatchPaymentSearch] = useState("");
+  const [batchExpenseSearch, setBatchExpenseSearch] = useState("");
   const [paymentVerificationDrafts, setPaymentVerificationDrafts] = useState<Record<number, string>>({});
   const [expenseVerificationDrafts, setExpenseVerificationDrafts] = useState<Record<number, string>>({});
   const [selectedTab, setSelectedTab] = useState<"alalayang_agila_contribution" | "monthly_contribution" | "extra_contribution">("monthly_contribution");
@@ -1064,12 +1094,101 @@ export default function PortalDashboard() {
     return documents.slice(start, start + PAGE_SIZE);
   }, [currentHistoryDetails?.documents, documentsPage]);
   const documentsLastPage = Math.max(1, Math.ceil((currentHistoryDetails?.documents?.length ?? 0) / PAGE_SIZE));
-  const pagedFeeRequirements = useMemo(() => {
+  const filteredFeeRequirements = useMemo(() => {
     const requirements = currentHistoryDetails?.fees.requirements ?? [];
+    const search = applicantRequirementSearch.trim();
+
+    if (!search) return requirements;
+
+    return requirements.filter((req) => rowMatchesFinanceSearch(
+      [
+        req.category_label,
+        req.note,
+        req.target_payment,
+        req.partial_payment_total,
+        req.variance,
+        req.payments.map((payment) => [
+          payment.payment_date,
+          payment.amount,
+          payment.encoded_by?.name,
+          payment.verification_status,
+          payment.verification_comment,
+        ].filter(Boolean).join(" ")).join(" "),
+      ],
+      search,
+    ));
+  }, [applicantRequirementSearch, currentHistoryDetails?.fees.requirements]);
+  const pagedFeeRequirements = useMemo(() => {
     const start = (feesPage - 1) * PAGE_SIZE;
-    return requirements.slice(start, start + PAGE_SIZE);
-  }, [currentHistoryDetails?.fees.requirements, feesPage]);
-  const feesLastPage = Math.max(1, Math.ceil((currentHistoryDetails?.fees.requirements?.length ?? 0) / PAGE_SIZE));
+    return filteredFeeRequirements.slice(start, start + PAGE_SIZE);
+  }, [feesPage, filteredFeeRequirements]);
+  const feesLastPage = Math.max(1, Math.ceil(filteredFeeRequirements.length / PAGE_SIZE));
+  const filteredBatchPayments = useMemo(() => {
+    const payments = selectedApplicationDetails?.batch?.contribution_payments ?? [];
+    const search = batchPaymentSearch.trim();
+
+    if (!search) return payments;
+
+    return payments.filter((payment) => rowMatchesFinanceSearch(
+      [
+        payment.applicant_name,
+        payment.category_label,
+        payment.payment_date,
+        payment.amount,
+        payment.note,
+        payment.encoded_by?.name,
+        payment.verification_status,
+        payment.verification_comment,
+      ],
+      search,
+    ));
+  }, [batchPaymentSearch, selectedApplicationDetails?.batch?.contribution_payments]);
+  const filteredBatchExpenses = useMemo(() => {
+    const expenses = selectedApplicationDetails?.batch?.expenses ?? [];
+    const search = batchExpenseSearch.trim();
+
+    if (!search) return expenses;
+
+    return expenses.filter((expense) => rowMatchesFinanceSearch(
+      [
+        expense.description,
+        expense.category_label ?? expense.category,
+        expense.expense_date,
+        expense.amount,
+        expense.note,
+        expense.support_reference,
+        expense.approval_reference,
+        expense.encoded_by?.name,
+        expense.verification_status,
+        expense.verification_comment,
+      ],
+      search,
+    ));
+  }, [batchExpenseSearch, selectedApplicationDetails?.batch?.expenses]);
+  const filteredSelectedFeeRequirements = useMemo(() => {
+    const requirements = selectedApplicationDetails?.fees.requirements ?? [];
+    const search = applicantRequirementSearch.trim();
+
+    if (!search) return requirements;
+
+    return requirements.filter((req) => rowMatchesFinanceSearch(
+      [
+        req.category_label,
+        req.note,
+        req.target_payment,
+        req.partial_payment_total,
+        req.variance,
+        req.payments.map((payment) => [
+          payment.payment_date,
+          payment.amount,
+          payment.encoded_by?.name,
+          payment.verification_status,
+          payment.verification_comment,
+        ].filter(Boolean).join(" ")).join(" "),
+      ],
+      search,
+    ));
+  }, [applicantRequirementSearch, selectedApplicationDetails?.fees.requirements]);
 
   const userFullName = useMemo(() => {
     if (typeof user?.name === "string" && user.name.trim()) {
@@ -1462,13 +1581,13 @@ export default function PortalDashboard() {
       await api.post(`/applicants/${selectedApplication.id}/fee-requirements`, {
         category: selectedContributionCategory,
         required_amount: Number(requiredAmount),
-        note: "Membership chairman target contribution",
+        note: "Applicant payment target",
       });
-      setNotice("Applicant target contribution set.");
+      setNotice("Applicant payment target set.");
       setRequiredAmount("");
       await loadDashboard();
     } catch (err) {
-      setError(parseError(err, "Failed to set required fee."));
+      setError(parseError(err, "Failed to set payment target."));
     }
   };
 
@@ -1481,12 +1600,16 @@ export default function PortalDashboard() {
       await api.post(`/applicants/${selectedApplication.id}/fee-payments`, {
         category: selectedContributionCategory,
         amount: Number(paymentAmount),
+        payment_date: paymentDate || null,
+        note: paymentNote.trim() || null,
       });
-      setNotice("Applicant partial/full payment logged.");
+      setNotice("Applicant payment recorded.");
       setPaymentAmount("");
+      setPaymentDate("");
+      setPaymentNote("");
       await loadDashboard();
     } catch (err) {
-      setError(parseError(err, "Failed to log payment."));
+      setError(parseError(err, "Failed to record payment."));
     }
   };
 
@@ -1591,6 +1714,8 @@ export default function PortalDashboard() {
         description: batchExpenseDescription.trim(),
         amount: Number(batchExpenseAmount),
         note: batchExpenseNote.trim() || null,
+        support_reference: batchExpenseSupportReference.trim() || null,
+        approval_reference: batchExpenseApprovalReference.trim() || null,
       });
       setNotice("Applicant batch expense recorded.");
       setBatchExpenseDate("");
@@ -1598,11 +1723,13 @@ export default function PortalDashboard() {
       setBatchExpenseDescription("");
       setBatchExpenseAmount("");
       setBatchExpenseNote("");
+      setBatchExpenseSupportReference("");
+      setBatchExpenseApprovalReference("");
       if (selectedApplicationId) {
         await refreshSelectedCommitteeApplication(selectedApplicationId);
       }
     } catch (err) {
-      setError(parseError(err, "Failed to record batch expense."));
+      setError(parseError(err, "Failed to record applicant batch expense."));
     }
   };
 
@@ -2122,7 +2249,7 @@ export default function PortalDashboard() {
         <div className="rounded-xl border border-white/20 bg-white/10 p-4">
           <h2 className="mb-2 font-heading text-2xl text-offwhite">Application Requirements</h2>
           <p className="text-sm text-mist/85">Target Total: <span className="text-offwhite">{money(applicantDetails.fees.required_total)}</span></p>
-          <p className="text-sm text-mist/85">Partial/Full Paid Total: <span className="text-offwhite">{money(applicantDetails.fees.paid_total)}</span></p>
+          <p className="text-sm text-mist/85">Total Recorded Payments: <span className="text-offwhite">{money(applicantDetails.fees.paid_total)}</span></p>
           <p className="text-sm text-mist/85">Variance: <span className="text-gold-soft">{money(applicantDetails.fees.variance_total ?? applicantDetails.fees.balance)}</span></p>
           {pagedFeeRequirements.map((req) => (
             <div key={req.category} className="mt-2 rounded-md border border-white/20 bg-white/5 p-3">
@@ -2136,18 +2263,18 @@ export default function PortalDashboard() {
                     <p className="mt-1">
                       <span className={`rounded-full border px-2 py-0.5 text-[11px] ${statusBadgeClasses(p.verification_status)}`}>{statusLabel(p.verification_status)}</span>
                     </p>
-                    {p.verification_comment && <p className="mt-1 text-mist/70">Chairman note: {p.verification_comment}</p>}
+                    {p.verification_comment && <p className="mt-1 text-mist/70">Review note: {p.verification_comment}</p>}
                   </div>
                 ))}
               </div>
             </div>
           ))}
-          <div className="mt-4 flex items-center justify-between text-xs text-mist/80">
-            <span>Page {feesPage} of {feesLastPage} | Total {applicantDetails.fees.requirements.length}</span>
-            <div className="flex gap-2">
-              <button type="button" className="btn-secondary" disabled={feesPage <= 1} onClick={() => setFeesPage((current) => Math.max(1, current - 1))}>Prev</button>
-              <button type="button" className="btn-secondary" disabled={feesPage >= feesLastPage} onClick={() => setFeesPage((current) => Math.min(feesLastPage, current + 1))}>Next</button>
-            </div>
+            <div className="mt-4 flex items-center justify-between text-xs text-mist/80">
+              <span>Page {feesPage} of {feesLastPage} | Total {filteredFeeRequirements.length}</span>
+              <div className="flex gap-2">
+                <button type="button" className="btn-secondary" disabled={feesPage <= 1} onClick={() => setFeesPage((current) => Math.max(1, current - 1))}>Prev</button>
+                <button type="button" className="btn-secondary" disabled={feesPage >= feesLastPage} onClick={() => setFeesPage((current) => Math.min(feesLastPage, current + 1))}>Next</button>
+              </div>
           </div>
         </div>
       )}
@@ -2257,20 +2384,72 @@ export default function PortalDashboard() {
               <div className="rounded-xl border border-white/20 bg-white/10 p-4">
                 <h3 className="mb-2 font-heading text-xl text-offwhite">Archive Requirements</h3>
                 <p className="text-sm text-mist/85">Target Total: <span className="text-offwhite">{money(archiveDetails.fees.required_total)}</span></p>
-                <p className="text-sm text-mist/85">Paid Total: <span className="text-offwhite">{money(archiveDetails.fees.paid_total)}</span></p>
+                <p className="text-sm text-mist/85">Total Recorded Payments: <span className="text-offwhite">{money(archiveDetails.fees.paid_total)}</span></p>
                 <p className="text-sm text-mist/85">Variance: <span className="text-gold-soft">{money(archiveDetails.fees.variance_total ?? archiveDetails.fees.balance)}</span></p>
-                {pagedFeeRequirements.map((req) => (
-                  <div key={req.category} className="mt-2 rounded-md border border-white/20 bg-white/5 p-3">
-                    <p className="text-sm text-offwhite">{req.category_label}</p>
-                    <p className="text-xs text-mist/70">Target: {money(req.target_payment)} | Paid: {money(req.partial_payment_total)} | Variance: {money(req.variance)}</p>
-                    <p className="text-xs text-mist/70">{req.note ?? "-"}</p>
-                    {req.payments.map((p) => (
-                      <p key={p.id} className="text-xs text-mist/80">{p.payment_date} - {money(p.amount)} by {p.encoded_by?.name ?? "Membership Chairman"}</p>
-                    ))}
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                  <div className="max-w-xl">
+                    <label htmlFor="archive-fee-search" className="mb-1 block text-xs font-semibold uppercase tracking-[0.18em] text-mist/75">
+                      Search archived requirement records
+                    </label>
+                    <input
+                      id="archive-fee-search"
+                      value={applicantRequirementSearch}
+                      onChange={(e) => {
+                        setApplicantRequirementSearch(e.target.value);
+                        setFeesPage(1);
+                      }}
+                      placeholder="Search category, note, payment date, reviewer, or status"
+                      className="w-full rounded-md border border-white/25 bg-white/10 px-3 py-2 text-sm text-offwhite"
+                    />
                   </div>
-                ))}
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => {
+                      setApplicantRequirementSearch("");
+                      setFeesPage(1);
+                    }}
+                    disabled={!applicantRequirementSearch}
+                  >
+                    Clear Search
+                  </button>
+                </div>
+                <p className="mb-3 text-xs text-mist/75">
+                  Showing {pagedFeeRequirements.length} of {filteredFeeRequirements.length} archived requirement record{filteredFeeRequirements.length === 1 ? "" : "s"}.
+                </p>
+                <div className={APPLICANT_FINANCE_TABLE_WRAPPER_CLASS}>
+                  <table className="min-w-[980px] text-sm text-offwhite">
+                    <thead className={APPLICANT_FINANCE_TABLE_HEAD_CLASS}>
+                      <tr>
+                        <th className="px-3 py-2 text-left">Category</th>
+                        <th className="px-3 py-2 text-left">Target</th>
+                        <th className="px-3 py-2 text-left">Paid</th>
+                        <th className="px-3 py-2 text-left">Variance</th>
+                        <th className="px-3 py-2 text-left">Requirement Note</th>
+                        <th className="px-3 py-2 text-left">Payment Entries</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pagedFeeRequirements.map((req) => (
+                        <tr key={req.category} className="border-b border-white/15 align-top">
+                          <td className="px-3 py-2">{req.category_label}</td>
+                          <td className="px-3 py-2">{money(req.target_payment)}</td>
+                          <td className="px-3 py-2">{money(req.partial_payment_total)}</td>
+                          <td className="px-3 py-2">{money(req.variance)}</td>
+                          <td className="px-3 py-2 text-xs text-mist/80">{req.note ?? "-"}</td>
+                          <td className="px-3 py-2 text-xs text-mist/80">
+                            {req.payments.length === 0
+                              ? "No payments yet."
+                              : req.payments.map((p) => `${p.payment_date} - ${money(p.amount)} by ${p.encoded_by?.name ?? "Membership Chairman"}`).join(" | ")}
+                          </td>
+                        </tr>
+                      ))}
+                      {filteredFeeRequirements.length === 0 && <tr><td colSpan={6} className="px-3 py-3 text-center text-mist/70">No archived requirement records match the current search.</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
                 <div className="mt-4 flex items-center justify-between text-xs text-mist/80">
-                  <span>Page {feesPage} of {feesLastPage} | Total {archiveDetails.fees.requirements.length}</span>
+                  <span>Page {feesPage} of {feesLastPage} | Total {filteredFeeRequirements.length}</span>
                   <div className="flex gap-2">
                     <button type="button" className="btn-secondary" disabled={feesPage <= 1} onClick={() => setFeesPage((current) => Math.max(1, current - 1))}>Prev</button>
                     <button type="button" className="btn-secondary" disabled={feesPage >= feesLastPage} onClick={() => setFeesPage((current) => Math.min(feesLastPage, current + 1))}>Next</button>
@@ -2309,22 +2488,22 @@ export default function PortalDashboard() {
                   <div className="mb-4 rounded-xl border border-gold/30 bg-gold/10 p-4">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
-                        <p className="text-xs uppercase tracking-[0.18em] text-gold-soft">Batch Treasurer Workspace</p>
+                        <p className="text-xs uppercase tracking-[0.18em] text-gold-soft">Applicant Batch Workspace</p>
                         <p className="mt-2 text-sm text-offwhite">{applicantDetails.batch.name}</p>
                         <p className="mt-1 text-xs text-mist/75">{dateRangeLabel(applicantDetails.batch.start_date, applicantDetails.batch.target_completion_date)}</p>
                       </div>
                       <button type="button" className="btn-secondary" onClick={() => { setActiveTab("committee"); setCommitteeSection("finance"); }}>
-                        Open Finance Encoding
+                        Open Applicant Finance
                       </button>
                     </div>
                     {applicantDetails.batch.finance_summary && (
                       <div className="mt-4 grid gap-3 sm:grid-cols-3">
                         <div className="rounded-lg border border-white/15 bg-white/5 p-3">
-                          <p className="text-xs uppercase tracking-[0.18em] text-gold-soft">Batch Contributions</p>
+                          <p className="text-xs uppercase tracking-[0.18em] text-gold-soft">Recorded Payments</p>
                           <p className="mt-2 text-base text-offwhite">{money(applicantDetails.batch.finance_summary.contribution_total)}</p>
                         </div>
                         <div className="rounded-lg border border-white/15 bg-white/5 p-3">
-                          <p className="text-xs uppercase tracking-[0.18em] text-gold-soft">Batch Expenses</p>
+                          <p className="text-xs uppercase tracking-[0.18em] text-gold-soft">Recorded Expenses</p>
                           <p className="mt-2 text-base text-offwhite">{money(applicantDetails.batch.finance_summary.expense_total)}</p>
                         </div>
                         <div className="rounded-lg border border-white/15 bg-white/5 p-3">
@@ -2341,7 +2520,7 @@ export default function PortalDashboard() {
                     <p className="mt-2 text-lg text-offwhite">{money(applicantDetails.fees.required_total)}</p>
                   </div>
                   <div className="rounded-lg border border-white/15 bg-white/5 p-4">
-                    <p className="text-xs uppercase tracking-[0.18em] text-gold-soft">Paid Total</p>
+                    <p className="text-xs uppercase tracking-[0.18em] text-gold-soft">Total Recorded Payments</p>
                     <p className="mt-2 text-lg text-offwhite">{money(applicantDetails.fees.paid_total)}</p>
                   </div>
                   <div className="rounded-lg border border-white/15 bg-white/5 p-4">
@@ -2349,30 +2528,65 @@ export default function PortalDashboard() {
                     <p className="mt-2 text-lg text-gold-soft">{money(applicantDetails.fees.variance_total ?? applicantDetails.fees.balance)}</p>
                   </div>
                 </div>
-                <div className="overflow-x-auto rounded-lg border border-white/20">
-                  <table className="min-w-full text-sm text-offwhite">
-                    <thead className="bg-navy/70 text-gold-soft">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                  <div className="max-w-xl">
+                    <label htmlFor="applicant-fee-search" className="mb-1 block text-xs font-semibold uppercase tracking-[0.18em] text-mist/75">
+                      Search requirement records
+                    </label>
+                    <input
+                      id="applicant-fee-search"
+                      value={applicantRequirementSearch}
+                      onChange={(e) => {
+                        setApplicantRequirementSearch(e.target.value);
+                        setFeesPage(1);
+                      }}
+                      placeholder="Search category, note, payment date, reviewer, or status"
+                      className="w-full rounded-md border border-white/25 bg-white/10 px-3 py-2 text-sm text-offwhite"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => {
+                      setApplicantRequirementSearch("");
+                      setFeesPage(1);
+                    }}
+                    disabled={!applicantRequirementSearch}
+                  >
+                    Clear Search
+                  </button>
+                </div>
+                <p className="mb-3 text-xs text-mist/75">
+                  Showing {pagedFeeRequirements.length} of {filteredFeeRequirements.length} requirement record{filteredFeeRequirements.length === 1 ? "" : "s"}.
+                </p>
+                <div className={APPLICANT_FINANCE_TABLE_WRAPPER_CLASS}>
+                  <table className="min-w-[980px] text-sm text-offwhite">
+                    <thead className={APPLICANT_FINANCE_TABLE_HEAD_CLASS}>
                       <tr>
                         <th className="px-3 py-2 text-left">Category</th>
                         <th className="px-3 py-2 text-left">Target</th>
                         <th className="px-3 py-2 text-left">Paid</th>
                         <th className="px-3 py-2 text-left">Variance</th>
-                        <th className="px-3 py-2 text-left">Payments</th>
+                        <th className="px-3 py-2 text-left">Requirement Note</th>
+                        <th className="px-3 py-2 text-left">Payment Entries</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {applicantDetails.fees.requirements.map((req) => (
+                      {pagedFeeRequirements.map((req) => (
                         <tr key={req.category} className="border-b border-white/15 align-top">
                           <td className="px-3 py-2">{req.category_label}</td>
                           <td className="px-3 py-2">{money(req.target_payment)}</td>
                           <td className="px-3 py-2">{money(req.partial_payment_total)}</td>
                           <td className="px-3 py-2">{money(req.variance)}</td>
+                          <td className="px-3 py-2 text-xs text-mist/80">{req.note ?? "-"}</td>
                           <td className="px-3 py-2 text-xs text-mist/80">
-                            {req.payments.length === 0 ? "No payments yet." : req.payments.map((p) => `${p.payment_date} - ${money(p.amount)} by ${p.encoded_by?.name ?? "Membership Chairman"}`).join(" | ")}
+                            {req.payments.length === 0
+                              ? "No payments yet."
+                              : req.payments.map((p) => `${p.payment_date} - ${money(p.amount)} by ${p.encoded_by?.name ?? "Membership Chairman"}`).join(" | ")}
                           </td>
                         </tr>
                       ))}
-                      {applicantDetails.fees.requirements.length === 0 && <tr><td colSpan={5} className="px-3 py-3 text-center text-mist/70">No requirement records found.</td></tr>}
+                      {filteredFeeRequirements.length === 0 && <tr><td colSpan={6} className="px-3 py-3 text-center text-mist/70">No requirement records match the current search.</td></tr>}
                     </tbody>
                   </table>
                 </div>
@@ -3090,37 +3304,85 @@ export default function PortalDashboard() {
                 <div className="space-y-4">
                   <div className="grid gap-3 lg:grid-cols-2">
                     <div className="rounded-xl border border-white/15 bg-white/5 p-4">
-                      <p className="text-sm font-semibold text-offwhite">Selected Applicant Requirement Progress</p>
-                      <div className="mt-3 space-y-2">
-                        {selectedApplicationDetails.fees.requirements.map((req) => {
-                          const requirementStatus = inferRequirementReviewStatus(req);
-                          return (
-                            <div key={req.category} className="rounded-md border border-white/15 bg-navy/35 p-3">
-                              <div className="flex flex-wrap items-start justify-between gap-2">
-                                <div>
-                                  <p className="text-sm text-offwhite">{req.category_label}</p>
-                                  <p className="text-xs text-mist/75">Target: {money(req.target_payment)} | Paid: {money(req.partial_payment_total)} | Variance: {money(req.variance)}</p>
-                                </div>
-                                <span className={`rounded-full border px-2 py-1 text-[11px] font-semibold ${reviewStatusClasses(requirementStatus)}`}>{formatReviewStatusLabel(requirementStatus)}</span>
-                              </div>
-                              <p className="mt-2 text-xs text-mist/80">{req.note ?? "No requirement note yet."}</p>
-                            </div>
-                          );
-                        })}
-                        {selectedApplicationDetails.fees.requirements.length === 0 && <p className="text-xs text-mist/70">No fee requirements recorded yet.</p>}
+                      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                        <p className="text-sm font-semibold text-offwhite">Selected Applicant Requirement Progress</p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <input
+                            value={applicantRequirementSearch}
+                            onChange={(e) => {
+                              setApplicantRequirementSearch(e.target.value);
+                              setFeesPage(1);
+                            }}
+                            placeholder="Search category, note, or payment context"
+                            className="w-full rounded-md border border-white/25 bg-white/10 px-3 py-2 text-sm text-offwhite sm:w-[20rem]"
+                          />
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            onClick={() => {
+                              setApplicantRequirementSearch("");
+                              setFeesPage(1);
+                            }}
+                            disabled={!applicantRequirementSearch}
+                          >
+                            Clear
+                          </button>
+                        </div>
+                      </div>
+                      <p className="mb-3 text-xs text-mist/75">
+                        Showing {filteredSelectedFeeRequirements.length} requirement record{filteredSelectedFeeRequirements.length === 1 ? "" : "s"}.
+                      </p>
+                      <div className={APPLICANT_FINANCE_TABLE_WRAPPER_CLASS}>
+                        <table className="min-w-[980px] text-sm text-offwhite">
+                          <thead className={APPLICANT_FINANCE_TABLE_HEAD_CLASS}>
+                            <tr>
+                              <th className="px-3 py-2 text-left">Category</th>
+                              <th className="px-3 py-2 text-left">Target</th>
+                              <th className="px-3 py-2 text-left">Paid</th>
+                              <th className="px-3 py-2 text-left">Variance</th>
+                              <th className="px-3 py-2 text-left">Status</th>
+                              <th className="px-3 py-2 text-left">Requirement Note</th>
+                              <th className="px-3 py-2 text-left">Payment Entries</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {filteredSelectedFeeRequirements.map((req) => {
+                              const requirementStatus = inferRequirementReviewStatus(req);
+                              return (
+                                <tr key={req.category} className="border-b border-white/15 align-top">
+                                  <td className="px-3 py-2">{req.category_label}</td>
+                                  <td className="px-3 py-2">{money(req.target_payment)}</td>
+                                  <td className="px-3 py-2">{money(req.partial_payment_total)}</td>
+                                  <td className="px-3 py-2">{money(req.variance)}</td>
+                                  <td className="px-3 py-2">
+                                    <span className={`rounded-full border px-2 py-1 text-[11px] font-semibold ${reviewStatusClasses(requirementStatus)}`}>{formatReviewStatusLabel(requirementStatus)}</span>
+                                  </td>
+                                  <td className="px-3 py-2 text-xs text-mist/80">{req.note ?? "No requirement note yet."}</td>
+                                  <td className="px-3 py-2 text-xs text-mist/80">
+                                    {req.payments.length === 0
+                                      ? "No payments yet."
+                                      : req.payments.map((p) => `${p.payment_date} - ${money(p.amount)} by ${p.encoded_by?.name ?? "Membership Chairman"}`).join(" | ")}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                            {filteredSelectedFeeRequirements.length === 0 && <tr><td colSpan={7} className="px-3 py-3 text-center text-mist/70">No fee requirements match the current search.</td></tr>}
+                          </tbody>
+                        </table>
                       </div>
                     </div>
 
                     {selectedApplicationDetails.batch?.finance_summary && (
                       <div className="rounded-xl border border-white/15 bg-white/5 p-4">
-                        <p className="text-sm font-semibold text-offwhite">Batch Finance Summary</p>
+                        <p className="text-sm font-semibold text-offwhite">Applicant Batch Tracking</p>
+                        <p className="mt-1 text-xs text-mist/75">Separate from the membership treasury ledger. This summary is for applicant workflow tracking only.</p>
                         <div className="mt-3 grid gap-3 sm:grid-cols-2">
                           <div className="rounded-md border border-white/15 bg-navy/35 p-3">
-                            <p className="text-xs uppercase tracking-[0.18em] text-gold-soft">Contributions</p>
+                            <p className="text-xs uppercase tracking-[0.18em] text-gold-soft">Recorded Payments</p>
                             <p className="mt-2 text-base text-offwhite">{money(selectedApplicationDetails.batch.finance_summary.contribution_total)}</p>
                           </div>
                           <div className="rounded-md border border-white/15 bg-navy/35 p-3">
-                            <p className="text-xs uppercase tracking-[0.18em] text-gold-soft">Expenses</p>
+                            <p className="text-xs uppercase tracking-[0.18em] text-gold-soft">Recorded Expenses</p>
                             <p className="mt-2 text-base text-offwhite">{money(selectedApplicationDetails.batch.finance_summary.expense_total)}</p>
                           </div>
                           <div className="rounded-md border border-white/15 bg-navy/35 p-3">
@@ -3138,7 +3400,7 @@ export default function PortalDashboard() {
 
                   {(canChairmanSetContributionTarget || canChairmanLogContributionPayment || canBatchTreasurerManagePayments) && (
                     <div className="rounded-xl border border-white/20 bg-white/5 p-4">
-                      <p className="mb-3 text-sm font-semibold text-offwhite">Contribution Encoding</p>
+                      <p className="mb-3 text-sm font-semibold text-offwhite">Applicant Payment Entry</p>
                       <div className="grid gap-3 lg:grid-cols-[1fr_auto_auto_auto]">
                         <select id="committee-contribution-category" value={selectedContributionCategory} onChange={(e) => setSelectedContributionCategory(e.target.value as "project" | "community_service" | "fellowship" | "five_i_activities")} className={READABLE_SELECT_CLASS}>
                           <option value="project" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Projects</option>
@@ -3148,15 +3410,17 @@ export default function PortalDashboard() {
                         </select>
                         {canChairmanSetContributionTarget && (
                           <>
-                            <input value={requiredAmount} onChange={(e) => setRequiredAmount(e.target.value)} type="number" step="0.01" placeholder="Target amount" className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite" />
-                            <button className="btn-secondary" onClick={() => void setFeeRequirement()}>Set Target</button>
+                            <input value={requiredAmount} onChange={(e) => setRequiredAmount(e.target.value)} type="number" step="0.01" placeholder="Required amount" className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite" />
+                            <button className="btn-secondary" onClick={() => void setFeeRequirement()}>Set Requirement</button>
                           </>
                         )}
                         {(canChairmanLogContributionPayment || canBatchTreasurerManagePayments) && (
-                          <>
+                          <div className="grid gap-3 md:col-span-3 md:grid-cols-[repeat(3,minmax(0,1fr))_auto]">
                             <input value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} type="number" step="0.01" placeholder="Payment amount" className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite" />
-                            <button className="btn-secondary" onClick={() => void addFeePayment()}>Log Payment</button>
-                          </>
+                            <input value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} type="date" className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite" />
+                            <input value={paymentNote} onChange={(e) => setPaymentNote(e.target.value)} placeholder="Notes or context" className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite" />
+                            <button className="btn-secondary" onClick={() => void addFeePayment()}>Record Payment</button>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -3164,13 +3428,22 @@ export default function PortalDashboard() {
 
                   {selectedApplicationDetails.batch && canManageSelectedBatchFinance && (
                     <div className="rounded-xl border border-white/20 bg-white/5 p-4">
-                      <p className="mb-3 text-sm font-semibold text-offwhite">Batch Expense Encoding</p>
+                      <p className="mb-3 text-sm font-semibold text-offwhite">Applicant Batch Expense Entry</p>
                       <div className="grid gap-3 md:grid-cols-2">
                         <input value={batchExpenseDate} onChange={(e) => setBatchExpenseDate(e.target.value)} type="date" className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite" />
-                        <input value={batchExpenseCategory} onChange={(e) => setBatchExpenseCategory(e.target.value)} placeholder="Expense category" className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite" />
-                        <input value={batchExpenseDescription} onChange={(e) => setBatchExpenseDescription(e.target.value)} placeholder="Expense description" className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite md:col-span-2" />
+                        <select value={batchExpenseCategory} onChange={(e) => setBatchExpenseCategory(e.target.value)} className={READABLE_SELECT_CLASS}>
+                          <option value="" style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>Select expense type</option>
+                          {APPLICANT_BATCH_EXPENSE_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value} style={{ color: "#0a1730", backgroundColor: "#f6f1e6" }}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                        <input value={batchExpenseDescription} onChange={(e) => setBatchExpenseDescription(e.target.value)} placeholder="What the expense was for" className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite md:col-span-2" />
                         <input value={batchExpenseAmount} onChange={(e) => setBatchExpenseAmount(e.target.value)} type="number" step="0.01" placeholder="Expense amount" className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite" />
-                        <textarea value={batchExpenseNote} onChange={(e) => setBatchExpenseNote(e.target.value)} placeholder="Expense note or supporting details" className="min-h-[96px] rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite" />
+                        <input value={batchExpenseSupportReference} onChange={(e) => setBatchExpenseSupportReference(e.target.value)} placeholder="Receipt, voucher, or support reference" className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite" />
+                        <input value={batchExpenseApprovalReference} onChange={(e) => setBatchExpenseApprovalReference(e.target.value)} placeholder="Approval note or approval reference" className="rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite md:col-span-2" />
+                        <textarea value={batchExpenseNote} onChange={(e) => setBatchExpenseNote(e.target.value)} placeholder="Notes or supporting details" className="min-h-[96px] rounded-md border border-white/25 bg-white/10 px-3 py-2 text-offwhite" />
                       </div>
                       <div className="mt-3 flex flex-wrap gap-2">
                         <button className="btn-secondary" onClick={() => void addBatchExpenseRecord()}>Record Batch Expense</button>
@@ -3181,74 +3454,158 @@ export default function PortalDashboard() {
                   {selectedApplicationDetails.batch && (
                     <div className="grid gap-4 xl:grid-cols-2">
                       <div className="rounded-xl border border-white/20 bg-white/5 p-4">
-                        <p className="mb-3 text-sm font-semibold text-offwhite">Batch Contribution Table</p>
-                        <div className="space-y-3">
-                          {selectedApplicationDetails.batch.contribution_payments.map((payment) => (
-                            <div key={payment.id} className="rounded-lg border border-white/15 bg-navy/35 p-3">
-                              <div className="flex flex-wrap items-start justify-between gap-2">
-                                <div>
-                                  <p className="text-sm text-offwhite">{payment.applicant_name}</p>
-                                  <p className="text-xs text-mist/75">{payment.category_label} | {payment.payment_date ?? "No payment date"}</p>
-                                  <p className="mt-1 text-xs text-mist/80">{money(payment.amount)} by {payment.encoded_by?.name ?? "System"}</p>
-                                </div>
-                                <span className={`rounded-full border px-2 py-1 text-[11px] ${statusBadgeClasses(payment.verification_status)}`}>{statusLabel(payment.verification_status)}</span>
-                              </div>
-                              {payment.note && <p className="mt-2 text-xs text-mist/75">Entry note: {payment.note}</p>}
-                              {payment.verification_comment && <p className="mt-2 text-xs text-mist/75">Chairman note: {payment.verification_comment}</p>}
-                              {isMembershipChairman && canChairmanReview && (
-                                <div className="mt-3 space-y-2">
-                                  <textarea
-                                    value={paymentVerificationDrafts[payment.id] ?? payment.verification_comment ?? ""}
-                                    onChange={(e) => setPaymentVerificationDrafts((current) => ({ ...current, [payment.id]: e.target.value }))}
-                                    placeholder="Verification comment for this contribution"
-                                    className="min-h-[84px] w-full rounded-md border border-white/20 bg-white/10 px-3 py-2 text-sm text-offwhite"
-                                  />
-                                  <div className="flex flex-wrap gap-2">
-                                    <button type="button" className="btn-secondary" onClick={() => void verifyContributionPayment(payment.id, "verified")}>Verify</button>
-                                    <button type="button" className="btn-secondary" onClick={() => void verifyContributionPayment(payment.id, "needs_revision")}>Needs Revision</button>
-                                    <button type="button" className="btn-secondary" onClick={() => void verifyContributionPayment(payment.id, "pending")}>Mark Pending</button>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                          {selectedApplicationDetails.batch.contribution_payments.length === 0 && <p className="text-sm text-mist/70">No batch contribution payments recorded yet.</p>}
+                        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                          <p className="text-sm font-semibold text-offwhite">Applicant Payment Table</p>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <input
+                              value={batchPaymentSearch}
+                              onChange={(e) => setBatchPaymentSearch(e.target.value)}
+                              placeholder="Search applicant, category, note, reviewer, or status"
+                              className="w-full rounded-md border border-white/25 bg-white/10 px-3 py-2 text-sm text-offwhite sm:w-[21rem]"
+                            />
+                            <button
+                              type="button"
+                              className="btn-secondary"
+                              onClick={() => setBatchPaymentSearch("")}
+                              disabled={!batchPaymentSearch}
+                            >
+                              Clear
+                            </button>
+                          </div>
+                        </div>
+                        <p className="mb-3 text-xs text-mist/75">
+                          Showing {filteredBatchPayments.length} of {selectedApplicationDetails.batch.contribution_payments.length} payment record{selectedApplicationDetails.batch.contribution_payments.length === 1 ? "" : "s"}.
+                        </p>
+                        <div className={APPLICANT_FINANCE_TABLE_WRAPPER_CLASS}>
+                          <table className="min-w-[1120px] text-sm text-offwhite">
+                            <thead className={APPLICANT_FINANCE_TABLE_HEAD_CLASS}>
+                              <tr>
+                                <th className="px-3 py-2 text-left">Applicant</th>
+                                <th className="px-3 py-2 text-left">Category</th>
+                                <th className="px-3 py-2 text-left">Payment Date</th>
+                                <th className="px-3 py-2 text-left">Amount</th>
+                                <th className="px-3 py-2 text-left">Encoded By</th>
+                                <th className="px-3 py-2 text-left">Status</th>
+                                <th className="px-3 py-2 text-left">Notes and Review</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {filteredBatchPayments.map((payment) => (
+                                <tr key={payment.id} className="border-b border-white/15 align-top">
+                                  <td className="px-3 py-2">{payment.applicant_name}</td>
+                                  <td className="px-3 py-2">{payment.category_label}</td>
+                                  <td className="px-3 py-2">{payment.payment_date ?? "No payment date"}</td>
+                                  <td className="px-3 py-2">{money(payment.amount)}</td>
+                                  <td className="px-3 py-2">{payment.encoded_by?.name ?? "System"}</td>
+                                  <td className="px-3 py-2">
+                                    <span className={`rounded-full border px-2 py-1 text-[11px] ${statusBadgeClasses(payment.verification_status)}`}>{statusLabel(payment.verification_status)}</span>
+                                  </td>
+                                  <td className="px-3 py-2 text-xs text-mist/80">
+                                    <div className="space-y-1">
+                                      <p>{payment.note ? `Notes: ${payment.note}` : "No notes yet."}</p>
+                                      <p>{payment.verification_comment ? `Review note: ${payment.verification_comment}` : "No review note yet."}</p>
+                                      {isMembershipChairman && canChairmanReview && (
+                                        <div className="space-y-2 pt-2">
+                                          <textarea
+                                            value={paymentVerificationDrafts[payment.id] ?? payment.verification_comment ?? ""}
+                                            onChange={(e) => setPaymentVerificationDrafts((current) => ({ ...current, [payment.id]: e.target.value }))}
+                                            placeholder="Review note for this payment"
+                                            className="min-h-[84px] w-full rounded-md border border-white/20 bg-white/10 px-3 py-2 text-sm text-offwhite"
+                                          />
+                                          <div className="flex flex-wrap gap-2">
+                                            <button type="button" className="btn-secondary" onClick={() => void verifyContributionPayment(payment.id, "verified")}>Mark Verified</button>
+                                            <button type="button" className="btn-secondary" onClick={() => void verifyContributionPayment(payment.id, "needs_revision")}>Needs Follow-Up</button>
+                                            <button type="button" className="btn-secondary" onClick={() => void verifyContributionPayment(payment.id, "pending")}>Mark Pending</button>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                              {filteredBatchPayments.length === 0 && <tr><td colSpan={7} className="px-3 py-3 text-center text-mist/70">No batch contribution payments match the current search.</td></tr>}
+                            </tbody>
+                          </table>
                         </div>
                       </div>
 
                       <div className="rounded-xl border border-white/20 bg-white/5 p-4">
-                        <p className="mb-3 text-sm font-semibold text-offwhite">Batch Expense Table</p>
-                        <div className="space-y-3">
-                          {selectedApplicationDetails.batch.expenses.map((expense) => (
-                            <div key={expense.id} className="rounded-lg border border-white/15 bg-navy/35 p-3">
-                              <div className="flex flex-wrap items-start justify-between gap-2">
-                                <div>
-                                  <p className="text-sm text-offwhite">{expense.description}</p>
-                                  <p className="text-xs text-mist/75">{expense.category} | {expense.expense_date ?? "No expense date"}</p>
-                                  <p className="mt-1 text-xs text-mist/80">{money(expense.amount)} by {expense.encoded_by?.name ?? "System"}</p>
-                                </div>
-                                <span className={`rounded-full border px-2 py-1 text-[11px] ${statusBadgeClasses(expense.verification_status)}`}>{statusLabel(expense.verification_status)}</span>
-                              </div>
-                              {expense.note && <p className="mt-2 text-xs text-mist/75">Entry note: {expense.note}</p>}
-                              {expense.verification_comment && <p className="mt-2 text-xs text-mist/75">Chairman note: {expense.verification_comment}</p>}
-                              {isMembershipChairman && canChairmanReview && (
-                                <div className="mt-3 space-y-2">
-                                  <textarea
-                                    value={expenseVerificationDrafts[expense.id] ?? expense.verification_comment ?? ""}
-                                    onChange={(e) => setExpenseVerificationDrafts((current) => ({ ...current, [expense.id]: e.target.value }))}
-                                    placeholder="Verification comment for this expense"
-                                    className="min-h-[84px] w-full rounded-md border border-white/20 bg-white/10 px-3 py-2 text-sm text-offwhite"
-                                  />
-                                  <div className="flex flex-wrap gap-2">
-                                    <button type="button" className="btn-secondary" onClick={() => void verifyExpenseRecord(expense.id, "verified")}>Verify</button>
-                                    <button type="button" className="btn-secondary" onClick={() => void verifyExpenseRecord(expense.id, "needs_revision")}>Needs Revision</button>
-                                    <button type="button" className="btn-secondary" onClick={() => void verifyExpenseRecord(expense.id, "pending")}>Mark Pending</button>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                          {selectedApplicationDetails.batch.expenses.length === 0 && <p className="text-sm text-mist/70">No batch expenses recorded yet.</p>}
+                        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                          <p className="text-sm font-semibold text-offwhite">Applicant Batch Expense Table</p>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <input
+                              value={batchExpenseSearch}
+                              onChange={(e) => setBatchExpenseSearch(e.target.value)}
+                              placeholder="Search description, support, approval, reviewer, or status"
+                              className="w-full rounded-md border border-white/25 bg-white/10 px-3 py-2 text-sm text-offwhite sm:w-[21rem]"
+                            />
+                            <button
+                              type="button"
+                              className="btn-secondary"
+                              onClick={() => setBatchExpenseSearch("")}
+                              disabled={!batchExpenseSearch}
+                            >
+                              Clear
+                            </button>
+                          </div>
+                        </div>
+                        <p className="mb-3 text-xs text-mist/75">
+                          Showing {filteredBatchExpenses.length} of {selectedApplicationDetails.batch.expenses.length} expense record{selectedApplicationDetails.batch.expenses.length === 1 ? "" : "s"}.
+                        </p>
+                        <div className={APPLICANT_FINANCE_TABLE_WRAPPER_CLASS}>
+                          <table className="min-w-[1220px] text-sm text-offwhite">
+                            <thead className={APPLICANT_FINANCE_TABLE_HEAD_CLASS}>
+                              <tr>
+                                <th className="px-3 py-2 text-left">Date</th>
+                                <th className="px-3 py-2 text-left">Category</th>
+                                <th className="px-3 py-2 text-left">Description</th>
+                                <th className="px-3 py-2 text-left">Amount</th>
+                                <th className="px-3 py-2 text-left">Support Reference</th>
+                                <th className="px-3 py-2 text-left">Approval Reference</th>
+                                <th className="px-3 py-2 text-left">Encoded By</th>
+                                <th className="px-3 py-2 text-left">Status</th>
+                                <th className="px-3 py-2 text-left">Notes and Review</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {filteredBatchExpenses.map((expense) => (
+                                <tr key={expense.id} className="border-b border-white/15 align-top">
+                                  <td className="px-3 py-2">{expense.expense_date ?? "No expense date"}</td>
+                                  <td className="px-3 py-2">{expense.category_label ?? expense.category}</td>
+                                  <td className="px-3 py-2">{expense.description}</td>
+                                  <td className="px-3 py-2">{money(expense.amount)}</td>
+                                  <td className="px-3 py-2">{expense.support_reference ?? "-"}</td>
+                                  <td className="px-3 py-2">{expense.approval_reference ?? "-"}</td>
+                                  <td className="px-3 py-2">{expense.encoded_by?.name ?? "System"}</td>
+                                  <td className="px-3 py-2">
+                                    <span className={`rounded-full border px-2 py-1 text-[11px] ${statusBadgeClasses(expense.verification_status)}`}>{statusLabel(expense.verification_status)}</span>
+                                  </td>
+                                  <td className="px-3 py-2 text-xs text-mist/80">
+                                    <div className="space-y-1">
+                                      <p>{expense.note ? `Notes: ${expense.note}` : "No notes yet."}</p>
+                                      <p>{expense.verification_comment ? `Review note: ${expense.verification_comment}` : "No review note yet."}</p>
+                                      {isMembershipChairman && canChairmanReview && (
+                                        <div className="space-y-2 pt-2">
+                                          <textarea
+                                            value={expenseVerificationDrafts[expense.id] ?? expense.verification_comment ?? ""}
+                                            onChange={(e) => setExpenseVerificationDrafts((current) => ({ ...current, [expense.id]: e.target.value }))}
+                                            placeholder="Review note for this expense"
+                                            className="min-h-[84px] w-full rounded-md border border-white/20 bg-white/10 px-3 py-2 text-sm text-offwhite"
+                                          />
+                                          <div className="flex flex-wrap gap-2">
+                                            <button type="button" className="btn-secondary" onClick={() => void verifyExpenseRecord(expense.id, "verified")}>Mark Verified</button>
+                                            <button type="button" className="btn-secondary" onClick={() => void verifyExpenseRecord(expense.id, "needs_revision")}>Needs Follow-Up</button>
+                                            <button type="button" className="btn-secondary" onClick={() => void verifyExpenseRecord(expense.id, "pending")}>Mark Pending</button>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                              {filteredBatchExpenses.length === 0 && <tr><td colSpan={9} className="px-3 py-3 text-center text-mist/70">No batch expenses match the current search.</td></tr>}
+                            </tbody>
+                          </table>
                         </div>
                       </div>
                     </div>

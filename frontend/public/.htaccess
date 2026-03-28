@@ -1,6 +1,18 @@
 AddHandler x-httpd-php85 .php
 Options -Indexes
 
+<IfModule mod_dir.c>
+  DirectorySlash Off
+</IfModule>
+
+<IfModule pagespeed_module>
+  ModPagespeed Off
+</IfModule>
+
+<IfModule mod_pagespeed.c>
+  ModPagespeed Off
+</IfModule>
+
 <IfModule mod_headers.c>
   Header always set X-Content-Type-Options "nosniff"
   Header always set X-Frame-Options "DENY"
@@ -24,6 +36,9 @@ Options -Indexes
   RewriteEngine On
   RewriteBase /
 
+  RewriteCond %{HTTP_HOST} !^www\.lgec\.org$ [NC]
+  RewriteRule ^ https://www.lgec.org%{REQUEST_URI} [R=301,L]
+
   RewriteCond %{THE_REQUEST} \s/+laravel-api\.php(?:[\s?]|$) [NC]
   RewriteRule ^laravel-api\.php$ - [F,L]
 
@@ -33,6 +48,10 @@ Options -Indexes
 
   RewriteRule ^(?:backend|app|bootstrap|config|database|resources|routes|storage|tests|vendor)(?:/|$) - [F,L,NC]
   RewriteRule ^(?:\.env|artisan|composer\.(?:json|lock)|package\.json|phpunit\.xml|vite\.config\.js)$ - [F,L,NC]
+
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteCond %{REQUEST_FILENAME}/index.html -f
+  RewriteRule ^(.+?)/?$ $1/index.html [L]
 
   RewriteCond %{REQUEST_FILENAME} -f [OR]
   RewriteCond %{REQUEST_FILENAME} -d

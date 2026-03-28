@@ -101,7 +101,10 @@ class DashboardController extends Controller
             return $user->memberProfile;
         }
 
-        return Member::query()->where('email', $user->email)->first();
+        return Member::query()
+            ->whereNull('user_id')
+            ->whereRaw('LOWER(TRIM(email)) = ?', [strtolower(trim((string) ($user->recovery_email ?: $user->email)))])
+            ->first();
     }
 
     private function formalPhotoPayload(?FormalPhoto $formalPhoto, bool $includeOwnerRoute = false): ?array
